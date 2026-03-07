@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    /* Base Options: */
+    "target": "es2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"],
+
+    /* Strictness */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+
+    /* File Paths */
+    "rootDir": "./src",
+    "outDir": "./dist",
+
+    /* Emit */
+    "sourceMap": true,
+    "declaration": true,
+
+    /* Modern Module Features */
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+
+    /* Optimizations */
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
