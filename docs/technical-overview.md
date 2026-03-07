@@ -1,4 +1,4 @@
-# Technical Overview — Bikers Community Platform
+# Technical Overview — ThrottleBase
 
 ---
 

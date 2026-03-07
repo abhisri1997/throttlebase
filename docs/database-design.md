@@ -1,4 +1,4 @@
-# Database Design — Bikers Community Platform
+# Database Design — ThrottleBase
 
 > PostgreSQL with PostGIS extension for spatial queries
 

@@ -1,7 +1,7 @@
 {
-  "name": "server",
+  "name": "throttlebase-server",
   "version": "1.0.0",
-  "description": "",
+  "description": "Backend API for ThrottleBase",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",

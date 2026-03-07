@@ -1,4 +1,4 @@
-# AI Assistant — Bikers Community Platform
+# AI Assistant — ThrottleBase
 
 ## Project Goal
 
@@ -20,7 +20,7 @@ A platform where riders can create rides, join rides, share routes, track ride h
 ## Project Structure
 
 ```
-bikers-community-platform/
+throttlebase/
 ├── docs/
 │   ├── product-overview.md      # Problem statement, core & additional features
 │   ├── technical-overview.md    # Functional + technical specs for all features
