@@ -4,6 +4,13 @@
 
 A platform where riders can create rides, join rides, share routes, track ride history, and interact with a biking community. Includes a reward system (badges, achievements, leaderboard), notifications, settings, privacy/security controls, and community features (posts, comments, likes, follows, groups, ride reviews).
 
+This platform is purely for learning purpose but may be used for commercial purpose in future.
+
+Hence AI should help user in following ways:
+
+- Learn about all the features of the platform
+- Learn about all the tech stack used in the platform in depth
+
 ## Tech Stack
 
 | Layer                | Technology                                                                          |
@@ -29,11 +36,23 @@ throttlebase/
 ├── server/
 │   ├── src/
 │   │   ├── app.ts               # Express entry point (port 5001)
+│   │   ├── config/
+│   │   │   └── db.ts            # PostgreSQL pool + connection test
+│   │   ├── schemas/
+│   │   │   └── auth.schemas.ts  # Zod schemas for register/login
 │   │   ├── controllers/
+│   │   │   └── auth.controller.ts
 │   │   ├── middleware/
+│   │   │   └── auth.middleware.ts # JWT verify middleware
 │   │   ├── models/
 │   │   ├── routes/
-│   │   └── services/
+│   │   │   └── auth.routes.ts
+│   │   ├── services/
+│   │   │   └── auth.service.ts  # bcrypt + JWT logic
+│   │   └── db/
+│   │       └── migrations/
+│   │           └── 001_initial_riders.sql
+│   ├── .env                     # DB credentials, JWT secret
 │   ├── tsconfig.json
 │   └── package.json
 ├── client/                      # (not yet started)
@@ -63,9 +82,9 @@ throttlebase/
 - [x] Database design document (`docs/database-design.md`) — 25+ tables with ER diagram, indexing strategy, data policies
 - [x] Express server entry point (`server/src/app.ts`) with `/health` endpoint
 - [x] TypeScript strict mode configured and compiling cleanly
-- [ ] Database setup (PostgreSQL + PostGIS) and connection
-- [ ] Drizzle ORM or raw SQL schema implementation
-- [ ] Authentication module (register, login, JWT)
+- [x] Database setup (PostgreSQL + PostGIS) and connection
+- [x] Raw SQL schema: riders table with PostGIS, indexes, triggers
+- [x] Authentication module (register, login, JWT middleware)
 - [ ] Rider profiles CRUD
 - [ ] Rides module (create, join, state machine)
 - [ ] Routes module
@@ -76,7 +95,9 @@ throttlebase/
 
 ## Next Steps
 
-1. Set up PostgreSQL database connection using `pg` + `dotenv`
-2. Implement the database schema (migrations or raw SQL)
-3. Build the authentication module (register/login/JWT middleware)
+1. ~~Set up PostgreSQL database connection using `pg` + `dotenv`~~ (DONE)
+2. ~~Implement the database schema using Raw SQL migrations~~ (DONE — riders table)
+3. ~~Build the authentication module (register/login/JWT middleware)~~ (DONE)
 4. Build rider profiles CRUD endpoints
+5. Implement remaining database tables (vehicles, rides, routes, community, etc.)
+6. **Future Refactor**: Migrate from Raw SQL to Drizzle ORM or Prisma
