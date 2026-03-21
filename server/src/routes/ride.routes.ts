@@ -156,6 +156,7 @@ router.post('/', authenticate, rideController.createRide);
  */
 router.get('/:id', authenticate, rideController.getRide);
 router.patch('/:id', authenticate, rideController.updateRide);
+router.delete('/:id', authenticate, rideController.deleteRide);
 
 /**
  * @swagger

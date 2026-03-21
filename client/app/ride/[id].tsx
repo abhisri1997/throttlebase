@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../src/api/client';
 import { useAuthStore } from '../../src/store/authStore';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from '../../src/components/MapWrapper';
-import { Calendar, Users, Gauge, ChevronLeft, Navigation, Shield, CheckCircle, XCircle, Clock, Edit3 } from 'lucide-react-native';
+import { Calendar, Users, Gauge, ChevronLeft, Navigation, Shield, CheckCircle, XCircle, Clock, Edit3, Trash2 } from 'lucide-react-native';
 import { showLocation } from 'react-native-map-link';
 import { useTheme } from '../../src/theme/ThemeContext';
 
@@ -32,6 +32,11 @@ const handleStop = async (rideId: string, stopId: string, status: string) => {
 
 const updateRideStatus = async (rideId: string, status: string) => {
   const { data } = await apiClient.patch(`/api/rides/${rideId}`, { status });
+  return data;
+};
+
+const deleteRideReq = async (id: string) => {
+  const { data } = await apiClient.delete(`/api/rides/${id}`);
   return data;
 };
 
@@ -116,6 +121,18 @@ export default function RideDetailScreen() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: deleteRideReq,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rides'] });
+      Alert.alert('Success', 'Ride deleted successfully');
+      router.replace('/(tabs)/rides');
+    },
+    onError: (err: any) => {
+      Alert.alert('Error', err.response?.data?.error || 'Failed to delete ride');
+    },
+  });
+
   if (isLoading) {
     return (
       <SafeAreaView className="flex-1 justify-center items-center" style={{ backgroundColor: colors.bg }}>
@@ -168,6 +185,13 @@ export default function RideDetailScreen() {
     Alert.alert(`${nextAction.label}?`, `Change ride status to ${nextAction.status}?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: nextAction.label, onPress: () => statusMutation.mutate(nextAction.status) },
+    ]);
+  };
+
+  const handleDeleteRide = () => {
+    Alert.alert('Delete Ride?', 'Are you sure you want to delete this ride? This action cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteMutation.mutate(id as string) },
     ]);
   };
 
@@ -244,16 +268,27 @@ export default function RideDetailScreen() {
           <View className="flex-row justify-between items-start">
             <Text className="text-3xl font-bold flex-1 mr-2" style={{ color: colors.text }}>{ride.title}</Text>
             {isLeader && (
-              <TouchableOpacity
-                onPress={() => router.push({
-                  pathname: '/(modals)/create-ride',
-                  params: { editRide: JSON.stringify(ride) }
-                })}
-                className="p-2 rounded-full"
-                style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
-              >
-                <Edit3 color={colors.text} size={20} />
-              </TouchableOpacity>
+              <View className="flex-row items-center">
+                {isCaptain && ride.status !== 'active' && ride.status !== 'completed' && (
+                  <TouchableOpacity
+                    onPress={handleDeleteRide}
+                    className="p-2 rounded-full mr-2"
+                    style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.danger + '80' }}
+                  >
+                    <Trash2 color={colors.danger} size={20} />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  onPress={() => router.push({
+                    pathname: '/(modals)/create-ride',
+                    params: { editRide: JSON.stringify(ride) }
+                  })}
+                  className="p-2 rounded-full"
+                  style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
+                >
+                  <Edit3 color={colors.text} size={20} />
+                </TouchableOpacity>
+              </View>
             )}
           </View>
           <Text className="text-sm mb-4 mt-2" style={{ color: colors.textMuted }}>

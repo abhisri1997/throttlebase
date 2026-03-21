@@ -316,6 +316,20 @@ export const updateRideInfo = async (
 };
 
 /**
+ * Deletes a ride.
+ * Only the captain can delete it, and only if it hasn't started yet (not active/completed).
+ */
+export const deleteRide = async (rideId: string, captainId: string): Promise<boolean> => {
+  const result = await query(
+    `DELETE FROM rides 
+     WHERE id = $1 AND captain_id = $2 AND status NOT IN ('active', 'completed') 
+     RETURNING id`,
+    [rideId, captainId]
+  );
+  return result.rows.length > 0;
+};
+
+/**
  * Allows a rider to join a public ride.
  * Enforces max capacity using SELECT ... FOR UPDATE (optimistic locking).
  */

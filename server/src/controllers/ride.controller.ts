@@ -88,6 +88,25 @@ export const updateRide = async (req: Request, res: Response): Promise<void> => 
   }
 };
 
+export const deleteRide = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const captainId = (req.rider as unknown as RiderPayload).riderId;
+    const rideId = req.params.id as string;
+
+    const success = await RideService.deleteRide(rideId, captainId);
+    
+    if (!success) {
+      res.status(400).json({ error: 'Cannot delete ride. Either you are not the captain, or the ride is already active/completed.' });
+      return;
+    }
+
+    res.json({ message: 'Ride deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting ride:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const joinRide = async (req: Request, res: Response): Promise<void> => {
   try {
     const riderId = (req.rider as unknown as RiderPayload).riderId;
