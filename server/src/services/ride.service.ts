@@ -209,16 +209,23 @@ export const getRideById = async (id: string): Promise<Ride | null> => {
 /**
  * Lists public and upcoming rides.
  */
-export const listDiscoverableRides = async (): Promise<Ride[]> => {
-  const result = await query(
-    `SELECT r.*, c.display_name as captain_name
-     FROM rides r
-     JOIN riders c ON r.captain_id = c.id
-     WHERE r.visibility = 'public' 
-       AND r.status IN ('draft', 'scheduled')
-     ORDER BY r.scheduled_at ASC
-     LIMIT 50`
-  );
+export const listDiscoverableRides = async (riderId?: string): Promise<Ride[]> => {
+  let queryStr = `
+    SELECT r.*, c.display_name as captain_name
+    FROM rides r
+    JOIN riders c ON r.captain_id = c.id
+    WHERE (r.visibility = 'public' AND r.status IN ('scheduled', 'active', 'completed'))
+  `;
+  const params: any[] = [];
+
+  if (riderId) {
+    queryStr += ` OR r.captain_id = $1 OR EXISTS (SELECT 1 FROM ride_participants rp WHERE rp.ride_id = r.id AND rp.rider_id = $1)`;
+    params.push(riderId);
+  }
+
+  queryStr += ` ORDER BY r.scheduled_at ASC LIMIT 50`;
+
+  const result = await query(queryStr, params);
   return result.rows as Ride[];
 };
 

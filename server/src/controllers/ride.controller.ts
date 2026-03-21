@@ -53,7 +53,8 @@ export const getRide = async (req: Request, res: Response): Promise<void> => {
 
 export const getAllRides = async (req: Request, res: Response): Promise<void> => {
   try {
-    const rides = await RideService.listDiscoverableRides();
+    const riderId = (req.rider as unknown as RiderPayload)?.riderId;
+    const rides = await RideService.listDiscoverableRides(riderId);
     res.json({ rides });
   } catch (error) {
     console.error('Error listing rides:', error);
