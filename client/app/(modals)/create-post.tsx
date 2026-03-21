@@ -108,6 +108,7 @@ export default function CreatePostModal() {
           {/* Text Input */}
           <TextInput
             className='text-xl flex-1 leading-8'
+            style={{ color: colors.text }}
             placeholder="What's on your mind? Got a route to share?"
             placeholderTextColor='#64748b'
             multiline
@@ -117,9 +118,10 @@ export default function CreatePostModal() {
             textAlignVertical='top'
           />
           {/* Toolbar */}
-          <View className='border-t py-4 flex-row items-center'>
+          <View className='border-t py-4 flex-row items-center' style={{ borderTopColor: colors.border }}>
             <TouchableOpacity
-              className='w-12 h-12 rounded-full items-center justify-center mr-3 border '
+              className='w-12 h-12 rounded-full items-center justify-center mr-3 border'
+              style={{ borderColor: colors.border }}
               onPress={() =>
                 Alert.alert(
                   "Notice",
@@ -129,7 +131,7 @@ export default function CreatePostModal() {
             >
               <Camera color='#22c55e' size={24} />
             </TouchableOpacity>
-            <Text className='text-sm flex-1'>Keep the rubber side down.</Text>
+            <Text className='text-sm flex-1' style={{ color: colors.textMuted }}>Keep the rubber side down.</Text>
           </View>
         </SafeAreaView>
       </Pressable>
