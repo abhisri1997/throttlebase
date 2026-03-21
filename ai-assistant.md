@@ -100,6 +100,9 @@ throttlebase/
 | **VSCode Tailwind Linting**            | Added `.vscode/settings.json` with `"css.lint.unknownAtRules": "ignore"` to fix `@tailwind` unknown at-rule warnings |
 | **Client UI Icons**                    | Using `lucide-react-native` and `react-native-svg` installed with `--legacy-peer-deps` due to React 19 conflict with Expo 55 |
 | **Centralized ThemeContext**           | Replaced NativeWind `dark:` class prefix theming (broken on iOS native) with a React Context provider (`src/theme/ThemeContext.tsx`) that delivers resolved hex color values via inline `style={{}}` props. All screens/components use `useTheme()`. Color palette defined in `src/theme/colors.ts`. |
+| **LocationPicker + Google Places**     | Replaced blind map-tapping with `src/components/LocationPicker.tsx` — uses `react-native-google-places-autocomplete` for search, `expo-location` for current location, and a draggable `MapView` pin. Stores both coords and place names. |
+| **Google Maps on iOS**                 | Switched all `react-native-maps` instances to use `provider={PROVIDER_GOOGLE}` instead of default Apple Maps. |
+| **Equidistant Start Point**            | Server-side `src/utils/geo.ts` computes 3D Cartesian centroid from riders' locations, then snaps to nearest accessible place (gas station, café) via Google Nearby Search within 2km. |
 
 ## API Endpoints (11 total)
 
@@ -113,9 +116,13 @@ throttlebase/
 | GET    | `/api/riders/:id`        | Yes  | View another rider's public profile|
 | GET    | `/api/rides`             | Yes  | List upcoming public rides         |
 | POST   | `/api/rides`             | Yes  | Create a ride (become captain)     |
-| GET    | `/api/rides/:id`         | Yes  | Get ride details                   |
-| PATCH  | `/api/rides/:id`         | Yes  | Update ride (captain only)         |
-| POST   | `/api/rides/:id/join`    | Yes  | Join a ride                        |
+| GET    | `/api/rides/:id`         | Yes  | Get ride details + stops           |
+| PATCH  | `/api/rides/:id`         | Yes  | Update ride (captain/co-captain, state machine) |
+| POST   | `/api/rides/:id/join`    | Yes  | Join a ride (capacity enforced)    |
+| POST   | `/api/rides/:id/promote` | Yes  | Promote rider to co-captain        |
+| GET    | `/api/rides/:id/stops`   | Yes  | List ride stops                    |
+| POST   | `/api/rides/:id/stops`   | Yes  | Request a stop (any participant)   |
+| PATCH  | `/api/rides/:id/stops/:stopId` | Yes | Approve/reject a stop (captain)|
 | GET    | `/api/routes`            | Yes  | List public routes                 |
 | POST   | `/api/routes`            | Yes  | Create a route with GeoJSON        |
 | POST   | `/api/routes/traces`     | Yes  | Upload batch GPS trace points      |
