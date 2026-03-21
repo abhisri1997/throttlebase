@@ -24,7 +24,7 @@ const createRide = async (payload: any) => {
 };
 
 const updateRide = async (id: string, payload: any) => {
-  const { data } = await apiClient.put(`/api/rides/${id}`, payload);
+  const { data } = await apiClient.patch(`/api/rides/${id}`, payload);
   return data;
 };
 
