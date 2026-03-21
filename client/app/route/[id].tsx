@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../src/api/client';
-import MapView, { Polyline, Marker } from '../../src/components/MapWrapper';
+import MapView, { Polyline, Marker, PROVIDER_GOOGLE } from '../../src/components/MapWrapper';
 import { Map, Mountain, TrendingUp, ChevronLeft, Bookmark, Share2 } from 'lucide-react-native';
 import { useTheme } from '../../src/theme/ThemeContext';
 
@@ -75,6 +75,7 @@ export default function RouteDetailScreen() {
         {mapCoords.length > 0 ? (
           <MapView
             style={{ flex: 1 }}
+            provider={PROVIDER_GOOGLE}
             userInterfaceStyle="dark"
             initialRegion={{
               latitude: startCoord.latitude,
