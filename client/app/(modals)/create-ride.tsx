@@ -747,23 +747,25 @@ export default function CreateRideModal() {
 
         {/* ──── ACTION BUTTONS ──── */}
         <View className='flex-row mb-16'>
-          <TouchableOpacity
-            onPress={handleSaveDraft}
-            disabled={mutation.isPending}
-            className='flex-1 p-4 rounded-2xl mr-2 items-center'
-            style={{ borderWidth: 2, borderColor: colors.border }}
-          >
-            <Text
-              className='font-bold text-base'
-              style={{ color: colors.text }}
+          {(!editMode || existingRide?.status === 'draft') && (
+            <TouchableOpacity
+              onPress={handleSaveDraft}
+              disabled={mutation.isPending}
+              className='flex-1 p-4 rounded-2xl mr-2 items-center'
+              style={{ borderWidth: 2, borderColor: colors.border }}
             >
-              Save Draft
-            </Text>
-          </TouchableOpacity>
+              <Text
+                className='font-bold text-base'
+                style={{ color: colors.text }}
+              >
+                Save Draft
+              </Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             onPress={handlePublish}
             disabled={mutation.isPending}
-            className='flex-1 p-4 rounded-2xl ml-2 items-center'
+            className={`p-4 rounded-2xl items-center flex-1 ${(!editMode || existingRide?.status === 'draft') ? 'ml-2' : ''}`}
             style={{ backgroundColor: colors.primary }}
           >
             {mutation.isPending ? (
@@ -773,7 +775,7 @@ export default function CreateRideModal() {
                 className='font-bold text-base'
                 style={{ color: "#ffffff" }}
               >
-                Publish Ride
+                {editMode && existingRide?.status !== 'draft' ? "Save Changes" : "Publish Ride"}
               </Text>
             )}
           </TouchableOpacity>
