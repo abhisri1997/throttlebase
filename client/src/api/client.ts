@@ -20,6 +20,8 @@ export const apiClient = axios.create({
   },
 });
 
+import { useAuthStore } from '../store/authStore';
+
 apiClient.interceptors.request.use(async (config) => {
   const token = await AsyncStorage.getItem('jwt_token');
   if (token && config.headers) {
@@ -27,3 +29,17 @@ apiClient.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (
+      error.response &&
+      (error.response.status === 401 || error.response.status === 403) &&
+      error.response.data?.error === 'Invalid or expired token.'
+    ) {
+      await useAuthStore.getState().logout();
+    }
+    return Promise.reject(error);
+  }
+);
