@@ -6,7 +6,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "tsx src/app.ts",
-    "dev": "nodemon --exec tsx src/app.ts"
+    "dev": "nodemon --exec tsx src/app.ts",
+    "worker": "tsx src/workers/worker.ts",
+    "dev:all": "concurrently --names api,worker \"npm run dev\" \"npm run worker\""
   },
   "keywords": [],
   "author": "",
@@ -18,6 +20,7 @@
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
+    "node-cron": "^4.2.1",
     "pg": "^8.20.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
@@ -29,9 +32,11 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.3.5",
+    "@types/node-cron": "^3.0.11",
     "@types/pg": "^8.18.0",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
+    "concurrently": "^9.2.1",
     "nodemon": "^3.1.14",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",

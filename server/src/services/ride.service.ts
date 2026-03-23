@@ -5,6 +5,7 @@ import type {
   RequestStopInput,
 } from "../schemas/ride.schemas.js";
 import { calculateGeometricMedian, snapToNearestPlace } from "../utils/geo.js";
+import { enqueueRideStatsRecompute } from "./jobs.service.js";
 
 export interface Ride {
   id: string;
@@ -317,6 +318,9 @@ export const updateRideInfo = async (
     }
   }
 
+  const shouldEnqueueRideStats =
+    fields.status === "completed" && currentStatus !== "completed";
+
   // Build SET clauses dynamically
   const setClauses: string[] = [];
   const values: any[] = [];
@@ -382,7 +386,19 @@ export const updateRideInfo = async (
     values,
   );
 
-  return result.rows.length ? (result.rows[0] as Ride) : null;
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const updatedRide = result.rows[0] as Ride;
+
+  if (shouldEnqueueRideStats) {
+    enqueueRideStatsRecompute(rideId, "ride-completed").catch((error) => {
+      console.error("Failed to enqueue ride stats recompute job:", error);
+    });
+  }
+
+  return updatedRide;
 };
 
 /**

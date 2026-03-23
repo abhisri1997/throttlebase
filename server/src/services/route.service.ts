@@ -1,4 +1,5 @@
 import { query } from "../config/db.js";
+import { enqueueRideStatsRecompute } from "./jobs.service.js";
 import type {
   CreateRouteInput,
   GpsTraceBatchInput,
@@ -181,6 +182,18 @@ export const ingestGpsTraces = async (
      VALUES ${placeholders.join(", ")}`,
     values,
   );
+
+  const rideStateResult = await query(
+    `SELECT status FROM rides WHERE id = $1 LIMIT 1`,
+    [data.ride_id],
+  );
+
+  const rideStatus = rideStateResult.rows[0]?.status;
+  if (rideStatus === "completed") {
+    enqueueRideStatsRecompute(data.ride_id, "gps-ingest").catch((error) => {
+      console.error("Failed to enqueue ride stats from GPS ingest:", error);
+    });
+  }
 
   return result.rowCount ?? 0;
 };
