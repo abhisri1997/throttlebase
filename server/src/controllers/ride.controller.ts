@@ -62,6 +62,17 @@ export const getAllRides = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
+export const getHistory = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const riderId = (req.rider as unknown as RiderPayload).riderId;
+    const rides = await RideService.getRideHistory(riderId);
+    res.json({ rides });
+  } catch (error) {
+    console.error('Error listing ride history:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const updateRide = async (req: Request, res: Response): Promise<void> => {
   try {
     const validatedData = UpdateRideSchema.parse(req.body);
@@ -215,5 +226,32 @@ export const getRideStops = async (req: Request, res: Response): Promise<void> =
   } catch (error) {
     console.error('Error listing stops:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const updateStartLocation = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const riderId = (req.rider as unknown as RiderPayload).riderId;
+    const rideId = req.params.id as string;
+    
+    const { location_coords } = req.body;
+    
+    if (!Array.isArray(location_coords) || location_coords.length !== 2) {
+      res.status(400).json({ error: 'location_coords must be an array of [lng, lat]' });
+      return;
+    }
+
+    await RideService.updateStartLocationOverride(rideId, riderId, location_coords as [number, number]);
+    
+    res.json({ message: 'Start location updated successfully' });
+  } catch (error: any) {
+    if (error.message === 'Ride not found') {
+      res.status(404).json({ error: error.message });
+    } else if (error.message.includes('12 hours') || error.message.includes('confirmed') || error.message.includes('auto-calculate')) {
+      res.status(400).json({ error: error.message });
+    } else {
+      console.error('Error updating start location:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
   }
 };

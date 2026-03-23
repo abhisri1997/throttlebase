@@ -23,6 +23,9 @@ interface LocationPickerProps {
   placeholder?: string;
   label: string;
   color?: string;
+  customTrigger?: (showModal: () => void) => React.ReactNode;
+  visible?: boolean;
+  onClose?: () => void;
 }
 
 export default function LocationPicker({
@@ -32,10 +35,25 @@ export default function LocationPicker({
   placeholder = 'Search for a place...',
   label,
   color,
+  customTrigger,
+  visible: externalVisible,
+  onClose,
 }: LocationPickerProps) {
   const { colors } = useTheme();
   const accentColor = color || colors.primary;
-  const [visible, setVisible] = useState(false);
+  const [internalVisible, setInternalVisible] = useState(false);
+  const isControlled = externalVisible !== undefined;
+  const visible = isControlled ? externalVisible : internalVisible;
+
+  const handleOpen = () => {
+    if (!isControlled) setInternalVisible(true);
+  };
+
+  const handleClose = () => {
+    if (!isControlled) setInternalVisible(false);
+    if (onClose) onClose();
+  };
+
   const [selectedCoords, setSelectedCoords] = useState<[number, number] | null>(
     initialCoords || null
   );
@@ -97,7 +115,7 @@ export default function LocationPicker({
     if (selectedCoords) {
       onSelect({ coords: selectedCoords, name: selectedName });
     }
-    setVisible(false);
+    handleClose();
   };
 
   const displayText = initialName || (initialCoords ? 'Location set' : '');
@@ -105,28 +123,32 @@ export default function LocationPicker({
   return (
     <>
       {/* Trigger Button */}
-      <TouchableOpacity
-        onPress={() => setVisible(true)}
-        className="flex-row items-center p-4 rounded-xl mb-3"
-        style={{
-          backgroundColor: displayText ? accentColor + '15' : colors.inputBg,
-          borderWidth: 1,
-          borderColor: displayText ? accentColor + '50' : colors.border,
-        }}
-      >
-        <MapPin color={displayText ? accentColor : colors.textMuted} size={20} />
-        <View className="flex-1 ml-3">
-          <Text className="text-xs" style={{ color: colors.textMuted }}>{label}</Text>
-          <Text
-            className="font-bold text-sm mt-0.5"
-            style={{ color: displayText ? colors.text : colors.textMuted }}
-            numberOfLines={1}
-          >
-            {displayText || placeholder}
-          </Text>
-        </View>
-        {displayText && <Check color={accentColor} size={18} />}
-      </TouchableOpacity>
+      {customTrigger ? (
+        customTrigger(handleOpen)
+      ) : (
+        <TouchableOpacity
+          onPress={handleOpen}
+          className="flex-row items-center p-4 rounded-xl mb-3"
+          style={{
+            backgroundColor: displayText ? accentColor + '15' : colors.inputBg,
+            borderWidth: 1,
+            borderColor: displayText ? accentColor + '50' : colors.border,
+          }}
+        >
+          <MapPin color={displayText ? accentColor : colors.textMuted} size={20} />
+          <View className="flex-1 ml-3">
+            <Text className="text-xs" style={{ color: colors.textMuted }}>{label}</Text>
+            <Text
+              className="font-bold text-sm mt-0.5"
+              style={{ color: displayText ? colors.text : colors.textMuted }}
+              numberOfLines={1}
+            >
+              {displayText || placeholder}
+            </Text>
+          </View>
+          {displayText && <Check color={accentColor} size={18} />}
+        </TouchableOpacity>
+      )}
 
       {/* Full-Screen Modal */}
       <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
@@ -136,7 +158,7 @@ export default function LocationPicker({
             className="flex-row items-center justify-between px-4 py-3"
             style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
           >
-            <TouchableOpacity onPress={() => setVisible(false)}>
+            <TouchableOpacity onPress={handleClose}>
               <X color={colors.textMuted} size={24} />
             </TouchableOpacity>
             <Text className="font-bold text-lg" style={{ color: colors.text }}>{label}</Text>

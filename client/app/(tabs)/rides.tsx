@@ -43,23 +43,20 @@ export default function DiscoverRidesScreen() {
       );
     }
 
-    if (!rides || rides.length === 0) {
-      return (
-        <View className="flex-1 justify-center items-center">
-          <Text style={{ color: colors.textMuted }}>No active rides found</Text>
-        </View>
-      );
-    }
-
     return (
       <View className="flex-1">
         <FlatList
-          data={rides}
+          data={rides || []}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <RideCard ride={item} onPress={() => router.push(`/ride/${item.id}` as any)} />
           )}
-          contentContainerStyle={{ paddingVertical: 16 }}
+          contentContainerStyle={(!rides || rides.length === 0) ? { flexGrow: 1 } : { paddingVertical: 16 }}
+          ListEmptyComponent={
+            <View className="flex-1 justify-center items-center">
+              <Text style={{ color: colors.textMuted }}>No active rides found</Text>
+            </View>
+          }
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Modal } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -9,14 +9,20 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from '../../src/components
 import { Calendar, Users, Gauge, ChevronLeft, Navigation, Shield, CheckCircle, XCircle, Clock, Edit3, Trash2 } from 'lucide-react-native';
 import { showLocation } from 'react-native-map-link';
 import { useTheme } from '../../src/theme/ThemeContext';
+import LocationPicker from '../../src/components/LocationPicker';
 
 const fetchRideDetails = async (id: string) => {
   const { data } = await apiClient.get(`/api/rides/${id}`);
   return data.ride;
 };
 
-const joinRide = async (id: string) => {
-  const { data } = await apiClient.post(`/api/rides/${id}/join`);
+const joinRide = async (id: string, coords?: [number, number]) => {
+  const { data } = await apiClient.post(`/api/rides/${id}/join`, { location_coords: coords });
+  return data;
+};
+
+const updateStartLocationOverride = async (id: string, coords: [number, number]) => {
+  const { data } = await apiClient.patch(`/api/rides/${id}/start-location`, { location_coords: coords });
   return data;
 };
 
@@ -77,8 +83,10 @@ export default function RideDetailScreen() {
     enabled: !!id,
   });
 
+  const [showJoinOverridePicker, setShowJoinOverridePicker] = useState(false);
+
   const joinMutation = useMutation({
-    mutationFn: () => joinRide(id!),
+    mutationFn: (coords?: [number, number]) => joinRide(id!, coords),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ride', id] });
       queryClient.invalidateQueries({ queryKey: ['rides'] });
@@ -86,6 +94,17 @@ export default function RideDetailScreen() {
     },
     onError: (err: any) => {
       Alert.alert('Error', err.response?.data?.error || err.response?.data?.message || 'Failed to join ride');
+    },
+  });
+
+  const updateLocationMutation = useMutation({
+    mutationFn: (coords: [number, number]) => updateStartLocationOverride(id!, coords),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ride', id] });
+      Alert.alert('Success', 'Starting location updated successfully!');
+    },
+    onError: (err: any) => {
+      Alert.alert('Error', err.response?.data?.error || 'Failed to update location');
     },
   });
 
@@ -178,6 +197,22 @@ export default function RideDetailScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Promote', onPress: () => promoteMutation.mutate(riderId) },
     ]);
+  };
+
+  const handleJoinAttempt = () => {
+    if (ride.start_point_auto) {
+      Alert.alert(
+        'Auto-Calculate Start Point',
+        'This ride automatically groups everyone based on their Home Location. Do you want to use your saved Home Location, or set a different starting point for this specific ride?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Set Override', onPress: () => setShowJoinOverridePicker(true) },
+          { text: 'Use Home', onPress: () => joinMutation.mutate(undefined) },
+        ]
+      );
+    } else {
+      joinMutation.mutate(undefined);
+    }
   };
 
   const handleStatusChange = () => {
@@ -278,16 +313,18 @@ export default function RideDetailScreen() {
                     <Trash2 color={colors.danger} size={20} />
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity
-                  onPress={() => router.push({
-                    pathname: '/(modals)/create-ride',
-                    params: { editRide: JSON.stringify(ride) }
-                  })}
-                  className="p-2 rounded-full"
-                  style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
-                >
-                  <Edit3 color={colors.text} size={20} />
-                </TouchableOpacity>
+                {ride.status !== 'completed' && ride.status !== 'cancelled' && (
+                  <TouchableOpacity
+                    onPress={() => router.push({
+                      pathname: '/(modals)/create-ride',
+                      params: { editRide: JSON.stringify(ride) }
+                    })}
+                    className="p-2 rounded-full"
+                    style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
+                  >
+                    <Edit3 color={colors.text} size={20} />
+                  </TouchableOpacity>
+                )}
               </View>
             )}
           </View>
@@ -487,10 +524,29 @@ export default function RideDetailScreen() {
             <Text className="font-bold text-center text-lg" style={{ color: colors.text }}>
               You are participating in this ride! 🎉
             </Text>
+            {ride.start_point_auto && new Date(ride.scheduled_at).getTime() - Date.now() > 12 * 60 * 60 * 1000 && (
+              <LocationPicker
+                label="Update Starting Location"
+                onSelect={(result) => updateLocationMutation.mutate(result.coords)}
+                customTrigger={(showModal) => (
+                  <TouchableOpacity
+                    onPress={showModal}
+                    className="mt-3 p-3 rounded-xl items-center"
+                    style={{ backgroundColor: colors.primary }}
+                  >
+                    {updateLocationMutation.isPending ? (
+                      <ActivityIndicator color="white" />
+                    ) : (
+                      <Text className="font-bold text-white">Update Starting Location</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+              />
+            )}
           </View>
         ) : (
           <TouchableOpacity
-            onPress={() => joinMutation.mutate()}
+            onPress={handleJoinAttempt}
             disabled={joinMutation.isPending || isFull}
             className="p-4 rounded-2xl shadow-lg"
             style={{ backgroundColor: isFull ? colors.border : colors.primary }}
@@ -505,6 +561,20 @@ export default function RideDetailScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Hidden Location Picker for Join Flow Override */}
+      {showJoinOverridePicker && (
+        <LocationPicker
+          label="Set Override Location"
+          visible={showJoinOverridePicker}
+          onClose={() => setShowJoinOverridePicker(false)}
+          onSelect={(result) => {
+            setShowJoinOverridePicker(false);
+            joinMutation.mutate(result.coords);
+          }}
+          customTrigger={() => <View />}
+        />
+      )}
     </View>
   );
 }

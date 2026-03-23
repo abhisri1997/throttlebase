@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../src/api/client';
 import { useAuthStore } from '../../src/store/authStore';
 import { useTheme } from '../../src/theme/ThemeContext';
+import LocationPicker from '../../src/components/LocationPicker';
 
 const updateProfile = async (payload: any) => {
   const { data } = await apiClient.patch('/api/riders/me', payload);
@@ -21,6 +22,9 @@ export default function EditProfileModal() {
   const [displayName, setDisplayName] = useState(currentRider?.display_name || '');
   const [bio, setBio] = useState(currentRider?.bio || '');
   const [experienceLevel, setExperienceLevel] = useState(currentRider?.experience_level || 'beginner');
+  const [homeLocationCoords, setHomeLocationCoords] = useState<[number, number] | null>(
+    currentRider?.location_coords?.coordinates || null
+  );
 
   // Single vehicle tracking for simplicity in the prototype
   const [bikeMake, setBikeMake] = useState('Royal Enfield');
@@ -41,6 +45,7 @@ export default function EditProfileModal() {
         display_name: displayName,
         bio,
         experience_level: experienceLevel,
+        location_coords: homeLocationCoords,
         vehicles: [
           {
             make: bikeMake,
@@ -108,6 +113,15 @@ export default function EditProfileModal() {
           onChangeText={setBio}
           textAlignVertical="top"
         />
+
+        <View className="mb-6">
+          <LocationPicker
+            label="Home Location (Used for Auto-Start Rides)"
+            initialCoords={homeLocationCoords || undefined}
+            onSelect={(result) => setHomeLocationCoords(result.coords)}
+            placeholder="Search city or neighborhood..."
+          />
+        </View>
 
         {/* Experience Status */}
         <Text className="text-sm font-bold uppercase mb-2" style={{ color: colors.textMuted }}>

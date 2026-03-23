@@ -38,6 +38,11 @@ export const UpdateRiderSchema = z.object({
     .positive('Weight must be positive')
     .max(500, 'Weight seems unrealistic')
     .optional(),
+  location_coords: z
+    .array(z.number())
+    .length(2, 'Must be an array of [lng, lat]')
+    .nullable()
+    .optional(),
 });
 
 export type UpdateRiderInput = z.infer<typeof UpdateRiderSchema>;

@@ -1,6 +1,6 @@
-import { Router } from 'express';
-import { authenticate } from '../middleware/auth.middleware.js';
-import * as rideController from '../controllers/ride.controller.js';
+import { Router } from "express";
+import { authenticate } from "../middleware/auth.middleware.js";
+import * as rideController from "../controllers/ride.controller.js";
 
 const router = Router();
 
@@ -93,8 +93,9 @@ const router = Router();
  *       400:
  *         description: Validation error
  */
-router.get('/', authenticate, rideController.getAllRides);
-router.post('/', authenticate, rideController.createRide);
+router.get("/", authenticate, rideController.getAllRides);
+router.get("/history", authenticate, rideController.getHistory);
+router.post("/", authenticate, rideController.createRide);
 
 /**
  * @swagger
@@ -154,9 +155,9 @@ router.post('/', authenticate, rideController.createRide);
  *       404:
  *         description: Ride not found or not the captain/co-captain
  */
-router.get('/:id', authenticate, rideController.getRide);
-router.patch('/:id', authenticate, rideController.updateRide);
-router.delete('/:id', authenticate, rideController.deleteRide);
+router.get("/:id", authenticate, rideController.getRide);
+router.patch("/:id", authenticate, rideController.updateRide);
+router.delete("/:id", authenticate, rideController.deleteRide);
 
 /**
  * @swagger
@@ -181,7 +182,7 @@ router.delete('/:id', authenticate, rideController.deleteRide);
  *       404:
  *         description: Ride not found
  */
-router.post('/:id/join', authenticate, rideController.joinRide);
+router.post("/:id/join", authenticate, rideController.joinRide);
 
 /**
  * @swagger
@@ -215,7 +216,7 @@ router.post('/:id/join', authenticate, rideController.joinRide);
  *       400:
  *         description: Cannot promote (not captain or target not a participant)
  */
-router.post('/:id/promote', authenticate, rideController.promoteCoCaptain);
+router.post("/:id/promote", authenticate, rideController.promoteCoCaptain);
 
 /**
  * @swagger
@@ -269,8 +270,50 @@ router.post('/:id/promote', authenticate, rideController.promoteCoCaptain);
  *       403:
  *         description: Not a participant
  */
-router.get('/:id/stops', authenticate, rideController.getRideStops);
-router.post('/:id/stops', authenticate, rideController.requestStop);
+router.get("/:id/stops", authenticate, rideController.getRideStops);
+router.post("/:id/stops", authenticate, rideController.requestStop);
+
+/**
+ * @swagger
+ * /api/rides/{id}/start-location:
+ *   patch:
+ *     summary: Update specific start location override for an auto-calculate ride
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [location_coords]
+ *             properties:
+ *               location_coords:
+ *                 type: array
+ *                 items:
+ *                   type: number
+ *                 example: [77.62, 12.93]
+ *     responses:
+ *       200:
+ *         description: Start location updated successfully
+ *       400:
+ *         description: Invalid coords or less than 12 hours before ride
+ *       404:
+ *         description: Ride not found
+ */
+router.patch(
+  "/:id/start-location",
+  authenticate,
+  rideController.updateStartLocation,
+);
 
 /**
  * @swagger
@@ -310,6 +353,10 @@ router.post('/:id/stops', authenticate, rideController.requestStop);
  *       400:
  *         description: Cannot handle (not captain/co-captain or stop not pending)
  */
-router.patch('/:id/stops/:stopId', authenticate, rideController.handleStopRequest);
+router.patch(
+  "/:id/stops/:stopId",
+  authenticate,
+  rideController.handleStopRequest,
+);
 
 export default router;

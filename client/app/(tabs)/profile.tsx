@@ -110,6 +110,17 @@ export default function ProfileScreen() {
               <Text className="text-xs" style={{ color: colors.textMuted }}>Followers</Text>
             </View>
           </View>
+          <TouchableOpacity
+            onPress={() => router.push('/ride-history' as any)}
+            className="w-full mt-4 p-4 rounded-2xl flex-row items-center justify-between"
+            style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
+          >
+            <View className="flex-row items-center">
+              <Text className="text-2xl mr-3">🕒</Text>
+              <Text className="font-bold text-lg" style={{ color: colors.text }}>Ride History</Text>
+            </View>
+            <Text style={{ color: colors.textMuted }}>➔</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Garage Section */}

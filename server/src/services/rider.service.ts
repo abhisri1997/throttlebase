@@ -32,6 +32,10 @@ export interface RiderProfile {
   total_ride_time_sec: number;
   created_at: string;
   updated_at: string;
+  location_coords?: {
+    type: string;
+    coordinates: [number, number];
+  };
 }
 
 // Columns to SELECT for a full profile (never include password_hash)
@@ -39,7 +43,8 @@ const PROFILE_COLUMNS = `
   id, email, display_name, bio, profile_picture_url,
   experience_level, location_city, location_region,
   phone_number, weight_kg, total_rides, total_distance_km,
-  total_ride_time_sec, created_at, updated_at
+  total_ride_time_sec, created_at, updated_at,
+  ST_AsGeoJSON(location_coords)::json AS location_coords
 `;
 
 /**
@@ -86,11 +91,29 @@ export const update = async (
   }
 
   // Build dynamic SET clause: "display_name = $1, bio = $2, ..."
-  const setClauses = keys.map((key, index) => `${key} = $${index + 1}`);
-  const values = keys.map((key) => fields[key as keyof UpdateRiderInput]);
+  const setClauses: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  for (const key of keys) {
+    if (key === 'location_coords') {
+      if (fields.location_coords === null) {
+        setClauses.push(`location_coords = NULL`);
+      } else {
+        const coords = fields.location_coords as [number, number];
+        setClauses.push(`location_coords = ST_SetSRID(ST_MakePoint($${paramIndex}, $${paramIndex + 1}), 4326)::geography`);
+        values.push(coords[0], coords[1]);
+        paramIndex += 2;
+      }
+    } else {
+      setClauses.push(`${key} = $${paramIndex}`);
+      values.push(fields[key as keyof UpdateRiderInput]);
+      paramIndex += 1;
+    }
+  }
 
   // The rider ID is the last parameter
-  const idParamIndex = keys.length + 1;
+  const idParamIndex = paramIndex;
 
   const result = await query(
     `UPDATE riders

@@ -1,6 +1,10 @@
-import pool, { query } from '../config/db.js';
-import type { CreateRideInput, UpdateRideInput, RequestStopInput } from '../schemas/ride.schemas.js';
-import { calculateCentroid, snapToNearestPlace } from '../utils/geo.js';
+import pool, { query } from "../config/db.js";
+import type {
+  CreateRideInput,
+  UpdateRideInput,
+  RequestStopInput,
+} from "../schemas/ride.schemas.js";
+import { calculateGeometricMedian, snapToNearestPlace } from "../utils/geo.js";
 
 export interface Ride {
   id: string;
@@ -42,9 +46,9 @@ const RIDE_COLUMNS = `
 
 // ----- Allowed state transitions -----
 const VALID_TRANSITIONS: Record<string, string[]> = {
-  draft: ['scheduled', 'cancelled'],
-  scheduled: ['active', 'cancelled'],
-  active: ['completed', 'cancelled'],
+  draft: ["scheduled", "cancelled"],
+  scheduled: ["active", "cancelled"],
+  active: ["completed", "cancelled"],
   completed: [],
   cancelled: [],
 };
@@ -55,23 +59,31 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
  */
 export const createRide = async (
   captainId: string,
-  data: CreateRideInput
+  data: CreateRideInput,
 ): Promise<Ride | null> => {
   const client = await pool.connect();
 
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     // Build dynamic column/value lists for optional PostGIS fields
     const columns = [
-      'captain_id', 'title', 'description', 'status', 'visibility', 'scheduled_at',
-      'estimated_duration_min', 'max_capacity', 'requirements', 'current_rider_count'
+      "captain_id",
+      "title",
+      "description",
+      "status",
+      "visibility",
+      "scheduled_at",
+      "estimated_duration_min",
+      "max_capacity",
+      "requirements",
+      "current_rider_count",
     ];
     const values: any[] = [
       captainId,
       data.title,
       data.description || null,
-      data.status || 'draft',
+      data.status || "draft",
       data.visibility,
       data.scheduled_at,
       data.estimated_duration_min || null,
@@ -85,43 +97,47 @@ export const createRide = async (
     // Optionally add start_point
     if (data.start_point_coords) {
       paramIndex++;
-      columns.push('start_point');
-      values.push(`SRID=4326;POINT(${data.start_point_coords[0]} ${data.start_point_coords[1]})`);
+      columns.push("start_point");
+      values.push(
+        `SRID=4326;POINT(${data.start_point_coords[0]} ${data.start_point_coords[1]})`,
+      );
     }
 
     // Optionally add start_point_name
     if (data.start_point_name) {
       paramIndex++;
-      columns.push('start_point_name');
+      columns.push("start_point_name");
       values.push(data.start_point_name);
     }
 
     // Optionally add end_point
     if (data.end_point_coords) {
       paramIndex++;
-      columns.push('end_point');
-      values.push(`SRID=4326;POINT(${data.end_point_coords[0]} ${data.end_point_coords[1]})`);
+      columns.push("end_point");
+      values.push(
+        `SRID=4326;POINT(${data.end_point_coords[0]} ${data.end_point_coords[1]})`,
+      );
     }
 
     // Optionally add end_point_name
     if (data.end_point_name) {
       paramIndex++;
-      columns.push('end_point_name');
+      columns.push("end_point_name");
       values.push(data.end_point_name);
     }
 
     // Store auto-start flag
     if (data.start_point_auto) {
       paramIndex++;
-      columns.push('start_point_auto');
+      columns.push("start_point_auto");
       values.push(true);
     }
 
     const placeholders = values.map((_, i) => `$${i + 1}`);
 
     const insertRideQuery = `
-      INSERT INTO rides (${columns.join(', ')})
-      VALUES (${placeholders.join(', ')})
+      INSERT INTO rides (${columns.join(", ")})
+      VALUES (${placeholders.join(", ")})
       RETURNING ${RIDE_COLUMNS}
     `;
 
@@ -132,7 +148,7 @@ export const createRide = async (
     await client.query(
       `INSERT INTO ride_participants (ride_id, rider_id, role, status, joined_at)
        VALUES ($1, $2, 'captain', 'confirmed', now())`,
-      [newRide.id, captainId]
+      [newRide.id, captainId],
     );
 
     // 3. Insert pre-planned stops if provided
@@ -141,16 +157,23 @@ export const createRide = async (
         await client.query(
           `INSERT INTO ride_stops (ride_id, requested_by, approved_by, type, location, name, status, created_at)
            VALUES ($1, $2, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, $6, 'approved', now())`,
-          [newRide.id, captainId, stop.type, stop.location_coords[0], stop.location_coords[1], stop.name || null]
+          [
+            newRide.id,
+            captainId,
+            stop.type,
+            stop.location_coords[0],
+            stop.location_coords[1],
+            stop.name || null,
+          ],
         );
       }
     }
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
     return newRide as Ride;
   } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('createRide DB error:', error);
+    await client.query("ROLLBACK");
+    console.error("createRide DB error:", error);
     throw error;
   } finally {
     client.release();
@@ -201,7 +224,7 @@ export const getRideById = async (id: string): Promise<Ride | null> => {
      FROM rides r
      JOIN riders c ON r.captain_id = c.id
      WHERE r.id = $1`,
-    [id]
+    [id],
   );
   return result.rows.length ? (result.rows[0] as Ride) : null;
 };
@@ -209,12 +232,16 @@ export const getRideById = async (id: string): Promise<Ride | null> => {
 /**
  * Lists public and upcoming rides.
  */
-export const listDiscoverableRides = async (riderId?: string): Promise<Ride[]> => {
+export const listDiscoverableRides = async (
+  riderId?: string,
+): Promise<Ride[]> => {
   let queryStr = `
     SELECT r.*, c.display_name as captain_name
     FROM rides r
     JOIN riders c ON r.captain_id = c.id
-    WHERE (r.visibility = 'public' AND r.status IN ('scheduled', 'active', 'completed'))
+    WHERE r.status NOT IN ('completed', 'cancelled')
+      AND (
+        (r.visibility = 'public' AND r.status IN ('scheduled', 'active'))
   `;
   const params: any[] = [];
 
@@ -223,9 +250,27 @@ export const listDiscoverableRides = async (riderId?: string): Promise<Ride[]> =
     params.push(riderId);
   }
 
-  queryStr += ` ORDER BY r.scheduled_at ASC LIMIT 50`;
+  queryStr += ` ) ORDER BY r.scheduled_at ASC LIMIT 50`;
 
   const result = await query(queryStr, params);
+  return result.rows as Ride[];
+};
+
+/**
+ * Gets a user's completed or cancelled rides.
+ */
+export const getRideHistory = async (riderId: string): Promise<Ride[]> => {
+  const result = await query(
+    `SELECT r.*, c.display_name as captain_name
+     FROM rides r
+     JOIN riders c ON r.captain_id = c.id
+     WHERE r.status IN ('completed', 'cancelled')
+       AND (r.captain_id = $1 OR EXISTS (
+         SELECT 1 FROM ride_participants rp WHERE rp.ride_id = r.id AND rp.rider_id = $1
+       ))
+     ORDER BY r.scheduled_at DESC`,
+    [riderId],
+  );
   return result.rows as Ride[];
 };
 
@@ -236,7 +281,7 @@ export const listDiscoverableRides = async (riderId?: string): Promise<Ride[]> =
 export const updateRideInfo = async (
   rideId: string,
   captainId: string,
-  fields: UpdateRideInput
+  fields: UpdateRideInput,
 ): Promise<Ride | null> => {
   // Verify the caller is captain or co-captain
   const authCheck = await query(
@@ -245,18 +290,30 @@ export const updateRideInfo = async (
         SELECT 1 FROM ride_participants WHERE ride_id = $1 AND rider_id = $2 AND role = 'co_captain'
       )
     )`,
-    [rideId, captainId]
+    [rideId, captainId],
   );
 
   if (authCheck.rows.length === 0) return null;
 
+  // Block all edits if the ride is already completed or cancelled
+  const currentStatus = authCheck.rows[0].status;
+  if (["completed", "cancelled"].includes(currentStatus)) {
+    throw new Error(`Cannot edit a ride that is already ${currentStatus}`);
+  }
+
   // If status change requested, validate transition
   if (fields.status) {
     const currentStatus = authCheck.rows[0].status;
-    const allowed = VALID_TRANSITIONS[currentStatus] || [];
 
-    if (!allowed.includes(fields.status)) {
-      throw new Error(`Invalid status transition: ${currentStatus} → ${fields.status}. Allowed: ${allowed.join(', ') || 'none'}`);
+    // Only validate if it's an actual state change
+    if (fields.status !== currentStatus) {
+      const allowed = VALID_TRANSITIONS[currentStatus] || [];
+
+      if (!allowed.includes(fields.status)) {
+        throw new Error(
+          `Invalid status transition: ${currentStatus} → ${fields.status}. Allowed: ${allowed.join(", ") || "none"}`,
+        );
+      }
     }
   }
 
@@ -266,9 +323,18 @@ export const updateRideInfo = async (
   let paramIdx = 0;
 
   // Handle regular scalar fields
-  const scalarFields = ['title', 'description', 'status', 'visibility', 'scheduled_at',
-    'estimated_duration_min', 'max_capacity', 'start_point_name', 'end_point_name',
-    'start_point_auto'] as const;
+  const scalarFields = [
+    "title",
+    "description",
+    "status",
+    "visibility",
+    "scheduled_at",
+    "estimated_duration_min",
+    "max_capacity",
+    "start_point_name",
+    "end_point_name",
+    "start_point_auto",
+  ] as const;
 
   for (const key of scalarFields) {
     if (fields[key as keyof UpdateRideInput] !== undefined) {
@@ -289,14 +355,18 @@ export const updateRideInfo = async (
   // Handle spatial coordinates — convert to PostGIS points
   if (fields.start_point_coords) {
     paramIdx++;
-    setClauses.push(`start_point = ST_SetSRID(ST_MakePoint($${paramIdx}, $${paramIdx + 1}), 4326)::geography`);
+    setClauses.push(
+      `start_point = ST_SetSRID(ST_MakePoint($${paramIdx}, $${paramIdx + 1}), 4326)::geography`,
+    );
     values.push(fields.start_point_coords[0], fields.start_point_coords[1]);
     paramIdx++;
   }
 
   if (fields.end_point_coords) {
     paramIdx++;
-    setClauses.push(`end_point = ST_SetSRID(ST_MakePoint($${paramIdx}, $${paramIdx + 1}), 4326)::geography`);
+    setClauses.push(
+      `end_point = ST_SetSRID(ST_MakePoint($${paramIdx}, $${paramIdx + 1}), 4326)::geography`,
+    );
     values.push(fields.end_point_coords[0], fields.end_point_coords[1]);
     paramIdx++;
   }
@@ -308,8 +378,8 @@ export const updateRideInfo = async (
   values.push(rideId);
 
   const result = await query(
-    `UPDATE rides SET ${setClauses.join(', ')} WHERE id = $${rideIdParam} RETURNING *`,
-    values
+    `UPDATE rides SET ${setClauses.join(", ")} WHERE id = $${rideIdParam} RETURNING *`,
+    values,
   );
 
   return result.rows.length ? (result.rows[0] as Ride) : null;
@@ -319,12 +389,15 @@ export const updateRideInfo = async (
  * Deletes a ride.
  * Only the captain can delete it, and only if it hasn't started yet (not active/completed).
  */
-export const deleteRide = async (rideId: string, captainId: string): Promise<boolean> => {
+export const deleteRide = async (
+  rideId: string,
+  captainId: string,
+): Promise<boolean> => {
   const result = await query(
     `DELETE FROM rides 
      WHERE id = $1 AND captain_id = $2 AND status NOT IN ('active', 'completed') 
      RETURNING id`,
-    [rideId, captainId]
+    [rideId, captainId],
   );
   return result.rows.length > 0;
 };
@@ -333,62 +406,85 @@ export const deleteRide = async (rideId: string, captainId: string): Promise<boo
  * Allows a rider to join a public ride.
  * Enforces max capacity using SELECT ... FOR UPDATE (optimistic locking).
  */
-export const joinRide = async (rideId: string, riderId: string): Promise<boolean> => {
+export const joinRide = async (
+  rideId: string,
+  riderId: string,
+  overrideLocation?: [number, number],
+): Promise<boolean> => {
   const client = await pool.connect();
 
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     // Lock the ride row and check capacity
     const rideResult = await client.query(
-      `SELECT id, max_capacity, current_rider_count, status, visibility
+      `SELECT id, max_capacity, current_rider_count, status, visibility, start_point_auto
        FROM rides WHERE id = $1 FOR UPDATE`,
-      [rideId]
+      [rideId],
     );
 
     if (rideResult.rows.length === 0) {
-      await client.query('ROLLBACK');
-      throw new Error('Ride not found');
+      await client.query("ROLLBACK");
+      throw new Error("Ride not found");
     }
 
     const ride = rideResult.rows[0];
 
-    // Only allow joining scheduled rides
-    if (!['draft', 'scheduled'].includes(ride.status)) {
-      await client.query('ROLLBACK');
+    // Only allow joining published (scheduled), active, or completed rides
+    if (!["scheduled", "active", "completed"].includes(ride.status)) {
+      await client.query("ROLLBACK");
       throw new Error(`Cannot join a ride with status "${ride.status}"`);
     }
 
     // Enforce max capacity
     if (ride.max_capacity && ride.current_rider_count >= ride.max_capacity) {
-      await client.query('ROLLBACK');
-      throw new Error('This ride has reached its maximum capacity');
+      await client.query("ROLLBACK");
+      throw new Error("This ride has reached its maximum capacity");
     }
 
     // Try to insert the participant
-    const insertResult = await client.query(
-      `INSERT INTO ride_participants (ride_id, rider_id, role, status, joined_at)
-       VALUES ($1, $2, 'rider', 'confirmed', now())
-       ON CONFLICT (ride_id, rider_id) DO NOTHING
-       RETURNING id`,
-      [rideId, riderId]
-    );
+    const insertQuery = overrideLocation
+      ? `INSERT INTO ride_participants (ride_id, rider_id, role, status, joined_at, start_location_override)
+         VALUES ($1, $2, 'rider', 'confirmed', now(), ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography)
+         ON CONFLICT (ride_id, rider_id) DO NOTHING
+         RETURNING id`
+      : `INSERT INTO ride_participants (ride_id, rider_id, role, status, joined_at)
+         VALUES ($1, $2, 'rider', 'confirmed', now())
+         ON CONFLICT (ride_id, rider_id) DO NOTHING
+         RETURNING id`;
+
+    const insertParams = overrideLocation
+      ? [rideId, riderId, overrideLocation[0], overrideLocation[1]]
+      : [rideId, riderId];
+
+    const insertResult = await client.query(insertQuery, insertParams);
 
     if (insertResult.rows.length > 0) {
       // If successfully joined, increment the counter
       await client.query(
         `UPDATE rides SET current_rider_count = current_rider_count + 1 WHERE id = $1`,
-        [rideId]
+        [rideId],
       );
-      await client.query('COMMIT');
+      await client.query("COMMIT");
+
+      // Auto-calculate start point if enabled
+      if (ride.start_point_auto) {
+        recalculateStartPoint(rideId).catch((err) =>
+          console.error(
+            `Failed to recalculate start point for ride ${rideId}:`,
+            err,
+          ),
+        );
+      }
+
       return true;
     } else {
       // Already a participant
-      await client.query('ROLLBACK');
+      await client.query("ROLLBACK");
       return false;
     }
   } catch (error) {
-    await client.query('ROLLBACK');
+    await client.query("ROLLBACK");
     throw error;
   } finally {
     client.release();
@@ -401,12 +497,12 @@ export const joinRide = async (rideId: string, riderId: string): Promise<boolean
 export const promoteToCoCaptain = async (
   rideId: string,
   captainId: string,
-  targetRiderId: string
+  targetRiderId: string,
 ): Promise<boolean> => {
   // Verify caller is the captain
   const rideCheck = await query(
     `SELECT id FROM rides WHERE id = $1 AND captain_id = $2`,
-    [rideId, captainId]
+    [rideId, captainId],
   );
   if (rideCheck.rows.length === 0) return false;
 
@@ -415,7 +511,7 @@ export const promoteToCoCaptain = async (
      SET role = 'co_captain'
      WHERE ride_id = $1 AND rider_id = $2 AND role = 'rider' AND status = 'confirmed'
      RETURNING id`,
-    [rideId, targetRiderId]
+    [rideId, targetRiderId],
   );
   return result.rows.length > 0;
 };
@@ -428,22 +524,22 @@ export const promoteToCoCaptain = async (
 export const requestStop = async (
   rideId: string,
   riderId: string,
-  data: RequestStopInput
+  data: RequestStopInput,
 ): Promise<RideStop | null> => {
   // Verify rider is a participant
   const participantCheck = await query(
     `SELECT id FROM ride_participants WHERE ride_id = $1 AND rider_id = $2 AND status = 'confirmed'`,
-    [rideId, riderId]
+    [rideId, riderId],
   );
   if (participantCheck.rows.length === 0) return null;
 
   // Check if requester is captain/co-captain — auto-approve
   const roleCheck = await query(
     `SELECT role FROM ride_participants WHERE ride_id = $1 AND rider_id = $2`,
-    [rideId, riderId]
+    [rideId, riderId],
   );
   const role = roleCheck.rows[0]?.role;
-  const isLeader = role === 'captain' || role === 'co_captain';
+  const isLeader = role === "captain" || role === "co_captain";
 
   const result = await query(
     `INSERT INTO ride_stops (ride_id, requested_by, approved_by, type, location, status, created_at)
@@ -456,8 +552,8 @@ export const requestStop = async (
       data.type,
       data.location_coords[0],
       data.location_coords[1],
-      isLeader ? 'approved' : 'pending',
-    ]
+      isLeader ? "approved" : "pending",
+    ],
   );
   return result.rows.length ? (result.rows[0] as RideStop) : null;
 };
@@ -469,13 +565,13 @@ export const handleStopRequest = async (
   rideId: string,
   stopId: string,
   captainId: string,
-  decision: 'approved' | 'rejected'
+  decision: "approved" | "rejected",
 ): Promise<boolean> => {
   // Verify caller is captain or co-captain of this ride
   const authCheck = await query(
     `SELECT role FROM ride_participants
      WHERE ride_id = $1 AND rider_id = $2 AND role IN ('captain', 'co_captain') AND status = 'confirmed'`,
-    [rideId, captainId]
+    [rideId, captainId],
   );
   if (authCheck.rows.length === 0) return false;
 
@@ -484,7 +580,7 @@ export const handleStopRequest = async (
      SET status = $1, approved_by = $2
      WHERE id = $3 AND ride_id = $4 AND status = 'pending'
      RETURNING id`,
-    [decision, captainId, stopId, rideId]
+    [decision, captainId, stopId, rideId],
   );
   return result.rows.length > 0;
 };
@@ -503,7 +599,7 @@ export const listRideStops = async (rideId: string): Promise<RideStop[]> => {
      LEFT JOIN riders app ON rs.approved_by = app.id
      WHERE rs.ride_id = $1
      ORDER BY rs.created_at ASC`,
-    [rideId]
+    [rideId],
   );
   return result.rows as RideStop[];
 };
@@ -514,46 +610,63 @@ export const listRideStops = async (rideId: string): Promise<RideStop[]> => {
  * then snaps to the nearest accessible place via Google Nearby Search.
  */
 export const recalculateStartPoint = async (
-  rideId: string
-): Promise<{ lat: number; lng: number; name: string; address: string } | null> => {
+  rideId: string,
+): Promise<{
+  lat: number;
+  lng: number;
+  name: string;
+  address: string;
+} | null> => {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
   if (!apiKey) {
-    console.error('GOOGLE_MAPS_API_KEY not set');
+    console.error("GOOGLE_MAPS_API_KEY not set");
     return null;
   }
 
-  // Verify this ride has start_point_auto enabled
+  // Verify this ride has start_point_auto enabled and get end_point
   const rideCheck = await query(
-    `SELECT start_point_auto FROM rides WHERE id = $1`,
-    [rideId]
+    `SELECT 
+       start_point_auto, 
+       ST_X(end_point::geometry) as dest_lng, 
+       ST_Y(end_point::geometry) as dest_lat 
+     FROM rides WHERE id = $1`,
+    [rideId],
   );
   if (rideCheck.rows.length === 0 || !rideCheck.rows[0].start_point_auto) {
     return null;
   }
 
-  // Get all confirmed riders' last known locations
-  // For now, use the ride's end_point as a fallback (riders don't have location yet)
-  // In production, this would query riders' last GPS locations
+  const destRow = rideCheck.rows[0];
+  const destination =
+    destRow.dest_lat && destRow.dest_lng
+      ? { lat: parseFloat(destRow.dest_lat), lng: parseFloat(destRow.dest_lng) }
+      : undefined;
+
+  // Get all confirmed riders' locations (preferring override, falling back to home location)
   const participantResult = await query(
-    `SELECT rp.rider_id, r.last_known_lat, r.last_known_lng
+    `SELECT 
+       rp.rider_id, 
+       ST_X(COALESCE(rp.start_location_override, r.location_coords)::geometry) as lng,
+       ST_Y(COALESCE(rp.start_location_override, r.location_coords)::geometry) as lat
      FROM ride_participants rp
      JOIN riders r ON rp.rider_id = r.id
      WHERE rp.ride_id = $1 AND rp.status = 'confirmed'
-       AND r.last_known_lat IS NOT NULL`,
-    [rideId]
+       AND COALESCE(rp.start_location_override, r.location_coords) IS NOT NULL`,
+    [rideId],
   );
 
-  const locations = participantResult.rows
-    .filter((r: any) => r.last_known_lat && r.last_known_lng)
-    .map((r: any) => ({ lat: parseFloat(r.last_known_lat), lng: parseFloat(r.last_known_lng) }));
+  const locations = participantResult.rows.map((r: any) => ({
+    lat: parseFloat(r.lat),
+    lng: parseFloat(r.lng),
+  }));
 
   if (locations.length === 0) return null;
 
-  // Calculate centroid
-  const centroid = calculateCentroid(locations);
+  // Calculate the most equitable start point using Geometric Median (Weber Problem)
+  const medianPoint = calculateGeometricMedian(locations, destination, 1.5);
 
   // Snap to nearest accessible place
-  const snapped = await snapToNearestPlace(centroid, apiKey);
+  const snapped = await snapToNearestPlace(medianPoint, apiKey);
 
   // Update the ride's start point
   await query(
@@ -561,8 +674,72 @@ export const recalculateStartPoint = async (
      SET start_point = ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
          start_point_name = $3
      WHERE id = $4`,
-    [snapped.lng, snapped.lat, `${snapped.name} — ${snapped.address}`, rideId]
+    [snapped.lng, snapped.lat, `${snapped.name} — ${snapped.address}`, rideId],
   );
 
   return snapped;
+};
+
+/**
+ * Allows a participant to override their auto-calculate start point.
+ * Must be at least 12 hours before the ride's scheduled_at time.
+ */
+export const updateStartLocationOverride = async (
+  rideId: string,
+  riderId: string,
+  locationCoords: [number, number],
+): Promise<boolean> => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Check if ride exists, is auto-start, and starts in > 12 hours
+    const rideCheck = await client.query(
+      `SELECT scheduled_at, start_point_auto FROM rides WHERE id = $1`,
+      [rideId],
+    );
+
+    if (rideCheck.rows.length === 0) throw new Error("Ride not found");
+    const ride = rideCheck.rows[0];
+
+    if (!ride.start_point_auto)
+      throw new Error("Ride does not auto-calculate start points");
+
+    if (ride.scheduled_at) {
+      const scheduledTime = new Date(ride.scheduled_at).getTime();
+      const now = Date.now();
+      const twelveHoursMs = 12 * 60 * 60 * 1000;
+
+      if (scheduledTime - now < twelveHoursMs) {
+        throw new Error(
+          "Start locations cannot be updated less than 12 hours before the ride begins",
+        );
+      }
+    }
+
+    // Update the participant
+    const updateResult = await client.query(
+      `UPDATE ride_participants
+       SET start_location_override = ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+       WHERE ride_id = $3 AND rider_id = $4 AND status = 'confirmed'
+       RETURNING id`,
+      [locationCoords[0], locationCoords[1], rideId, riderId],
+    );
+
+    if (updateResult.rows.length === 0) {
+      throw new Error("You are not a confirmed participant in this ride");
+    }
+
+    await client.query("COMMIT");
+
+    // Recalculate silently
+    recalculateStartPoint(rideId).catch(console.error);
+
+    return true;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 };
