@@ -7,7 +7,7 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
-import { Link, router } from "expo-router";
+import { Link, router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { UserPlus } from "lucide-react-native";
@@ -19,6 +19,7 @@ import { useTheme } from "../../src/theme/ThemeContext";
 
 export default function RegisterScreen() {
   const { colors } = useTheme();
+  const { redirectTo } = useLocalSearchParams<{ redirectTo?: string }>();
   const [form, setForm] = useState({
     username: "",
     email: "",
@@ -28,6 +29,20 @@ export default function RegisterScreen() {
 
   const [isLoading, setIsLoading] = useState(false);
   const login = useAuthStore((state) => state.login);
+
+  const resolvePostRegisterRoute = () => {
+    if (typeof redirectTo === "string" && redirectTo.startsWith("/")) {
+      return redirectTo;
+    }
+
+    return "/(tabs)/feed";
+  };
+
+  const loginHref =
+    typeof redirectTo === "string" && redirectTo.startsWith("/")
+      ? ({ pathname: "/login", params: { redirectTo } } as const)
+      : "/login";
+
   const handleRegister = async () => {
     if (!form.username || !form.email || !form.password) {
       Alert.alert("Error", "Username, email, and password are required.");
@@ -37,7 +52,7 @@ export default function RegisterScreen() {
       setIsLoading(true);
       const res = await apiClient.post("/auth/register", form); // Auto login after successful register
       await login(res.data.token, res.data.rider);
-      router.replace("/(tabs)/feed");
+      router.replace(resolvePostRegisterRoute() as any);
     } catch (error: any) {
       const msg = error.response?.data?.error || "Registration failed";
       Alert.alert("Registration Error", msg);
@@ -102,7 +117,7 @@ export default function RegisterScreen() {
             />
             <View className='flex-row justify-center mt-6'>
               <Text className=''>Already a rider? </Text>
-              <Link href='/login' asChild>
+              <Link href={loginHref as any} asChild>
                 <Text className='text-primary-500 font-bold'>Sign In</Text>
               </Link>
             </View>

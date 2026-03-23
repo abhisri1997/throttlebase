@@ -13,7 +13,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
 import { useTheme } from "../../src/theme/ThemeContext";
 import {
+  Bell,
   ChevronLeft,
+  LifeBuoy,
   Shield,
   UserX,
   Settings as SettingsIcon,
@@ -74,31 +76,29 @@ export default function SettingsModal() {
     onChange: (val: string) => void,
   ) => (
     <View
-      className="flex-row justify-between items-center py-4 mx-4"
+      className='flex-row justify-between items-center py-4 mx-4'
       style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
     >
-      <Text style={{ color: colors.text }} className="text-base font-medium">
+      <Text style={{ color: colors.text }} className='text-base font-medium'>
         {label}
       </Text>
       <View
-        className="flex-row rounded-lg p-1"
+        className='flex-row rounded-lg p-1'
         style={{ backgroundColor: colors.surface }}
       >
         {options.map((opt) => (
           <TouchableOpacity
             key={opt}
             onPress={() => onChange(opt)}
-            className="px-3 py-1.5 rounded"
+            className='px-3 py-1.5 rounded'
             style={{
-              backgroundColor:
-                value === opt ? colors.primary : "transparent",
+              backgroundColor: value === opt ? colors.primary : "transparent",
             }}
           >
             <Text
-              className="capitalize font-bold text-xs"
+              className='capitalize font-bold text-xs'
               style={{
-                color:
-                  value === opt ? "#ffffff" : colors.textMuted,
+                color: value === opt ? "#ffffff" : colors.textMuted,
               }}
             >
               {opt.replace("_", " ")}
@@ -115,17 +115,17 @@ export default function SettingsModal() {
     onChange: (val: boolean) => void,
   ) => (
     <View
-      className="flex-row justify-between items-center py-4 mx-4"
+      className='flex-row justify-between items-center py-4 mx-4'
       style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
     >
-      <Text style={{ color: colors.text }} className="text-base font-medium">
+      <Text style={{ color: colors.text }} className='text-base font-medium'>
         {label}
       </Text>
       <Switch
         value={value}
         onValueChange={onChange}
         trackColor={{ false: colors.border, true: colors.primary }}
-        thumbColor="#ffffff"
+        thumbColor='#ffffff'
       />
     </View>
   );
@@ -133,18 +133,18 @@ export default function SettingsModal() {
   if (gLoading || pLoading || bLoading) {
     return (
       <View
-        className="flex-1 justify-center items-center"
+        className='flex-1 justify-center items-center'
         style={{ backgroundColor: colors.bg }}
       >
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size='large' color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <View className="flex-1" style={{ backgroundColor: colors.bg }}>
+    <View className='flex-1' style={{ backgroundColor: colors.bg }}>
       <SafeAreaView
-        className="px-4 py-3 flex-row items-center"
+        className='px-4 py-3 flex-row items-center'
         style={{
           backgroundColor: colors.surface,
           borderBottomWidth: 1,
@@ -152,24 +152,24 @@ export default function SettingsModal() {
         }}
         edges={["top"]}
       >
-        <TouchableOpacity onPress={() => router.back()} className="p-2 mr-2">
+        <TouchableOpacity onPress={() => router.back()} className='p-2 mr-2'>
           <ChevronLeft color={colors.text} size={24} />
         </TouchableOpacity>
         <Text
-          className="text-xl font-bold flex-1"
+          className='text-xl font-bold flex-1'
           style={{ color: colors.text }}
         >
           App Settings
         </Text>
       </SafeAreaView>
 
-      <ScrollView className="flex-1" style={{ backgroundColor: colors.bg }}>
+      <ScrollView className='flex-1' style={{ backgroundColor: colors.bg }}>
         {/* GENERAL SETTINGS */}
-        <View className="pt-6 pb-2">
-          <View className="px-4 flex-row items-center mb-2">
+        <View className='pt-6 pb-2'>
+          <View className='px-4 flex-row items-center mb-2'>
             <SettingsIcon color={colors.textMuted} size={18} />
             <Text
-              className="font-bold uppercase tracking-wider text-xs ml-2"
+              className='font-bold uppercase tracking-wider text-xs ml-2'
               style={{ color: colors.textMuted }}
             >
               General Options
@@ -201,15 +201,30 @@ export default function SettingsModal() {
               ["dark", "light"],
               (val) => updateGeneral.mutate({ theme: val }),
             )}
+            <TouchableOpacity
+              onPress={() => router.push("/(modals)/notifications")}
+              className='mx-4 py-4 flex-row items-center justify-between'
+            >
+              <View className='flex-row items-center'>
+                <Bell color={colors.textMuted} size={16} />
+                <Text
+                  className='ml-2 text-base font-medium'
+                  style={{ color: colors.text }}
+                >
+                  Notification Center
+                </Text>
+              </View>
+              <Text style={{ color: colors.textMuted }}>➔</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
         {/* PRIVACY SETTINGS */}
-        <View className="pt-6 pb-2">
-          <View className="px-4 flex-row items-center mb-2">
+        <View className='pt-6 pb-2'>
+          <View className='px-4 flex-row items-center mb-2'>
             <Shield color={colors.textMuted} size={18} />
             <Text
-              className="font-bold uppercase tracking-wider text-xs ml-2"
+              className='font-bold uppercase tracking-wider text-xs ml-2'
               style={{ color: colors.textMuted }}
             >
               Security & Privacy
@@ -250,18 +265,18 @@ export default function SettingsModal() {
         </View>
 
         {/* BLOCKED USERS */}
-        <View className="pt-6 pb-12">
-          <View className="px-4 flex-row items-center mb-2">
+        <View className='pt-6 pb-12'>
+          <View className='px-4 flex-row items-center mb-2'>
             <UserX color={colors.danger} size={18} />
             <Text
-              className="font-bold uppercase tracking-wider text-xs ml-2"
+              className='font-bold uppercase tracking-wider text-xs ml-2'
               style={{ color: colors.danger }}
             >
               Blocked Riders
             </Text>
           </View>
           <View
-            className="py-2 min-h-[100px] justify-center"
+            className='py-2 min-h-[100px] justify-center'
             style={{
               backgroundColor: colors.surface,
               borderTopWidth: 1,
@@ -273,22 +288,22 @@ export default function SettingsModal() {
               blocked.map((block: any, index: number) => (
                 <View
                   key={block.blocked_id}
-                  className="flex-row items-center justify-between px-4 py-3"
+                  className='flex-row items-center justify-between px-4 py-3'
                   style={
                     index !== blocked.length - 1
-                      ? { borderBottomWidth: 1, borderBottomColor: colors.border }
+                      ? {
+                          borderBottomWidth: 1,
+                          borderBottomColor: colors.border,
+                        }
                       : undefined
                   }
                 >
-                  <Text
-                    className="font-bold"
-                    style={{ color: colors.text }}
-                  >
+                  <Text className='font-bold' style={{ color: colors.text }}>
                     {block.blocked_name}
                   </Text>
                   <TouchableOpacity
                     onPress={() => unblockRider.mutate(block.blocked_id)}
-                    className="px-4 py-2 rounded-full"
+                    className='px-4 py-2 rounded-full'
                     style={{
                       backgroundColor: colors.surface,
                       borderWidth: 1,
@@ -296,7 +311,7 @@ export default function SettingsModal() {
                     }}
                   >
                     <Text
-                      className="font-bold text-sm"
+                      className='font-bold text-sm'
                       style={{ color: colors.text }}
                     >
                       Unblock
@@ -306,13 +321,54 @@ export default function SettingsModal() {
               ))
             ) : (
               <Text
-                className="italic text-center text-sm px-4"
+                className='italic text-center text-sm px-4'
                 style={{ color: colors.textMuted }}
               >
                 You have not blocked any riders. Blocked riders will completely
                 disappear from your App views.
               </Text>
             )}
+          </View>
+        </View>
+
+        <View className='pb-12'>
+          <View className='px-4 flex-row items-center mb-2'>
+            <LifeBuoy color={colors.primary} size={18} />
+            <Text
+              className='font-bold uppercase tracking-wider text-xs ml-2'
+              style={{ color: colors.textMuted }}
+            >
+              Support
+            </Text>
+          </View>
+          <View
+            style={{
+              backgroundColor: colors.surface,
+              borderTopWidth: 1,
+              borderBottomWidth: 1,
+              borderColor: colors.border,
+            }}
+          >
+            <TouchableOpacity
+              onPress={() => router.push("/(modals)/support")}
+              className='px-4 py-4 flex-row items-center justify-between'
+            >
+              <View>
+                <Text
+                  className='text-base font-medium'
+                  style={{ color: colors.text }}
+                >
+                  Contact Support
+                </Text>
+                <Text
+                  className='text-sm mt-1'
+                  style={{ color: colors.textMuted }}
+                >
+                  Report bugs, disputes, account issues, or general questions.
+                </Text>
+              </View>
+              <Text style={{ color: colors.textMuted }}>➔</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
