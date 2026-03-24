@@ -5,6 +5,7 @@ export default function ModalsLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name='create-post' />
       <Stack.Screen name='create-ride' />
+      <Stack.Screen name='create-group' />
       <Stack.Screen name='edit-profile' />
       <Stack.Screen name='notifications' />
       <Stack.Screen name='settings' />

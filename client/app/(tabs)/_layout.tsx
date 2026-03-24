@@ -1,6 +1,13 @@
-import { Tabs } from 'expo-router';
-import { Compass, Map, Activity, User, Trophy } from 'lucide-react-native';
-import { useTheme } from '../../src/theme/ThemeContext';
+import { Tabs } from "expo-router";
+import {
+  Compass,
+  Map,
+  Activity,
+  User,
+  Trophy,
+  Users,
+} from "lucide-react-native";
+import { useTheme } from "../../src/theme/ThemeContext";
 
 export default function TabLayout() {
   const { colors } = useTheme();
@@ -21,37 +28,44 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="feed"
+        name='feed'
         options={{
-          title: 'Feed',
+          title: "Feed",
           tabBarIcon: ({ color }) => <Activity size={24} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="rides"
+        name='rides'
         options={{
-          title: 'Discover',
+          title: "Discover",
           tabBarIcon: ({ color }) => <Compass size={24} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="routes"
+        name='routes'
         options={{
-          title: 'Routes',
+          title: "Routes",
           tabBarIcon: ({ color }) => <Map size={24} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="rewards"
+        name='groups'
         options={{
-          title: 'Rank',
+          title: "Groups",
+          tabBarIcon: ({ color }) => <Users size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name='rewards'
+        options={{
+          title: "Rank",
           tabBarIcon: ({ color }) => <Trophy size={24} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name='profile'
         options={{
-          title: 'Profile',
+          title: "Profile",
           tabBarIcon: ({ color }) => <User size={24} color={color} />,
         }}
       />

@@ -112,6 +112,7 @@ function AppInner() {
         <Stack.Screen name='ride/[id]' options={{ headerShown: false }} />
         <Stack.Screen name='route/[id]' options={{ headerShown: false }} />
         <Stack.Screen name='rider/[id]' options={{ headerShown: false }} />
+        <Stack.Screen name='group/[id]' options={{ headerShown: false }} />
         <Stack.Screen
           name='(modals)'
           options={{ presentation: "modal", headerShown: false }}

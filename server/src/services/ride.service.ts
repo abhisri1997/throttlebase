@@ -39,6 +39,8 @@ export interface RideStop {
   approver_name?: string;
 }
 
+export type RideStatusFilter = "all" | "draft" | "scheduled" | "active";
+
 const RIDE_COLUMNS = `
   id, captain_id, title, description, status, visibility,
   scheduled_at, estimated_duration_min, max_capacity,
@@ -234,24 +236,32 @@ export const getRideById = async (id: string): Promise<Ride | null> => {
  * Lists public and upcoming rides.
  */
 export const listDiscoverableRides = async (
-  riderId?: string,
+  riderId: string,
+  statusFilter: RideStatusFilter = "all",
 ): Promise<Ride[]> => {
+  const params: any[] = [riderId];
   let queryStr = `
     SELECT r.*, c.display_name as captain_name
     FROM rides r
     JOIN riders c ON r.captain_id = c.id
     WHERE r.status NOT IN ('completed', 'cancelled')
       AND (
-        (r.visibility = 'public' AND r.status IN ('scheduled', 'active'))
+        (r.visibility = 'public' AND r.status = 'scheduled')
+        OR r.captain_id = $1
+        OR EXISTS (
+          SELECT 1
+          FROM ride_participants rp
+          WHERE rp.ride_id = r.id AND rp.rider_id = $1
+        )
+      )
   `;
-  const params: any[] = [];
 
-  if (riderId) {
-    queryStr += ` OR r.captain_id = $1 OR EXISTS (SELECT 1 FROM ride_participants rp WHERE rp.ride_id = r.id AND rp.rider_id = $1)`;
-    params.push(riderId);
+  if (statusFilter !== "all") {
+    params.push(statusFilter);
+    queryStr += ` AND r.status = $${params.length}`;
   }
 
-  queryStr += ` ) ORDER BY r.scheduled_at ASC LIMIT 50`;
+  queryStr += ` ORDER BY r.scheduled_at ASC LIMIT 50`;
 
   const result = await query(queryStr, params);
   return result.rows as Ride[];

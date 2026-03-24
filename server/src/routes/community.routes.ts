@@ -1,6 +1,6 @@
-import { Router } from 'express';
-import { authenticate } from '../middleware/auth.middleware.js';
-import * as cc from '../controllers/community.controller.js';
+import { Router } from "express";
+import { authenticate } from "../middleware/auth.middleware.js";
+import * as cc from "../controllers/community.controller.js";
 
 const router = Router();
 router.use(authenticate);
@@ -58,8 +58,8 @@ router.use(authenticate);
  *       201:
  *         description: Post created
  */
-router.get('/posts', cc.getFeed);
-router.post('/posts', cc.createPost);
+router.get("/posts", cc.getFeed);
+router.post("/posts", cc.createPost);
 
 /**
  * @swagger
@@ -99,9 +99,9 @@ router.post('/posts', cc.createPost);
  *       404:
  *         description: Post not found or not yours
  */
-router.get('/posts/:id', cc.getPost);
-router.patch('/posts/:id', cc.updatePost);
-router.delete('/posts/:id', cc.deletePost);
+router.get("/posts/:id", cc.getPost);
+router.patch("/posts/:id", cc.updatePost);
+router.delete("/posts/:id", cc.deletePost);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMMENTS
@@ -157,10 +157,10 @@ router.delete('/posts/:id', cc.deletePost);
  *       201:
  *         description: Comment added
  */
-router.get('/posts/:id/comments', cc.getComments);
-router.post('/posts/:id/comments', cc.addComment);
-router.patch('/comments/:id', cc.updateComment);
-router.delete('/comments/:id', cc.deleteComment);
+router.get("/posts/:id/comments", cc.getComments);
+router.post("/posts/:id/comments", cc.addComment);
+router.patch("/comments/:id", cc.updateComment);
+router.delete("/comments/:id", cc.deleteComment);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // LIKES
@@ -202,8 +202,8 @@ router.delete('/comments/:id', cc.deleteComment);
  *       404:
  *         description: Like not found
  */
-router.post('/posts/:id/like', cc.likePost);
-router.delete('/posts/:id/like', cc.unlikePost);
+router.post("/posts/:id/like", cc.likePost);
+router.delete("/posts/:id/like", cc.unlikePost);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // FOLLOWS
@@ -247,8 +247,8 @@ router.delete('/posts/:id/like', cc.unlikePost);
  *       404:
  *         description: Not following this rider
  */
-router.post('/riders/:id/follow', cc.follow);
-router.delete('/riders/:id/follow', cc.unfollow);
+router.post("/riders/:id/follow", cc.follow);
+router.delete("/riders/:id/follow", cc.unfollow);
 
 /**
  * @swagger
@@ -269,7 +269,7 @@ router.delete('/riders/:id/follow', cc.unfollow);
  *       200:
  *         description: Array of followers
  */
-router.get('/riders/:id/followers', cc.getFollowers);
+router.get("/riders/:id/followers", cc.getFollowers);
 
 /**
  * @swagger
@@ -290,7 +290,7 @@ router.get('/riders/:id/followers', cc.getFollowers);
  *       200:
  *         description: Array of followed riders
  */
-router.get('/riders/:id/following', cc.getFollowing);
+router.get("/riders/:id/following", cc.getFollowing);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GROUPS
@@ -300,13 +300,22 @@ router.get('/riders/:id/following', cc.getFollowing);
  * @swagger
  * /api/community/groups:
  *   get:
- *     summary: List public groups
+ *     summary: List groups (public + your memberships)
  *     tags: [Community]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: scope
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [all, public, joined]
+ *           default: all
+ *         description: Filter groups by visibility/membership
  *     responses:
  *       200:
- *         description: Array of groups with member counts
+ *         description: Array of groups with member counts and current-user membership context
  *   post:
  *     summary: Create a group (you become admin)
  *     tags: [Community]
@@ -334,8 +343,31 @@ router.get('/riders/:id/following', cc.getFollowing);
  *       201:
  *         description: Group created
  */
-router.get('/groups', cc.listGroups);
-router.post('/groups', cc.createGroup);
+router.get("/groups", cc.listGroups);
+router.post("/groups", cc.createGroup);
+
+/**
+ * @swagger
+ * /api/community/groups/{id}:
+ *   get:
+ *     summary: Get group details with membership context
+ *     tags: [Community]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Group details including member list and current user membership info
+ *       404:
+ *         description: Group not found
+ */
+router.get("/groups/:id", cc.getGroup);
 
 /**
  * @swagger
@@ -356,7 +388,7 @@ router.post('/groups', cc.createGroup);
  *       200:
  *         description: Joined group
  */
-router.post('/groups/:id/join', cc.joinGroup);
+router.post("/groups/:id/join", cc.joinGroup);
 
 /**
  * @swagger
@@ -379,7 +411,7 @@ router.post('/groups/:id/join', cc.joinGroup);
  *       400:
  *         description: Cannot leave (admin or not a member)
  */
-router.delete('/groups/:id/leave', cc.leaveGroup);
+router.delete("/groups/:id/leave", cc.leaveGroup);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // RIDE REVIEWS
@@ -437,7 +469,7 @@ router.delete('/groups/:id/leave', cc.leaveGroup);
  *       400:
  *         description: Validation error or already reviewed
  */
-router.get('/rides/:rideId/reviews', cc.getReviews);
-router.post('/rides/:rideId/reviews', cc.addReview);
+router.get("/rides/:rideId/reviews", cc.getReviews);
+router.post("/rides/:rideId/reviews", cc.addReview);
 
 export default router;

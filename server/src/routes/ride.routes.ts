@@ -12,6 +12,15 @@ const router = Router();
  *     tags: [Rides]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [all, draft, scheduled, active]
+ *           default: all
+ *         description: Filter discoverable rides by status
  *     responses:
  *       200:
  *         description: Array of discoverable rides

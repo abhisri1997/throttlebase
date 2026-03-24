@@ -14,8 +14,9 @@ import { PostCard } from "../../src/components/PostCard";
 import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
 import { useRouter } from "expo-router";
 import { useAuthStore } from "../../src/store/authStore";
-import { Bell, Plus } from "lucide-react-native";
+import { Plus } from "lucide-react-native";
 import { useTheme } from "../../src/theme/ThemeContext";
+import { NotificationBell } from "../../src/components/NotificationBell";
 
 const fetchFeed = async () => {
   const { data } = await apiClient.get("/api/community/posts");
@@ -36,16 +37,6 @@ export default function FeedScreen() {
   } = useQuery({
     queryKey: ["feed"],
     queryFn: fetchFeed,
-  });
-
-  const { data: unreadNotifications = 0 } = useQuery({
-    queryKey: ["notifications", "unread-count"],
-    queryFn: async () => {
-      const { data } = await apiClient.get("/api/notifications", {
-        params: { unread: "true" },
-      });
-      return Array.isArray(data) ? data.length : 0;
-    },
   });
 
   const likeMutation = useMutation({
@@ -155,23 +146,7 @@ export default function FeedScreen() {
         >
           Community Feed
         </Text>
-        <TouchableOpacity
-          onPress={() => router.push("/(modals)/notifications")}
-          className='w-11 h-11 rounded-full items-center justify-center'
-          style={{ backgroundColor: colors.inputBg }}
-        >
-          <Bell color={colors.textMuted} size={20} />
-          {unreadNotifications > 0 ? (
-            <View
-              className='absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full'
-              style={{ backgroundColor: colors.danger }}
-            >
-              <Text className='text-[10px] font-bold text-white'>
-                {unreadNotifications > 99 ? "99+" : unreadNotifications}
-              </Text>
-            </View>
-          ) : null}
-        </TouchableOpacity>
+        <NotificationBell />
       </View>
       {renderContent()}
 
