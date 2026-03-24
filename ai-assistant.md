@@ -79,7 +79,7 @@ throttlebase/
 ## Technical Decisions
 
 | Decision                                   | Rationale                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Port 5001** (not 5000)                   | macOS AirPlay Receiver occupies port 5000                                                                                                                                                                                                                                                                                                                                                                                               |
 | **ES Modules**                             | `"type": "module"` + `"module": "NodeNext"` + `"verbatimModuleSyntax": true` for modern imports                                                                                                                                                                                                                                                                                                                                         |
 | **Express 5**                              | Latest major version; note: listen errors are passed to callback instead of crashing                                                                                                                                                                                                                                                                                                                                                    |
@@ -120,6 +120,11 @@ throttlebase/
 | **Ride Analytics Pipeline (P0 Step 3)**    | Worker `ride_stats.recompute` now executes real computation via `server/src/services/stats.service.ts`: per-rider distance/time/speed/elevation/calories from `gps_traces`, upsert to `ride_history_stats`, and rider aggregate refresh. Enqueue hooks now fire on ride completion (`ride.service.ts`) and on late GPS ingest for completed rides (`route.service.ts`) through `server/src/services/jobs.service.ts`.                   |
 | **Queue Lease SQL Disambiguation**         | In `server/src/queue/queue.ts`, leasing query `RETURNING` uses aliased columns (`JOB_COLUMNS_LEASE` with `j.`), while non-aliased queries keep standard `JOB_COLUMNS`. This avoids PostgreSQL `42702` ambiguity in lease paths without breaking enqueue/fail paths (`42P01` missing FROM-clause for `j`).                                                                                                                               |
 | **Notifications Center UX (P0 Step 4)**    | Added dedicated modal `client/app/(modals)/notifications.tsx` with unread/all filtering, per-item mark read, mark-all read, pull-to-refresh, unread count badge, and settings/preferences entrypoint. Added feed header bell shortcut with unread badge and settings shortcut to open the notifications center.                                                                                                                         |
+| **Rewards Contract Alignment**             | Fixed rewards/ranking UI contract drift in `client/app/(tabs)/rewards.tsx`: leaderboard now sends `metric` (`total_distance_km                                                                                                                                                                                                                                                                                                          | total_rides | badges_earned`) and reads matching response keys (`total_distance_km`, `total_rides`, `badges_earned`). Achievements now render `reward_description`instead of a non-existent`description` field. |
+| **Rewards Distance Display + Refresh**     | Updated `client/app/(tabs)/rewards.tsx` to preserve decimal distance precision on leaderboard (avoid whole-km rounding that displayed `0 km` for sub-1km totals) and added pull-to-refresh for rewards/ranking to refetch leaderboard, badges, and achievements in one gesture.                                                                                                                                                         |
+| **Rewards/Profile Rides Parity**           | Updated server leaderboard rides metric in `server/src/services/rewards.service.ts` to aggregate from `ride_history_stats` (same source used to refresh rider profile totals) instead of counting raw `ride_participants`, reducing profile vs rank drift.                                                                                                                                                                              |
+| **Groups UX First Slice (P0 Step 5)**      | Added Groups tab and flows: `client/app/(tabs)/groups.tsx` (list + join + pull-to-refresh), `client/app/group/[id].tsx` (detail + members + join/leave state), and `client/app/(modals)/create-group.tsx` (create form). Added backend `GET /api/community/groups/:id` with membership context and member list.                                                                                                                         |
+| **Ride Reviews Policy + UX (P0 Step 5)**   | Enforced server-side review policy in `server/src/services/community.service.ts`: only participants can review, and only after ride status is `completed`. Client `client/app/ride/[id].tsx` now renders ratings, review list, pull-to-refresh, and conditional review submission UI with clear gating states.                                                                                                                          |
 
 ## API Endpoints (11 total)
 
@@ -162,6 +167,7 @@ throttlebase/
 | GET    | `/api/community/riders/:id/following`  | Yes  | Get following                                   |
 | GET    | `/api/community/groups`                | Yes  | List public groups                              |
 | POST   | `/api/community/groups`                | Yes  | Create a group (become admin)                   |
+| GET    | `/api/community/groups/:id`            | Yes  | Get group details + membership context          |
 | POST   | `/api/community/groups/:id/join`       | Yes  | Join a group                                    |
 | DELETE | `/api/community/groups/:id/leave`      | Yes  | Leave a group                                   |
 | GET    | `/api/community/rides/:rideId/reviews` | Yes  | Get ride reviews                                |
@@ -219,6 +225,17 @@ All migration files through `010_background_jobs.sql` have been executed. Full s
 - [x] Background jobs foundation implemented (jobs table + queue + worker runtime)
 - [x] Ride analytics job implemented for `ride_history_stats` with enqueue triggers on ride completion and late GPS uploads
 - [x] Notifications center UX implemented (modal list/filter, mark read/all, unread badge, settings entrypoints)
+- [x] Rewards/ranking data binding fix implemented (leaderboard metric param + response key alignment)
+- [x] Rewards/profile parity improvement implemented for leaderboard rides metric (`ride_history_stats` aligned)
+- [x] Community groups UX first slice implemented (groups tab, detail, create, join/leave)
+- [x] Groups API hardening completed (`/api/community/groups` supports `scope=all|public|joined`, returns `is_member` + `current_user_role`, and `join` now blocks unauthorized private-group joins with explicit error/status payloads)
+- [x] Groups UX polish completed (top-right filter control, join-button hidden for existing members/admins, create-group redirect stabilized, and create FAB moved to bottom-right above tab bar)
+- [x] Private-group visibility recovery fix completed: groups listing/detail now self-heals missing creator admin memberships (backfills `group_members` rows) and includes creator-owned groups in `joined`/`all` scopes so legacy private groups remain visible/openable.
+- [x] Discover rides filtering and visibility hardening completed: `/api/rides` now supports `status=all|draft|scheduled|active`; public discover feed only exposes `scheduled` rides to non-participants, while `active` rides are visible only to captain/participants.
+- [x] Notifications bell parity completed across all tabs via shared `NotificationBell` component (Feed, Rides, Routes, Groups, Rewards, Profile).
+- [x] Group detail navigation hardening completed in `client/app/group/[id].tsx` by normalizing dynamic `id` route params before API calls, preventing invalid-path fetch attempts that surfaced as `Failed to load group.`
+- [x] Group route opening fix completed: switched groups list/create navigation to explicit path form (`/group/<id>`) from object-based dynamic navigation, and added an explicit invalid-id guard in `client/app/group/[id].tsx` to prevent silent empty-param failures.
+- [x] Ride reviews UX first slice implemented in ride detail (list, submit, policy-aware gating)
 - [x] Client auth state sync fix for profile edits (`rider_data` + Zustand rider now refresh from API response)
 - [x] Workspace-level Copilot context memory setup (`.github/copilot-instructions.md`)
 - [x] Workspace hook config draft for context workflow (`.github/hooks/ai-context-memory.json`)
@@ -235,8 +252,8 @@ All migration files through `010_background_jobs.sql` have been executed. Full s
 ### Frontend: Missing UX Surface
 
 - [x] Dedicated notifications center screen/drawer (beyond settings/preferences)
-- [ ] Community groups UX (browse/create/join/leave)
-- [ ] Ride reviews UX on ride detail flows
+- [x] Community groups UX (browse/create/join/leave)
+- [x] Ride reviews UX on ride detail flows
 - [ ] Followers/following list UX from profile/rider detail screens
 - [ ] Support agent/admin workflow beyond rider submission and self-history
 
@@ -253,7 +270,7 @@ All migration files through `010_background_jobs.sql` have been executed. Full s
 2. ~~Add background job infrastructure (queue + worker process)~~ (DONE)
 3. ~~Implement ride analytics job to populate `ride_history_stats`~~ (DONE)
 4. ~~Build notifications center UX (list + mark-read + preferences entrypoints)~~ (DONE)
-5. Add groups and ride reviews UX to unlock existing community APIs
+5. ~~Add groups and ride reviews UX to unlock existing community APIs~~ (DONE - first slice, follower lists still pending)
 
 ### P1 — Security & Reliability
 
@@ -292,8 +309,8 @@ All migration files through `010_background_jobs.sql` have been executed. Full s
 20. ~~Build UX for Rewards Engine~~ (DONE)
 21. ~~Build UX for App Settings & Privacy~~ (DONE)
 22. ~~Build UX for Notifications Center~~: Modal rendering unified list, unread/all filter, mark-read actions, and settings/preferences entrypoint. (DONE)
-23. Build **UX for Community Groups**: Tab or Modal structures to browse, view, and create `throttlebase` groups under `/api/community/groups`.
-24. Build **UX for Followers lists and Ride Reviews**: Extend `/rider/[id]` and `/ride/[id]` with follower/review sub-views.
+23. ~~Build **UX for Community Groups**: Tab or Modal structures to browse, view, and create `throttlebase` groups under `/api/community/groups`.~~ (DONE - tab + detail + create)
+24. Build **UX for Followers lists and Ride Reviews**: Extend `/rider/[id]` and `/ride/[id]` with follower/review sub-views. (PARTIAL - ride reviews done; followers pending)
 25. ~~Implement Support module end-to-end~~: API + basic client UX for support tickets. (DONE - rider-facing first slice)
 26. Implement **Security module features**: 2FA setup/verify, login activity, active session management.
 27. Implement **Notification delivery infra**: push/email workers and preference-aware dispatch.
@@ -301,3 +318,8 @@ All migration files through `010_background_jobs.sql` have been executed. Full s
 29. Add **Realtime transport** (WebSocket channels) for ride/live events where required.
 30. **Future Refactor**: Migrate from Raw SQL to Drizzle ORM or Prisma.
 31. Validate hook behavior in active tooling and tune script messages/strictness if needed (current config is a non-blocking draft).
+
+## Recent AI Assistant Updates
+
+- Added workspace skill [`.github/skills/git-commit-organizer/SKILL.md`](.github/skills/git-commit-organizer/SKILL.md) to standardize "check status -> group relevant commits -> commit -> push" workflow.
+- Skill includes commit-boundary decision logic, staged-diff validation checks, push/rebase handling, and quoted-path safety for files like `[id].tsx`.
