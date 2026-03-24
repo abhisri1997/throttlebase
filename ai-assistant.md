@@ -79,7 +79,7 @@ throttlebase/
 ## Technical Decisions
 
 | Decision                                   | Rationale                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Port 5001** (not 5000)                   | macOS AirPlay Receiver occupies port 5000                                                                                                                                                                                                                                                                                                                                                                                               |
 | **ES Modules**                             | `"type": "module"` + `"module": "NodeNext"` + `"verbatimModuleSyntax": true` for modern imports                                                                                                                                                                                                                                                                                                                                         |
 | **Express 5**                              | Latest major version; note: listen errors are passed to callback instead of crashing                                                                                                                                                                                                                                                                                                                                                    |
@@ -114,17 +114,24 @@ throttlebase/
 | **Post-Register Return Redirect**          | `client/app/(auth)/register.tsx` now mirrors login behavior by honoring `redirectTo` after successful sign-up/login, and login/register cross-links preserve `redirectTo` so shared-link users return to the original post after creating an account.                                                                                                                                                                                   |
 | **NativeWind Dark Mode Class Mode**        | Tailwind is configured with `darkMode: class` and app startup calls NativeWind dark-mode class flag in `client/app/_layout.tsx` to prevent web runtime error: `Cannot manually set color scheme, as dark mode is type 'media'.`                                                                                                                                                                                                         |
 | **Deprecated Pointer Events Prop**         | Replaced `pointerEvents` prop usage with `style.pointerEvents` on the global auth-notice container in `client/app/_layout.tsx` to satisfy web deprecation guidance.                                                                                                                                                                                                                                                                     |
+| **Auth Palette Consistency**               | `client/app/(auth)/register.tsx` now uses `ThemeContext` color tokens (`bg`, `surface`, `border`, `text`, `textMuted`, `primary`) and adaptive status bar style to match the login screen and the rest of the app palette in both dark and light themes.                                                                                                                                                                                |
+| **Validation Error UX Normalization**      | Added `client/src/utils/apiError.ts` and switched client mutation error alerts (auth, rides, groups, profile, support, route bookmarking) to parse server `details/errors` arrays into field-aware messages (e.g., `Password: Password must be at least 8 characters`) instead of showing generic `Validation failed`.                                                                                                                  |
+| **Register Token Contract Fix**            | `POST /auth/register` returns only `{ message, rider }`; `client/app/(auth)/register.tsx` now performs `/auth/login` after successful registration before persisting auth state, preventing undefined `jwt_token` writes in AsyncStorage.                                                                                                                                                                                               |
+| **Followers/Following UX**                 | `GET /api/riders/:id` now returns `follower_count`, `following_count` (subqueries on `follows` table) and `is_following` (viewer context in controller). `client/app/follow-list.tsx` added as a push screen with `riderId`+`mode` params and inline follow/unfollow. Profile and rider detail stats bars are now tappable and navigate to the list.                                                                                    |
+| **Followers/Following Reliability**        | Hardened follow list behavior across backend and client: `GET /api/community/riders/:id/followers                                                                                                                                                                                                                                                                                                                                       | following`now returns`is_following`in viewer context, follow-action taps no longer conflict with row navigation in`client/app/follow-list.tsx`, and pull-to-refresh was added to both `client/app/follow-list.tsx`and`client/app/(tabs)/profile.tsx` for fast state reconciliation. |
 | **Web Share API Fallback**                 | `PostCard` now avoids calling `Share.share` on browsers without Web Share support; it tries `navigator.share`, then clipboard copy, then prompt copy, preventing `Share is not supported in this browser` runtime errors.                                                                                                                                                                                                               |
 | **Support Center First Slice**             | Support tickets now follow the existing schema/controller/service/route pattern on the server (`/api/support`) and a basic client support center lives under `client/app/(modals)/support.tsx`, reachable from Settings. This delivers immediate rider-facing bug/account/dispute reporting without waiting for the future admin/backoffice workflow.                                                                                   |
 | **Background Jobs Foundation (P0 Step 2)** | Added migration `010_background_jobs.sql` plus queue + worker runtime under `server/src/queue/*` and `server/src/workers/*`. Worker uses `node-cron` polling, PostgreSQL row leasing (`FOR UPDATE SKIP LOCKED`), retry backoff, and expired-lock recovery. Domain-specific processors (ride stats/rewards/notifications) are intentionally deferred to next steps.                                                                      |
 | **Ride Analytics Pipeline (P0 Step 3)**    | Worker `ride_stats.recompute` now executes real computation via `server/src/services/stats.service.ts`: per-rider distance/time/speed/elevation/calories from `gps_traces`, upsert to `ride_history_stats`, and rider aggregate refresh. Enqueue hooks now fire on ride completion (`ride.service.ts`) and on late GPS ingest for completed rides (`route.service.ts`) through `server/src/services/jobs.service.ts`.                   |
 | **Queue Lease SQL Disambiguation**         | In `server/src/queue/queue.ts`, leasing query `RETURNING` uses aliased columns (`JOB_COLUMNS_LEASE` with `j.`), while non-aliased queries keep standard `JOB_COLUMNS`. This avoids PostgreSQL `42702` ambiguity in lease paths without breaking enqueue/fail paths (`42P01` missing FROM-clause for `j`).                                                                                                                               |
 | **Notifications Center UX (P0 Step 4)**    | Added dedicated modal `client/app/(modals)/notifications.tsx` with unread/all filtering, per-item mark read, mark-all read, pull-to-refresh, unread count badge, and settings/preferences entrypoint. Added feed header bell shortcut with unread badge and settings shortcut to open the notifications center.                                                                                                                         |
-| **Rewards Contract Alignment**             | Fixed rewards/ranking UI contract drift in `client/app/(tabs)/rewards.tsx`: leaderboard now sends `metric` (`total_distance_km                                                                                                                                                                                                                                                                                                          | total_rides | badges_earned`) and reads matching response keys (`total_distance_km`, `total_rides`, `badges_earned`). Achievements now render `reward_description`instead of a non-existent`description` field. |
+| **Rewards Contract Alignment**             | Fixed rewards/ranking UI contract drift in `client/app/(tabs)/rewards.tsx`: leaderboard now sends `metric` (`total_distance_km                                                                                                                                                                                                                                                                                                          | total_rides                                                                                                                                                                                                                                                                         | badges_earned`) and reads matching response keys (`total_distance_km`, `total_rides`, `badges_earned`). Achievements now render `reward_description`instead of a non-existent`description` field. |
 | **Rewards Distance Display + Refresh**     | Updated `client/app/(tabs)/rewards.tsx` to preserve decimal distance precision on leaderboard (avoid whole-km rounding that displayed `0 km` for sub-1km totals) and added pull-to-refresh for rewards/ranking to refetch leaderboard, badges, and achievements in one gesture.                                                                                                                                                         |
 | **Rewards/Profile Rides Parity**           | Updated server leaderboard rides metric in `server/src/services/rewards.service.ts` to aggregate from `ride_history_stats` (same source used to refresh rider profile totals) instead of counting raw `ride_participants`, reducing profile vs rank drift.                                                                                                                                                                              |
 | **Groups UX First Slice (P0 Step 5)**      | Added Groups tab and flows: `client/app/(tabs)/groups.tsx` (list + join + pull-to-refresh), `client/app/group/[id].tsx` (detail + members + join/leave state), and `client/app/(modals)/create-group.tsx` (create form). Added backend `GET /api/community/groups/:id` with membership context and member list.                                                                                                                         |
 | **Ride Reviews Policy + UX (P0 Step 5)**   | Enforced server-side review policy in `server/src/services/community.service.ts`: only participants can review, and only after ride status is `completed`. Client `client/app/ride/[id].tsx` now renders ratings, review list, pull-to-refresh, and conditional review submission UI with clear gating states.                                                                                                                          |
+| **Ride Detail Visibility Guard**           | `GET /api/rides/:id` now resolves with caller context; `active` rides are accessible only by captain/confirmed participants, and private/non-active rides remain participant-only. Prevents direct-link exposure beyond discover-list filtering.                                                                                                                                                                                        |
+| **Group ID Validation Hardening**          | `client/app/group/[id].tsx` now decodes and validates UUID route params before querying, so malformed IDs show an explicit invalid-link state instead of triggering generic failed-fetch errors.                                                                                                                                                                                                                                        |
 
 ## API Endpoints (11 total)
 
@@ -235,6 +242,23 @@ All migration files through `010_background_jobs.sql` have been executed. Full s
 - [x] Notifications bell parity completed across all tabs via shared `NotificationBell` component (Feed, Rides, Routes, Groups, Rewards, Profile).
 - [x] Group detail navigation hardening completed in `client/app/group/[id].tsx` by normalizing dynamic `id` route params before API calls, preventing invalid-path fetch attempts that surfaced as `Failed to load group.`
 - [x] Group route opening fix completed: switched groups list/create navigation to explicit path form (`/group/<id>`) from object-based dynamic navigation, and added an explicit invalid-id guard in `client/app/group/[id].tsx` to prevent silent empty-param failures.
+- [x] Group membership context hardening completed: group creators are consistently represented as members/admins in list/detail payloads even when legacy `group_members` rows were missing.
+- [x] Ride detail visibility hardening completed: `/api/rides/:id` now enforces participant-only access for `active` rides and participant-only access for private rides.
+- [x] Live Group Ride Session Phase 0 scaffold completed: migrations `011`-`015` added (`ride_live_sessions`, `ride_live_presence`, `ride_live_events`, `ride_live_location_samples`, `ride_live_incidents` + indexes), and backend module scaffolding added via `live-session` schema/service/controller/route with `/api/live/health` protected status endpoint.
+- [x] Live Group Ride Session Phase 0 local verification completed: migrations `011`-`015` applied on local PostgreSQL, `/api/live/health` returned all table flags as `true`, and integration test script (`server/test.ts`, runnable via `npm run test:live-health`) passed.
+- [x] Live Group Ride Session Phase 1 REST lifecycle completed: `POST /api/rides/:id/live/start`, `POST /api/rides/:id/live/end`, `GET /api/rides/:id/live/session`, `POST /api/rides/:id/live/incident`, and `POST /api/rides/:id/live/incident/:incidentId/ack` are implemented with role checks and integration-tested in `server/test.ts`.
+- [x] Live Group Ride Session Phase 1 runtime hardening completed: fixed nullable SQL parameter typing in `endLiveSession` (`COALESCE($3::text, ended_reason)` + event payload cast) to prevent PostgreSQL `42P18` during end-session when `reason` is absent.
+- [x] Live Group Ride Session Phase 2 backend foundation started: added Socket.IO dependencies, gateway bootstrap in `server/src/app.ts`, and new realtime modules (`server/src/realtime/auth.ts`, `server/src/realtime/session-room.ts`, `server/src/realtime/gateway.ts`) with `/live` namespace handlers for `session:join|leave`, `presence:heartbeat`, `location:update`, and `incident:create`.
+- [x] Live Group Ride Session Phase 2 reliability hardening (backend) started: socket `session:leave` and disconnect paths now persist offline presence state via `markLivePresenceOffline` in `server/src/services/live-session.service.ts` and `server/src/realtime/gateway.ts`, keeping DB presence consistent with socket broadcasts.
+- [x] Live Group Ride Session async pipeline scaffolding started: added queue job types (`live_session.started`, `live_session.ended`, `live_session.incident_reported`), producer helpers in `server/src/services/jobs.service.ts`, lifecycle enqueue hooks in `server/src/services/live-session.service.ts`, and worker processor stubs registered in `server/src/workers/worker.ts`.
+- [x] Live Group Ride Session async notifications processing completed: `server/src/workers/processors/live-session.processor.ts` and `server/src/workers/processors/live-notification.processor.ts` now create in-app notifications for lifecycle/incident jobs, filter recipients via `notification_preferences.in_app_enabled`, and apply retry-safe dedupe keys in notification `data`.
+- [x] Live Group Ride Session async notifications verification completed: `server/test.ts` now asserts notification side effects for live session start/incident/end flows, including recipient inclusion/exclusion, preference filtering, metadata payload checks, and dedupe behavior under repeated processor execution.
+- [x] Live Group Ride Session Phase 3 client MVP started: added `client/src/services/liveSessionSocket.ts` (Socket.IO auth + event transport), `client/src/store/liveSessionStore.ts` (session/presence/location/incident state + actions), and integrated initial live controls in `client/app/ride/[id].tsx` (start/end/join/leave/SOS, heartbeat loop, session status panel behind `EXPO_PUBLIC_ENABLE_LIVE_SESSION` flag).
+- [x] Live Group Ride Session Phase 3 continuation completed (lifecycle + map slice): `client/src/store/liveSessionStore.ts` now uses server-confirmed room joins (`session:state`) with `isJoining` state and ride-context helpers; `client/app/ride/[id].tsx` now handles app foreground/background behavior for heartbeat/location loops, auto-rejoin on active state, and renders live participant map markers from socket `location:broadcast` updates.
+- [x] Live Group Ride Session Phase 3 safety UX hardening completed: `client/app/ride/[id].tsx` SOS action now requires explicit confirmation and attaches best-effort current/last-known coordinates before dispatching via socket/REST.
+- [x] Live Group Ride Session Phase 4 ops hardening started: recurring worker jobs `live_session.presence_sweep` and `live_session.incident_escalate` are now scheduled from `server/src/workers/worker.ts` with processors in `server/src/workers/processors/live-ops.processor.ts` for heartbeat timeout offline reconciliation and unacknowledged high/critical incident escalation notifications.
+- [x] Client-side API validation messaging hardening completed: shared parser in `client/src/utils/apiError.ts` now surfaces server `details/errors` messages across auth and major mutation flows instead of generic top-level errors.
+- [x] Register flow contract and resilience fix completed: register now logs in via `/auth/login` before auth-store persistence, and `authStore.login` guards against invalid token/rider payloads to avoid AsyncStorage undefined-value crashes.
 - [x] Ride reviews UX first slice implemented in ride detail (list, submit, policy-aware gating)
 - [x] Client auth state sync fix for profile edits (`rider_data` + Zustand rider now refresh from API response)
 - [x] Workspace-level Copilot context memory setup (`.github/copilot-instructions.md`)
@@ -247,14 +271,15 @@ All migration files through `010_background_jobs.sql` have been executed. Full s
 - [ ] 2FA/TOTP flow (schema fields exist; auth setup/verify flow not implemented)
 - [ ] Remaining background job consumers (rewards/notification/cleanup) on top of the implemented queue + worker foundation
 - [ ] Push notifications (FCM/APNs) and email notification delivery infrastructure
-- [ ] WebSocket real-time transport for live ride/community events
+- [ ] Live session timeline/replay APIs and session-ended socket event fanout are not implemented yet
 
 ### Frontend: Missing UX Surface
 
 - [x] Dedicated notifications center screen/drawer (beyond settings/preferences)
 - [x] Community groups UX (browse/create/join/leave)
+- [ ] Live session map/presence UX polish (real-time rider markers/timeline, reconnect/background behavior hardening)
 - [x] Ride reviews UX on ride detail flows
-- [ ] Followers/following list UX from profile/rider detail screens
+- [x] Followers/following list UX implemented and hardened: viewer-context `is_following` now comes from both `/api/riders/:id` and follower-list endpoints, `client/app/follow-list.tsx` avoids nested-tap conflicts for follow/unfollow actions, and pull-to-refresh is enabled on both follow-list and profile screens.
 - [ ] Support agent/admin workflow beyond rider submission and self-history
 
 ### Notes
@@ -285,6 +310,299 @@ All migration files through `010_background_jobs.sql` have been executed. Full s
 2. Add reliable retry/idempotency around async jobs and notification delivery
 3. Refactor data layer from raw SQL to Drizzle ORM or Prisma after feature stabilization
 
+## Live Group Ride Session Rollout Plan (Phased Implementation)
+
+Goal: Enable coordinated real-time group riding after `Start Ride` with participant-only live tracking, captain/co-captain controls, safety workflows, and resilient realtime transport.
+
+### Scope Boundaries
+
+In scope for this rollout:
+
+- Session lifecycle (`scheduled` -> `active` -> `completed`) tied to ride state
+- Real-time participant location streaming and map playback for active sessions
+- Role-aware controls (captain/co-captain/member)
+- Safety events (SOS/manual incident/reporting) with notification fanout
+- Presence, heartbeat, and reconnect semantics
+
+Out of scope for first production slice:
+
+- Voice chat
+- Offline turn-by-turn navigation engine
+- Public spectator mode
+
+### Phase 0 — Foundation and Contracts (1 sprint)
+
+Objective: Introduce schema + typed contracts without changing user-visible behavior.
+
+Database migrations:
+
+1. `011_live_group_sessions.sql`
+2. `012_live_session_events.sql`
+3. `013_live_location_samples.sql`
+4. `014_live_session_incidents.sql`
+5. `015_live_session_indexes_and_retention.sql`
+
+Proposed tables:
+
+- `ride_live_sessions`
+  - `id UUID PK`
+  - `ride_id UUID UNIQUE NOT NULL` (one active session per ride)
+  - `status TEXT CHECK (status IN ('starting','active','paused','ended'))`
+  - `started_by UUID`, `started_at TIMESTAMPTZ`
+  - `ended_by UUID`, `ended_at TIMESTAMPTZ`
+  - `ended_reason TEXT`
+  - `created_at`, `updated_at`
+- `ride_live_presence`
+  - `session_id UUID`, `rider_id UUID`, `role TEXT`
+  - `is_online BOOLEAN`, `last_heartbeat_at TIMESTAMPTZ`
+  - `last_location GEOGRAPHY(POINT,4326)`
+  - PK `(session_id, rider_id)`
+- `ride_live_location_samples`
+  - `id BIGSERIAL PK`
+  - `session_id UUID`, `rider_id UUID`
+  - `location GEOGRAPHY(POINT,4326)`
+  - `speed_kmh NUMERIC`, `heading_deg NUMERIC`, `accuracy_m NUMERIC`
+  - `captured_at TIMESTAMPTZ`
+- `ride_live_events`
+  - `id BIGSERIAL PK`
+  - `session_id UUID`, `actor_rider_id UUID`
+  - `event_type TEXT` (`session_started`, `rider_joined`, `incident_reported`, etc.)
+  - `payload JSONB`
+  - `created_at TIMESTAMPTZ`
+- `ride_live_incidents`
+  - `id UUID PK`
+  - `session_id UUID`, `rider_id UUID`
+  - `severity TEXT` (`low|medium|high|critical`)
+  - `kind TEXT` (`sos|crash|medical|mechanical|other`)
+  - `status TEXT` (`open|acknowledged|resolved`)
+  - `location GEOGRAPHY(POINT,4326)`
+  - `metadata JSONB`
+  - `created_at`, `resolved_at`, `resolved_by`
+
+Server files to add/update:
+
+- Add schemas: `server/src/schemas/live-session.schemas.ts`
+- Add service: `server/src/services/live-session.service.ts`
+- Add controller: `server/src/controllers/live-session.controller.ts`
+- Add routes: `server/src/routes/live-session.routes.ts`
+- Register route in `server/src/app.ts`
+
+Exit criteria:
+
+- Migrations apply cleanly on local and staging
+- TS compile clean on server and client
+- No endpoint behavior changes for existing rides/groups paths
+
+### Phase 1 — REST Session Lifecycle APIs (1 sprint)
+
+Objective: Add explicit lifecycle APIs and role checks before socket transport.
+
+New endpoints:
+
+1. `POST /api/rides/:id/live/start`
+   - Auth: captain/co-captain only
+   - Preconditions: ride status = `scheduled` or `active`; caller is participant
+   - Action: set ride status to `active` if needed, create `ride_live_sessions`
+2. `POST /api/rides/:id/live/end`
+   - Auth: captain/co-captain only
+   - Action: end live session + optionally mark ride `completed`
+3. `GET /api/rides/:id/live/session`
+   - Auth: confirmed participants only
+   - Returns session metadata + participant presence summary
+4. `POST /api/rides/:id/live/incident`
+   - Auth: confirmed participants only
+   - Creates incident and event record
+5. `POST /api/rides/:id/live/incident/:incidentId/ack`
+   - Auth: captain/co-captain only
+
+Server implementation notes:
+
+- Keep role checks centralized in `live-session.service.ts`
+- Reuse participant checks from `ride.service.ts` semantics (`status='confirmed'`)
+- Emit durable domain events into `ride_live_events`
+- Create notification jobs via existing queue (`server/src/services/jobs.service.ts`)
+
+Testing:
+
+- Add integration tests in `server/test.ts` style for start/end/incident flows
+- Validate 401/403/404 boundaries for non-participants and private rides
+
+Exit criteria:
+
+- Lifecycle APIs stable and documented in Swagger
+- Existing ride detail/list behavior remains unchanged
+
+### Phase 2 — Socket Gateway and Presence (1 sprint)
+
+Objective: Real-time channel with authenticated rooms and heartbeat-based presence.
+
+Dependencies:
+
+- Add package: `socket.io` (server), `socket.io-client` (client)
+
+Server architecture:
+
+- Add `server/src/realtime/gateway.ts`
+- Add `server/src/realtime/auth.ts` for JWT handshake validation
+- Add `server/src/realtime/session-room.ts` room manager
+- Hook server bootstrap in `server/src/app.ts` (HTTP server + socket server)
+
+Socket namespace and rooms:
+
+- Namespace: `/live`
+- Room key: `ride:<rideId>:session:<sessionId>`
+
+Core socket events:
+
+1. Client -> Server
+   - `session:join` `{ rideId }`
+   - `session:leave` `{ rideId }`
+   - `presence:heartbeat` `{ rideId, ts }`
+   - `location:update` `{ rideId, lon, lat, speedKmh?, headingDeg?, accuracyM?, capturedAt }`
+   - `incident:create` `{ rideId, kind, severity, lon, lat, metadata? }`
+2. Server -> Client
+   - `session:state` `{ status, startedAt, participants[] }`
+   - `presence:update` `{ riderId, isOnline, lastHeartbeatAt }`
+   - `location:broadcast` `{ riderId, lon, lat, speedKmh, headingDeg, capturedAt }`
+   - `incident:created` `{ incidentId, riderId, severity, kind, createdAt }`
+   - `session:ended` `{ endedAt, endedBy, reason }`
+
+Data policy:
+
+- Broadcast location at 2-5 second cadence
+- Persist sampled points every N updates (for example, every 3rd) to reduce write pressure
+- Drop stale out-of-order location updates older than configured threshold
+
+Exit criteria:
+
+- Reconnect works with token refresh
+- Presence transitions online/offline reliably
+- No unauthorized room joins
+
+### Phase 3 — Client Live Session UX (1-2 sprints)
+
+Objective: Add in-app live ride controls and participant map experience.
+
+Client files to add:
+
+- `client/src/services/liveSessionSocket.ts`
+- `client/src/store/liveSessionStore.ts` (Zustand)
+- `client/src/hooks/useLiveSession.ts`
+- `client/app/ride/[id]/live.tsx` (or section in existing `client/app/ride/[id].tsx`)
+- `client/src/components/LiveRiderMarker.tsx`
+- `client/src/components/LiveSessionControls.tsx`
+
+Client behaviors:
+
+- Captain/co-captain sees `Start Live Session` and `End Session`
+- Participants can join room when session active
+- Map renders participant markers, own location trail, and safety banner
+- SOS button confirms intent, then sends incident event
+- Background/resume rejoin logic with heartbeat recovery
+
+Feature flags:
+
+- `EXPO_PUBLIC_ENABLE_LIVE_SESSION`
+- Hide controls and socket startup when flag is false
+
+Exit criteria:
+
+- Live map updates in under target latency budget
+- Session state survives app background/foreground cycles
+
+### Phase 4 — Notifications, Safety, and Ops Hardening (1 sprint)
+
+Objective: Connect incidents and session transitions to durable notification pipelines.
+
+Backend work:
+
+- Add job producers for:
+  - `live_session.started`
+  - `live_session.ended`
+  - `live_session.incident_reported`
+- Add worker consumers in `server/src/workers/processors/*`
+- Respect user notification preferences and privacy settings
+
+Safety policies:
+
+- Critical incident auto-notifies captain/co-captains and configured emergency contacts (when available)
+- Add escalation timer job for unacknowledged high/critical incidents
+
+Observability:
+
+- Structured logs for each socket event type
+- Metrics:
+  - active sessions count
+  - join success/failure rate
+  - heartbeat timeout rate
+  - p50/p95 location broadcast delay
+  - incident ack latency
+
+Exit criteria:
+
+- Alerts configured for gateway disconnect spikes and incident ack SLA misses
+- Notification fanout validated end-to-end
+
+### Phase 5 — Gradual Rollout Strategy (staged)
+
+Rollout order:
+
+1. Internal dev accounts only (feature flag on)
+2. Staging dogfood with synthetic load (20-50 concurrent riders)
+3. Production canary at 5% eligible rides
+4. Ramp to 25%, then 50%, then 100% over monitored windows
+
+Rollback plan:
+
+- Kill switch using `EXPO_PUBLIC_ENABLE_LIVE_SESSION` + server env `LIVE_SESSION_ENABLED=false`
+- Keep REST lifecycle endpoints but disable socket room joins when killed
+- Preserve DB writes for forensic debugging; stop broadcasts first
+
+Go/no-go checklist before each ramp:
+
+1. Error rate below threshold
+2. Socket reconnect success above threshold
+3. No unauthorized access incidents
+4. Incident notifications delivered within SLA
+
+## Detailed Implementation Checklist (Codebase-Specific)
+
+### Server
+
+1. Add migrations `011`-`015` under `server/src/db/migrations/`
+2. Add Zod schema file `server/src/schemas/live-session.schemas.ts`
+3. Add service `server/src/services/live-session.service.ts`
+4. Add controller `server/src/controllers/live-session.controller.ts`
+5. Add routes `server/src/routes/live-session.routes.ts`
+6. Mount route in `server/src/app.ts`
+7. Add socket gateway under `server/src/realtime/*`
+8. Wire queue producers/consumers for live events
+9. Extend swagger docs in `server/src/config/swagger.ts`
+
+### Client
+
+1. Add socket service/store/hooks in `client/src/services/`, `client/src/store/`, `client/src/hooks/`
+2. Add live ride UI in `client/app/ride/[id].tsx` or nested route
+3. Add participant marker and control components in `client/src/components/`
+4. Add feature-flag guards in app bootstrap/layout
+5. Add pull-to-refresh fallback when socket unavailable
+
+### QA and Validation
+
+1. API contract tests for lifecycle and incidents
+2. Permission matrix tests for captain/co-captain/member/non-member
+3. Socket soak tests with concurrent simulated riders
+4. Battery/network resilience tests on mobile (background/resume)
+5. Security checks for JWT handshake and room authorization
+
+### Suggested Phase Ownership
+
+1. Phase 0-1: backend/API team
+2. Phase 2: backend realtime + platform
+3. Phase 3: mobile team + map UX
+4. Phase 4: backend jobs + notifications
+5. Phase 5: release engineering + QA
+
 ## Next Steps
 
 1. ~~Set up PostgreSQL database connection~~ (DONE)
@@ -310,7 +628,7 @@ All migration files through `010_background_jobs.sql` have been executed. Full s
 21. ~~Build UX for App Settings & Privacy~~ (DONE)
 22. ~~Build UX for Notifications Center~~: Modal rendering unified list, unread/all filter, mark-read actions, and settings/preferences entrypoint. (DONE)
 23. ~~Build **UX for Community Groups**: Tab or Modal structures to browse, view, and create `throttlebase` groups under `/api/community/groups`.~~ (DONE - tab + detail + create)
-24. Build **UX for Followers lists and Ride Reviews**: Extend `/rider/[id]` and `/ride/[id]` with follower/review sub-views. (PARTIAL - ride reviews done; followers pending)
+24. Build **UX for Followers lists and Ride Reviews**: Extend `/rider/[id]` and `/ride/[id]` with follower/review sub-views. (DONE - ride reviews done; followers/following list UX done via `client/app/follow-list.tsx`)
 25. ~~Implement Support module end-to-end~~: API + basic client UX for support tickets. (DONE - rider-facing first slice)
 26. Implement **Security module features**: 2FA setup/verify, login activity, active session management.
 27. Implement **Notification delivery infra**: push/email workers and preference-aware dispatch.
