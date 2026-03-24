@@ -15,6 +15,7 @@ import { X, Check, Plus, Trash2, MapPin } from "lucide-react-native";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { apiClient } from "../../src/api/client";
+import { getApiErrorMessage } from "../../src/utils/apiError";
 import { useTheme } from "../../src/theme/ThemeContext";
 import LocationPicker from "../../src/components/LocationPicker";
 
@@ -168,8 +169,10 @@ export default function CreateRideModal() {
     onError: (err: any) => {
       Alert.alert(
         "Error",
-        err.response?.data?.error ||
+        getApiErrorMessage(
+          err,
           `Failed to ${editMode ? "update" : "create"} ride`,
+        ),
       );
     },
   });
@@ -747,7 +750,7 @@ export default function CreateRideModal() {
 
         {/* ──── ACTION BUTTONS ──── */}
         <View className='flex-row mb-16'>
-          {(!editMode || existingRide?.status === 'draft') && (
+          {(!editMode || existingRide?.status === "draft") && (
             <TouchableOpacity
               onPress={handleSaveDraft}
               disabled={mutation.isPending}
@@ -765,7 +768,7 @@ export default function CreateRideModal() {
           <TouchableOpacity
             onPress={handlePublish}
             disabled={mutation.isPending}
-            className={`p-4 rounded-2xl items-center flex-1 ${(!editMode || existingRide?.status === 'draft') ? 'ml-2' : ''}`}
+            className={`p-4 rounded-2xl items-center flex-1 ${!editMode || existingRide?.status === "draft" ? "ml-2" : ""}`}
             style={{ backgroundColor: colors.primary }}
           >
             {mutation.isPending ? (
@@ -775,7 +778,9 @@ export default function CreateRideModal() {
                 className='font-bold text-base'
                 style={{ color: "#ffffff" }}
               >
-                {editMode && existingRide?.status !== 'draft' ? "Save Changes" : "Publish Ride"}
+                {editMode && existingRide?.status !== "draft"
+                  ? "Save Changes"
+                  : "Publish Ride"}
               </Text>
             )}
           </TouchableOpacity>

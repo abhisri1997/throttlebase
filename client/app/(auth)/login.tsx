@@ -15,6 +15,7 @@ import { MapPin } from "lucide-react-native";
 import { Input } from "../../src/components/Input";
 import { Button } from "../../src/components/Button";
 import { apiClient } from "../../src/api/client";
+import { getApiErrorMessage } from "../../src/utils/apiError";
 import { useAuthStore } from "../../src/store/authStore";
 import { useTheme } from "../../src/theme/ThemeContext";
 
@@ -50,7 +51,7 @@ export default function LoginScreen() {
       await login(res.data.token, res.data.rider);
       router.replace(resolvePostLoginRoute() as any);
     } catch (error: any) {
-      const msg = error.response?.data?.error || "Failed to connect to server";
+      const msg = getApiErrorMessage(error, "Failed to connect to server");
       Alert.alert("Login Failed", msg);
     } finally {
       setIsLoading(false);

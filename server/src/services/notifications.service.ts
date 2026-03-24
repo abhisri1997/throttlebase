@@ -1,18 +1,20 @@
-import { query } from '../config/db.js';
+import { query } from "../config/db.js";
 import type {
-  UpdateSettingsInput, UpdatePrivacyInput, UpdateNotificationPrefInput,
-} from '../schemas/notifications.schemas.js';
+  UpdateSettingsInput,
+  UpdatePrivacyInput,
+  UpdateNotificationPrefInput,
+} from "../schemas/notifications.schemas.js";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // NOTIFICATIONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const getNotifications = async (riderId: string, unreadOnly = false) => {
-  const filter = unreadOnly ? 'AND is_read = false' : '';
+  const filter = unreadOnly ? "AND is_read = false" : "";
   const result = await query(
     `SELECT * FROM notifications WHERE rider_id = $1 ${filter}
      ORDER BY created_at DESC LIMIT 50`,
-    [riderId]
+    [riderId],
   );
   return result.rows;
 };
@@ -20,7 +22,7 @@ export const getNotifications = async (riderId: string, unreadOnly = false) => {
 export const markAsRead = async (notificationId: string, riderId: string) => {
   const result = await query(
     `UPDATE notifications SET is_read = true WHERE id = $1 AND rider_id = $2 RETURNING id`,
-    [notificationId, riderId]
+    [notificationId, riderId],
   );
   return result.rows.length > 0;
 };
@@ -28,9 +30,152 @@ export const markAsRead = async (notificationId: string, riderId: string) => {
 export const markAllAsRead = async (riderId: string) => {
   const result = await query(
     `UPDATE notifications SET is_read = true WHERE rider_id = $1 AND is_read = false`,
-    [riderId]
+    [riderId],
   );
   return result.rowCount ?? 0;
+};
+
+type NotificationData = Record<string, unknown>;
+
+const uniqueRiderIds = (riderIds: string[]) =>
+  Array.from(
+    new Set(riderIds.filter((id) => typeof id === "string" && id.length > 0)),
+  );
+
+export const getEligibleInAppRecipients = async (
+  riderIds: string[],
+  notificationType: string,
+) => {
+  const recipients = uniqueRiderIds(riderIds);
+  if (recipients.length === 0) {
+    return [] as string[];
+  }
+
+  const result = await query(
+    `SELECT recipient_id::text AS rider_id
+     FROM unnest($1::uuid[]) AS recipient_id
+     LEFT JOIN notification_preferences np
+       ON np.rider_id = recipient_id
+      AND np.notification_type = $2::varchar(50)
+     WHERE COALESCE(np.in_app_enabled, true) = true`,
+    [recipients, notificationType],
+  );
+
+  return result.rows.map((row) => row.rider_id as string);
+};
+
+export const createNotification = async (input: {
+  riderId: string;
+  type: string;
+  title?: string | null;
+  body?: string | null;
+  data?: NotificationData | null;
+  dedupeKey?: string;
+}) => {
+  const payload =
+    input.dedupeKey && input.data
+      ? { ...input.data, dedupe_key: input.dedupeKey }
+      : input.dedupeKey
+        ? { dedupe_key: input.dedupeKey }
+        : (input.data ?? null);
+
+  const result = await query(
+    `INSERT INTO notifications (rider_id, type, title, body, data)
+     SELECT $1::uuid, $2::varchar(50), $3::varchar(255), $4::text, $5::jsonb
+     WHERE (
+       $6::text IS NULL
+       OR NOT EXISTS (
+         SELECT 1
+         FROM notifications n
+         WHERE n.rider_id = $1::uuid
+           AND n.type = $2::varchar(50)
+           AND n.data->>'dedupe_key' = $6::text
+       )
+     )
+     RETURNING id`,
+    [
+      input.riderId,
+      input.type,
+      input.title ?? null,
+      input.body ?? null,
+      payload ? JSON.stringify(payload) : null,
+      input.dedupeKey ?? null,
+    ],
+  );
+
+  return result.rows[0]?.id ?? null;
+};
+
+export const createNotificationsForRiders = async (input: {
+  riderIds: string[];
+  type: string;
+  title?: string | null;
+  body?: string | null;
+  data?: NotificationData | null;
+  dedupeKey?: string;
+}) => {
+  const requestedRecipients = uniqueRiderIds(input.riderIds);
+  if (requestedRecipients.length === 0) {
+    return {
+      requested: 0,
+      eligible: 0,
+      inserted: 0,
+      skipped: 0,
+    };
+  }
+
+  const eligibleRecipients = await getEligibleInAppRecipients(
+    requestedRecipients,
+    input.type,
+  );
+
+  if (eligibleRecipients.length === 0) {
+    return {
+      requested: requestedRecipients.length,
+      eligible: 0,
+      inserted: 0,
+      skipped: requestedRecipients.length,
+    };
+  }
+
+  const payload =
+    input.dedupeKey && input.data
+      ? { ...input.data, dedupe_key: input.dedupeKey }
+      : input.dedupeKey
+        ? { dedupe_key: input.dedupeKey }
+        : (input.data ?? null);
+
+  const insertResult = await query(
+    `INSERT INTO notifications (rider_id, type, title, body, data)
+     SELECT recipient_id, $2::varchar(50), $3::varchar(255), $4::text, $5::jsonb
+     FROM unnest($1::uuid[]) AS recipient_id
+     WHERE (
+       $6::text IS NULL
+       OR NOT EXISTS (
+         SELECT 1
+         FROM notifications n
+         WHERE n.rider_id = recipient_id
+           AND n.type = $2::varchar(50)
+           AND n.data->>'dedupe_key' = $6::text
+       )
+     )`,
+    [
+      eligibleRecipients,
+      input.type,
+      input.title ?? null,
+      input.body ?? null,
+      payload ? JSON.stringify(payload) : null,
+      input.dedupeKey ?? null,
+    ],
+  );
+
+  const inserted = insertResult.rowCount ?? 0;
+  return {
+    requested: requestedRecipients.length,
+    eligible: eligibleRecipients.length,
+    inserted,
+    skipped: requestedRecipients.length - inserted,
+  };
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -40,12 +185,15 @@ export const markAllAsRead = async (riderId: string) => {
 export const getNotificationPrefs = async (riderId: string) => {
   const result = await query(
     `SELECT * FROM notification_preferences WHERE rider_id = $1 ORDER BY notification_type`,
-    [riderId]
+    [riderId],
   );
   return result.rows;
 };
 
-export const upsertNotificationPref = async (riderId: string, data: UpdateNotificationPrefInput) => {
+export const upsertNotificationPref = async (
+  riderId: string,
+  data: UpdateNotificationPrefInput,
+) => {
   const result = await query(
     `INSERT INTO notification_preferences (rider_id, notification_type, push_enabled, in_app_enabled, email_enabled)
      VALUES ($1, $2, $3, $4, $5)
@@ -54,7 +202,13 @@ export const upsertNotificationPref = async (riderId: string, data: UpdateNotifi
          in_app_enabled = COALESCE($4, notification_preferences.in_app_enabled),
          email_enabled = COALESCE($5, notification_preferences.email_enabled)
      RETURNING *`,
-    [riderId, data.notification_type, data.push_enabled ?? true, data.in_app_enabled ?? true, data.email_enabled ?? false]
+    [
+      riderId,
+      data.notification_type,
+      data.push_enabled ?? true,
+      data.in_app_enabled ?? true,
+      data.email_enabled ?? false,
+    ],
   );
   return result.rows[0];
 };
@@ -64,31 +218,47 @@ export const upsertNotificationPref = async (riderId: string, data: UpdateNotifi
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const getSettings = async (riderId: string) => {
-  const result = await query(`SELECT * FROM rider_settings WHERE rider_id = $1`, [riderId]);
+  const result = await query(
+    `SELECT * FROM rider_settings WHERE rider_id = $1`,
+    [riderId],
+  );
   if (result.rows.length === 0) {
     // Auto-create defaults on first access
     const insert = await query(
       `INSERT INTO rider_settings (rider_id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING *`,
-      [riderId]
+      [riderId],
     );
-    return insert.rows[0] || (await query(`SELECT * FROM rider_settings WHERE rider_id = $1`, [riderId])).rows[0];
+    return (
+      insert.rows[0] ||
+      (
+        await query(`SELECT * FROM rider_settings WHERE rider_id = $1`, [
+          riderId,
+        ])
+      ).rows[0]
+    );
   }
   return result.rows[0];
 };
 
-export const updateSettings = async (riderId: string, data: UpdateSettingsInput) => {
+export const updateSettings = async (
+  riderId: string,
+  data: UpdateSettingsInput,
+) => {
   const keys = Object.keys(data).filter((k) => (data as any)[k] !== undefined);
   if (keys.length === 0) return getSettings(riderId);
 
   // Ensure row exists
-  await query(`INSERT INTO rider_settings (rider_id) VALUES ($1) ON CONFLICT DO NOTHING`, [riderId]);
+  await query(
+    `INSERT INTO rider_settings (rider_id) VALUES ($1) ON CONFLICT DO NOTHING`,
+    [riderId],
+  );
 
   const setClauses = keys.map((k, i) => `${k} = $${i + 1}`);
   const values = keys.map((k) => (data as any)[k]);
 
   const result = await query(
-    `UPDATE rider_settings SET ${setClauses.join(', ')} WHERE rider_id = $${keys.length + 1} RETURNING *`,
-    [...values, riderId]
+    `UPDATE rider_settings SET ${setClauses.join(", ")} WHERE rider_id = $${keys.length + 1} RETURNING *`,
+    [...values, riderId],
   );
   return result.rows[0];
 };
@@ -98,29 +268,46 @@ export const updateSettings = async (riderId: string, data: UpdateSettingsInput)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const getPrivacy = async (riderId: string) => {
-  const result = await query(`SELECT * FROM rider_privacy_settings WHERE rider_id = $1`, [riderId]);
+  const result = await query(
+    `SELECT * FROM rider_privacy_settings WHERE rider_id = $1`,
+    [riderId],
+  );
   if (result.rows.length === 0) {
     const insert = await query(
       `INSERT INTO rider_privacy_settings (rider_id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING *`,
-      [riderId]
+      [riderId],
     );
-    return insert.rows[0] || (await query(`SELECT * FROM rider_privacy_settings WHERE rider_id = $1`, [riderId])).rows[0];
+    return (
+      insert.rows[0] ||
+      (
+        await query(
+          `SELECT * FROM rider_privacy_settings WHERE rider_id = $1`,
+          [riderId],
+        )
+      ).rows[0]
+    );
   }
   return result.rows[0];
 };
 
-export const updatePrivacy = async (riderId: string, data: UpdatePrivacyInput) => {
+export const updatePrivacy = async (
+  riderId: string,
+  data: UpdatePrivacyInput,
+) => {
   const keys = Object.keys(data).filter((k) => (data as any)[k] !== undefined);
   if (keys.length === 0) return getPrivacy(riderId);
 
-  await query(`INSERT INTO rider_privacy_settings (rider_id) VALUES ($1) ON CONFLICT DO NOTHING`, [riderId]);
+  await query(
+    `INSERT INTO rider_privacy_settings (rider_id) VALUES ($1) ON CONFLICT DO NOTHING`,
+    [riderId],
+  );
 
   const setClauses = keys.map((k, i) => `${k} = $${i + 1}`);
   const values = keys.map((k) => (data as any)[k]);
 
   const result = await query(
-    `UPDATE rider_privacy_settings SET ${setClauses.join(', ')} WHERE rider_id = $${keys.length + 1} RETURNING *`,
-    [...values, riderId]
+    `UPDATE rider_privacy_settings SET ${setClauses.join(", ")} WHERE rider_id = $${keys.length + 1} RETURNING *`,
+    [...values, riderId],
   );
   return result.rows[0];
 };
@@ -130,11 +317,11 @@ export const updatePrivacy = async (riderId: string, data: UpdatePrivacyInput) =
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const blockRider = async (blockerId: string, blockedId: string) => {
-  if (blockerId === blockedId) throw new Error('Cannot block yourself');
+  if (blockerId === blockedId) throw new Error("Cannot block yourself");
   const result = await query(
     `INSERT INTO blocked_riders (blocker_id, blocked_id) VALUES ($1, $2)
      ON CONFLICT DO NOTHING RETURNING blocker_id`,
-    [blockerId, blockedId]
+    [blockerId, blockedId],
   );
   return result.rows.length > 0;
 };
@@ -142,7 +329,7 @@ export const blockRider = async (blockerId: string, blockedId: string) => {
 export const unblockRider = async (blockerId: string, blockedId: string) => {
   const result = await query(
     `DELETE FROM blocked_riders WHERE blocker_id = $1 AND blocked_id = $2 RETURNING blocker_id`,
-    [blockerId, blockedId]
+    [blockerId, blockedId],
   );
   return result.rows.length > 0;
 };
@@ -153,7 +340,7 @@ export const getBlockedRiders = async (blockerId: string) => {
      JOIN riders r ON br.blocked_id = r.id
      WHERE br.blocker_id = $1
      ORDER BY br.created_at DESC`,
-    [blockerId]
+    [blockerId],
   );
   return result.rows;
 };

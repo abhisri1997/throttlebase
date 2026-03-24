@@ -14,6 +14,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { X } from "lucide-react-native";
 import { apiClient } from "../../src/api/client";
+import { getApiErrorMessage } from "../../src/utils/apiError";
 import { Input } from "../../src/components/Input";
 import { useTheme } from "../../src/theme/ThemeContext";
 
@@ -47,10 +48,7 @@ export default function CreateGroupModal() {
       router.replace("/(tabs)/groups");
     },
     onError: (err: any) => {
-      Alert.alert(
-        "Error",
-        err.response?.data?.error || "Failed to create group",
-      );
+      Alert.alert("Error", getApiErrorMessage(err, "Failed to create group"));
     },
   });
 

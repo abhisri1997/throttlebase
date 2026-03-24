@@ -188,24 +188,36 @@ export const unfollowRider = async (
   return result.rows.length > 0;
 };
 
-export const getFollowers = async (riderId: string) => {
+export const getFollowers = async (riderId: string, viewerId?: string) => {
   const result = await query(
-    `SELECT r.id, r.display_name, r.experience_level
+    `SELECT r.id, r.display_name, r.experience_level,
+            EXISTS(
+              SELECT 1
+              FROM follows vf
+              WHERE vf.follower_id = $2
+                AND vf.following_id = r.id
+            ) AS is_following
      FROM follows f JOIN riders r ON f.follower_id = r.id
      WHERE f.following_id = $1
      ORDER BY f.created_at DESC`,
-    [riderId],
+    [riderId, viewerId ?? null],
   );
   return result.rows;
 };
 
-export const getFollowing = async (riderId: string) => {
+export const getFollowing = async (riderId: string, viewerId?: string) => {
   const result = await query(
-    `SELECT r.id, r.display_name, r.experience_level
+    `SELECT r.id, r.display_name, r.experience_level,
+            EXISTS(
+              SELECT 1
+              FROM follows vf
+              WHERE vf.follower_id = $2
+                AND vf.following_id = r.id
+            ) AS is_following
      FROM follows f JOIN riders r ON f.following_id = r.id
      WHERE f.follower_id = $1
      ORDER BY f.created_at DESC`,
-    [riderId],
+    [riderId, viewerId ?? null],
   );
   return result.rows;
 };
@@ -283,16 +295,23 @@ export const listGroups = async (
   const result = await query(
     `SELECT g.*, r.display_name AS creator_name,
             (SELECT COUNT(*)::int FROM group_members gm WHERE gm.group_id = g.id) AS member_count,
-            EXISTS (
-              SELECT 1
-              FROM group_members gm
-              WHERE gm.group_id = g.id AND gm.rider_id = $1
+            (
+              g.created_by = $1 OR EXISTS (
+                SELECT 1
+                FROM group_members gm
+                WHERE gm.group_id = g.id AND gm.rider_id = $1
+              )
             ) AS is_member,
             (
-              SELECT gm.role
-              FROM group_members gm
-              WHERE gm.group_id = g.id AND gm.rider_id = $1
-              LIMIT 1
+              CASE
+                WHEN g.created_by = $1 THEN 'admin'
+                ELSE (
+                  SELECT gm.role
+                  FROM group_members gm
+                  WHERE gm.group_id = g.id AND gm.rider_id = $1
+                  LIMIT 1
+                )
+              END
             ) AS current_user_role
      FROM groups g JOIN riders r ON g.created_by = r.id
      WHERE ${whereClause}
@@ -308,16 +327,23 @@ export const getGroupById = async (groupId: string, riderId: string) => {
   const result = await query(
     `SELECT g.*, r.display_name AS creator_name,
             (SELECT COUNT(*)::int FROM group_members gm WHERE gm.group_id = g.id) AS member_count,
-            EXISTS(
-              SELECT 1
-              FROM group_members gm
-              WHERE gm.group_id = g.id AND gm.rider_id = $2
+            (
+              g.created_by = $2 OR EXISTS(
+                SELECT 1
+                FROM group_members gm
+                WHERE gm.group_id = g.id AND gm.rider_id = $2
+              )
             ) AS is_member,
             (
-              SELECT gm.role
-              FROM group_members gm
-              WHERE gm.group_id = g.id AND gm.rider_id = $2
-              LIMIT 1
+              CASE
+                WHEN g.created_by = $2 THEN 'admin'
+                ELSE (
+                  SELECT gm.role
+                  FROM group_members gm
+                  WHERE gm.group_id = g.id AND gm.rider_id = $2
+                  LIMIT 1
+                )
+              END
             ) AS current_user_role,
             (
               SELECT COALESCE(

@@ -14,6 +14,7 @@ import { useRouter } from "expo-router";
 import { Plus, Users } from "lucide-react-native";
 import { apiClient } from "../../src/api/client";
 import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
+import { getApiErrorMessage } from "../../src/utils/apiError";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { NotificationBell } from "../../src/components/NotificationBell";
 
@@ -71,7 +72,7 @@ export default function GroupsScreen() {
       queryClient.invalidateQueries({ queryKey: ["group", groupId] });
     },
     onError: (err: any) => {
-      Alert.alert("Error", err.response?.data?.error || "Failed to join group");
+      Alert.alert("Error", getApiErrorMessage(err, "Failed to join group"));
     },
   });
 

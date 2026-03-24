@@ -44,7 +44,8 @@ export const createRide = async (
 export const getRide = async (req: Request, res: Response): Promise<void> => {
   try {
     const rideId = req.params.id as string;
-    const ride = await RideService.getRideById(rideId);
+    const riderId = (req.rider as unknown as RiderPayload).riderId;
+    const ride = await RideService.getRideById(rideId, riderId);
 
     if (!ride) {
       res.status(404).json({ error: "Ride not found" });
@@ -113,11 +114,9 @@ export const updateRide = async (
     );
 
     if (!updatedRide) {
-      res
-        .status(404)
-        .json({
-          error: "Ride not found or you are not the captain/co-captain",
-        });
+      res.status(404).json({
+        error: "Ride not found or you are not the captain/co-captain",
+      });
       return;
     }
 
@@ -147,12 +146,10 @@ export const deleteRide = async (
     const success = await RideService.deleteRide(rideId, captainId);
 
     if (!success) {
-      res
-        .status(400)
-        .json({
-          error:
-            "Cannot delete ride. Either you are not the captain, or the ride is already active/completed.",
-        });
+      res.status(400).json({
+        error:
+          "Cannot delete ride. Either you are not the captain, or the ride is already active/completed.",
+      });
       return;
     }
 
@@ -211,12 +208,10 @@ export const promoteCoCaptain = async (
     if (success) {
       res.json({ message: "Rider promoted to co-captain successfully" });
     } else {
-      res
-        .status(400)
-        .json({
-          error:
-            "Could not promote rider. Either you are not the captain, or the target is not a confirmed participant.",
-        });
+      res.status(400).json({
+        error:
+          "Could not promote rider. Either you are not the captain, or the target is not a confirmed participant.",
+      });
     }
   } catch (error: any) {
     if (error.name === "ZodError") {
@@ -282,12 +277,10 @@ export const handleStopRequest = async (
     if (success) {
       res.json({ message: `Stop request ${validated.status}` });
     } else {
-      res
-        .status(400)
-        .json({
-          error:
-            "Could not update stop. Either you are not a captain/co-captain, or the stop is not pending.",
-        });
+      res.status(400).json({
+        error:
+          "Could not update stop. Either you are not a captain/co-captain, or the stop is not pending.",
+      });
     }
   } catch (error: any) {
     if (error.name === "ZodError") {

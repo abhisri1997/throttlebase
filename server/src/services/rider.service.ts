@@ -1,5 +1,5 @@
-import { query } from '../config/db.js';
-import type { UpdateRiderInput } from '../schemas/rider.schemas.js';
+import { query } from "../config/db.js";
+import type { UpdateRiderInput } from "../schemas/rider.schemas.js";
 
 /**
  * RiderService — Profile management business logic.
@@ -30,6 +30,8 @@ export interface RiderProfile {
   total_rides: number;
   total_distance_km: number;
   total_ride_time_sec: number;
+  follower_count: number;
+  following_count: number;
   created_at: string;
   updated_at: string;
   location_coords?: {
@@ -44,7 +46,9 @@ const PROFILE_COLUMNS = `
   experience_level, location_city, location_region,
   phone_number, weight_kg, total_rides, total_distance_km,
   total_ride_time_sec, created_at, updated_at,
-  ST_AsGeoJSON(location_coords)::json AS location_coords
+  ST_AsGeoJSON(location_coords)::json AS location_coords,
+  (SELECT COUNT(*) FROM follows WHERE following_id = riders.id)::int AS follower_count,
+  (SELECT COUNT(*) FROM follows WHERE follower_id = riders.id)::int AS following_count
 `;
 
 /**
@@ -56,7 +60,7 @@ export const getById = async (id: string): Promise<RiderProfile | null> => {
     `SELECT ${PROFILE_COLUMNS}
      FROM riders
      WHERE id = $1 AND deleted_at IS NULL`,
-    [id]
+    [id],
   );
 
   if (result.rows.length === 0) {
@@ -79,10 +83,10 @@ export const getById = async (id: string): Promise<RiderProfile | null> => {
  */
 export const update = async (
   id: string,
-  fields: UpdateRiderInput
+  fields: UpdateRiderInput,
 ): Promise<RiderProfile | null> => {
   const keys = Object.keys(fields).filter(
-    (key) => fields[key as keyof UpdateRiderInput] !== undefined
+    (key) => fields[key as keyof UpdateRiderInput] !== undefined,
   );
 
   if (keys.length === 0) {
@@ -96,12 +100,14 @@ export const update = async (
   let paramIndex = 1;
 
   for (const key of keys) {
-    if (key === 'location_coords') {
+    if (key === "location_coords") {
       if (fields.location_coords === null) {
         setClauses.push(`location_coords = NULL`);
       } else {
         const coords = fields.location_coords as [number, number];
-        setClauses.push(`location_coords = ST_SetSRID(ST_MakePoint($${paramIndex}, $${paramIndex + 1}), 4326)::geography`);
+        setClauses.push(
+          `location_coords = ST_SetSRID(ST_MakePoint($${paramIndex}, $${paramIndex + 1}), 4326)::geography`,
+        );
         values.push(coords[0], coords[1]);
         paramIndex += 2;
       }
@@ -117,10 +123,10 @@ export const update = async (
 
   const result = await query(
     `UPDATE riders
-     SET ${setClauses.join(', ')}
+     SET ${setClauses.join(", ")}
      WHERE id = $${idParamIndex} AND deleted_at IS NULL
      RETURNING ${PROFILE_COLUMNS}`,
-    [...values, id]
+    [...values, id],
   );
 
   if (result.rows.length === 0) {
@@ -139,7 +145,7 @@ export const softDelete = async (id: string): Promise<boolean> => {
     `UPDATE riders
      SET deleted_at = now()
      WHERE id = $1 AND deleted_at IS NULL`,
-    [id]
+    [id],
   );
 
   return (result.rowCount ?? 0) > 0;

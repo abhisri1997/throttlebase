@@ -1,5 +1,10 @@
 export const JOB_TYPES = {
   RIDE_STATS_RECOMPUTE: "ride_stats.recompute",
+  LIVE_SESSION_STARTED: "live_session.started",
+  LIVE_SESSION_ENDED: "live_session.ended",
+  LIVE_INCIDENT_REPORTED: "live_session.incident_reported",
+  LIVE_PRESENCE_SWEEP: "live_session.presence_sweep",
+  LIVE_INCIDENT_ESCALATE: "live_session.incident_escalate",
 } as const;
 
 export type JobType = (typeof JOB_TYPES)[keyof typeof JOB_TYPES];

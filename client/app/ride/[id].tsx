@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -9,12 +9,16 @@ import {
   Modal,
   TextInput,
   RefreshControl,
+  AppState,
+  type AppStateStatus,
+  Platform,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
 import { useAuthStore } from "../../src/store/authStore";
+import { useLiveSessionStore } from "../../src/store/liveSessionStore";
 import MapView, {
   Marker,
   Polyline,
@@ -35,9 +39,11 @@ import {
   Star,
 } from "lucide-react-native";
 import { showLocation } from "react-native-map-link";
+import * as ExpoLocation from "expo-location";
 import { useTheme } from "../../src/theme/ThemeContext";
 import LocationPicker from "../../src/components/LocationPicker";
 import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
+import { getApiErrorMessage } from "../../src/utils/apiError";
 
 const fetchRideDetails = async (id: string) => {
   const { data } = await apiClient.get(`/api/rides/${id}`);
@@ -113,6 +119,72 @@ const submitRideReview = async (
   return data;
 };
 
+const fetchLiveSession = async (rideId: string) => {
+  const { data } = await apiClient.get(`/api/rides/${rideId}/live/session`);
+  return data.session;
+};
+
+const startLiveSessionReq = async (rideId: string) => {
+  const { data } = await apiClient.post(`/api/rides/${rideId}/live/start`);
+  return data;
+};
+
+const endLiveSessionReq = async (rideId: string) => {
+  const { data } = await apiClient.post(`/api/rides/${rideId}/live/end`, {
+    mark_ride_completed: false,
+  });
+  return data;
+};
+
+const reportSOSReq = async (
+  rideId: string,
+  payload?: { lon: number; lat: number },
+) => {
+  const { data } = await apiClient.post(`/api/rides/${rideId}/live/incident`, {
+    severity: "critical",
+    kind: "sos",
+    ...(payload ? payload : {}),
+    metadata: {
+      source: "mobile",
+    },
+  });
+  return data;
+};
+
+const getSOSCoords = async (): Promise<
+  { lon: number; lat: number } | undefined
+> => {
+  if (Platform.OS === "web") {
+    return undefined;
+  }
+
+  try {
+    const permission = await ExpoLocation.requestForegroundPermissionsAsync();
+    if (permission.status !== "granted") {
+      return undefined;
+    }
+
+    const lastKnown = await ExpoLocation.getLastKnownPositionAsync();
+    if (lastKnown?.coords) {
+      return {
+        lon: lastKnown.coords.longitude,
+        lat: lastKnown.coords.latitude,
+      };
+    }
+
+    const current = await ExpoLocation.getCurrentPositionAsync({
+      accuracy: ExpoLocation.Accuracy.Balanced,
+    });
+
+    return {
+      lon: current.coords.longitude,
+      lat: current.coords.latitude,
+    };
+  } catch {
+    return undefined;
+  }
+};
+
 const STATUS_COLORS: Record<string, string> = {
   draft: "#64748b",
   scheduled: "#3b82f6",
@@ -143,6 +215,27 @@ export default function RideDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const currentRider = useAuthStore((state: any) => state.rider);
+  const token = useAuthStore((state: any) => state.token);
+  const liveEnabled = process.env.EXPO_PUBLIC_ENABLE_LIVE_SESSION !== "false";
+  const {
+    connected: liveConnected,
+    isJoining,
+    inRoom,
+    session: liveSocketSession,
+    presence,
+    locations,
+    incidents,
+    lastError: liveError,
+    connect,
+    joinRoom,
+    leaveRoom,
+    setRideContext,
+    clearRideContext,
+    sendHeartbeat,
+    upsertLocation,
+    reportSOS,
+    reset,
+  } = useLiveSessionStore();
 
   const {
     data: ride,
@@ -165,9 +258,28 @@ export default function RideDetailScreen() {
     enabled: !!id,
   });
 
+  const isParticipantFromRide = Boolean(
+    ride?.participants?.some((p: any) => p.rider_id === currentRider?.id),
+  );
+
+  const {
+    data: liveSession,
+    refetch: refetchLiveSession,
+    isFetching: liveSessionLoading,
+  } = useQuery({
+    queryKey: ["live-session", id],
+    queryFn: () => fetchLiveSession(id!),
+    enabled: Boolean(liveEnabled && id && isParticipantFromRide),
+    retry: false,
+  });
+
   const [showJoinOverridePicker, setShowJoinOverridePicker] = useState(false);
   const [reviewRating, setReviewRating] = useState<number>(0);
   const [reviewText, setReviewText] = useState("");
+  const [sosSubmitting, setSOSSubmitting] = useState(false);
+  const [appState, setAppState] = useState<AppStateStatus>(
+    AppState.currentState,
+  );
 
   const joinMutation = useMutation({
     mutationFn: (coords?: [number, number]) => joinRide(id!, coords),
@@ -177,12 +289,7 @@ export default function RideDetailScreen() {
       Alert.alert("Success", "You have joined the ride!");
     },
     onError: (err: any) => {
-      Alert.alert(
-        "Error",
-        err.response?.data?.error ||
-          err.response?.data?.message ||
-          "Failed to join ride",
-      );
+      Alert.alert("Error", getApiErrorMessage(err, "Failed to join ride"));
     },
   });
 
@@ -196,7 +303,7 @@ export default function RideDetailScreen() {
     onError: (err: any) => {
       Alert.alert(
         "Error",
-        err.response?.data?.error || "Failed to update location",
+        getApiErrorMessage(err, "Failed to update location"),
       );
     },
   });
@@ -208,7 +315,7 @@ export default function RideDetailScreen() {
       Alert.alert("Success", "Rider promoted to co-captain!");
     },
     onError: (err: any) => {
-      Alert.alert("Error", err.response?.data?.error || "Failed to promote");
+      Alert.alert("Error", getApiErrorMessage(err, "Failed to promote"));
     },
   });
 
@@ -219,10 +326,7 @@ export default function RideDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ["ride", id] });
     },
     onError: (err: any) => {
-      Alert.alert(
-        "Error",
-        err.response?.data?.error || "Failed to update stop",
-      );
+      Alert.alert("Error", getApiErrorMessage(err, "Failed to update stop"));
     },
   });
 
@@ -233,10 +337,7 @@ export default function RideDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ["rides"] });
     },
     onError: (err: any) => {
-      Alert.alert(
-        "Error",
-        err.response?.data?.error || "Failed to update status",
-      );
+      Alert.alert("Error", getApiErrorMessage(err, "Failed to update status"));
     },
   });
 
@@ -248,10 +349,7 @@ export default function RideDetailScreen() {
       router.replace("/(tabs)/rides");
     },
     onError: (err: any) => {
-      Alert.alert(
-        "Error",
-        err.response?.data?.error || "Failed to delete ride",
-      );
+      Alert.alert("Error", getApiErrorMessage(err, "Failed to delete ride"));
     },
   });
 
@@ -268,12 +366,235 @@ export default function RideDetailScreen() {
       Alert.alert("Success", "Review submitted successfully");
     },
     onError: (err: any) => {
+      Alert.alert("Error", getApiErrorMessage(err, "Failed to submit review"));
+    },
+  });
+
+  const liveStartMutation = useMutation({
+    mutationFn: () => startLiveSessionReq(id!),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["ride", id] }),
+        queryClient.invalidateQueries({ queryKey: ["live-session", id] }),
+      ]);
+      refetchLiveSession();
+      joinRoom(id!);
+    },
+    onError: (err: any) => {
       Alert.alert(
         "Error",
-        err.response?.data?.error || "Failed to submit review",
+        getApiErrorMessage(err, "Failed to start live session"),
       );
     },
   });
+
+  const liveEndMutation = useMutation({
+    mutationFn: () => endLiveSessionReq(id!),
+    onSuccess: async () => {
+      leaveRoom();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["ride", id] }),
+        queryClient.invalidateQueries({ queryKey: ["live-session", id] }),
+      ]);
+      refetchLiveSession();
+    },
+    onError: (err: any) => {
+      Alert.alert(
+        "Error",
+        getApiErrorMessage(err, "Failed to end live session"),
+      );
+    },
+  });
+
+  const liveSOSMutation = useMutation({
+    mutationFn: (payload?: { lon: number; lat: number }) =>
+      reportSOSReq(id!, payload),
+    onSuccess: () => {
+      Alert.alert("SOS sent", "Your critical SOS incident has been reported.");
+      refetchLiveSession();
+    },
+    onError: (err: any) => {
+      Alert.alert("Error", getApiErrorMessage(err, "Failed to report SOS"));
+    },
+  });
+
+  const handleSOS = () => {
+    Alert.alert(
+      "Send SOS?",
+      "This will report a critical incident to ride leaders immediately.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Send SOS",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              if (sosSubmitting || liveSOSMutation.isPending) {
+                return;
+              }
+
+              setSOSSubmitting(true);
+
+              try {
+                const coords = await getSOSCoords();
+
+                if (inRoom) {
+                  reportSOS(coords);
+                  Alert.alert(
+                    "SOS sent",
+                    "Your critical SOS incident has been reported.",
+                  );
+                  void refetchLiveSession();
+                } else {
+                  await liveSOSMutation.mutateAsync(coords);
+                }
+              } finally {
+                setSOSSubmitting(false);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
+  useEffect(() => {
+    if (!liveEnabled || !token) {
+      return;
+    }
+
+    connect(token);
+
+    return () => {
+      reset();
+    };
+  }, [connect, liveEnabled, reset, token]);
+
+  useEffect(() => {
+    if (!liveEnabled || !id || !isParticipantFromRide) {
+      clearRideContext();
+      return;
+    }
+
+    setRideContext(id);
+
+    return () => {
+      clearRideContext();
+    };
+  }, [
+    clearRideContext,
+    id,
+    isParticipantFromRide,
+    liveEnabled,
+    setRideContext,
+  ]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      setAppState(nextState);
+
+      if (
+        nextState === "active" &&
+        liveEnabled &&
+        id &&
+        isParticipantFromRide &&
+        ((liveSocketSession?.status || liveSession?.status) === "active" ||
+          (liveSocketSession?.status || liveSession?.status) === "starting" ||
+          (liveSocketSession?.status || liveSession?.status) === "paused")
+      ) {
+        joinRoom(id);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [
+    id,
+    isParticipantFromRide,
+    joinRoom,
+    liveEnabled,
+    liveSession?.status,
+    liveSocketSession?.status,
+  ]);
+
+  useEffect(() => {
+    if (!inRoom || appState !== "active") {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      sendHeartbeat();
+    }, 10000);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [appState, inRoom, sendHeartbeat]);
+
+  useEffect(() => {
+    if (!inRoom || appState !== "active" || Platform.OS === "web") {
+      return;
+    }
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    const publishCurrentLocation = async () => {
+      try {
+        const position = await ExpoLocation.getCurrentPositionAsync({
+          accuracy: ExpoLocation.Accuracy.Balanced,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        const speedMs = position.coords.speed;
+        const heading = position.coords.heading;
+
+        upsertLocation({
+          lon: position.coords.longitude,
+          lat: position.coords.latitude,
+          speed_kmh:
+            typeof speedMs === "number" &&
+            Number.isFinite(speedMs) &&
+            speedMs >= 0
+              ? speedMs * 3.6
+              : undefined,
+          heading_deg:
+            typeof heading === "number" && Number.isFinite(heading)
+              ? heading
+              : undefined,
+          accuracy_m: position.coords.accuracy ?? undefined,
+          captured_at: new Date(position.timestamp).toISOString(),
+        });
+      } catch {
+        // Silent fallback: presence and incidents still work even if location fails.
+      }
+    };
+
+    const start = async () => {
+      const permission = await ExpoLocation.requestForegroundPermissionsAsync();
+      if (cancelled || permission.status !== "granted") {
+        return;
+      }
+
+      await publishCurrentLocation();
+      timer = setInterval(() => {
+        void publishCurrentLocation();
+      }, 5000);
+    };
+
+    void start();
+
+    return () => {
+      cancelled = true;
+      if (timer) {
+        clearInterval(timer);
+      }
+    };
+  }, [appState, inRoom, upsertLocation]);
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     await Promise.all([refetch(), refetchReviews()]);
@@ -313,9 +634,7 @@ export default function RideDetailScreen() {
 
   const startCoords = ride.start_point_geojson?.coordinates;
   const endCoords = ride.end_point_geojson?.coordinates;
-  const isParticipant = ride.participants?.some(
-    (p: any) => p.rider_id === currentRider?.id,
-  );
+  const isParticipant = isParticipantFromRide;
   const isCaptain = ride.captain_id === currentRider?.id;
   const isCoCaptain = ride.participants?.some(
     (p: any) => p.rider_id === currentRider?.id && p.role === "co_captain",
@@ -336,6 +655,26 @@ export default function RideDetailScreen() {
     minute: "2-digit",
   });
   const nextAction = NEXT_STATUS[ride.status];
+  const effectiveLiveSession = liveSocketSession || liveSession;
+  const liveStatus = effectiveLiveSession?.status || "not_started";
+  const onlineCount = Object.values(presence).filter(
+    (member) => member.isOnline,
+  ).length;
+  const liveConnectionLabel = !liveConnected
+    ? "Socket offline"
+    : isJoining
+      ? "Joining live room..."
+      : inRoom
+        ? "Live room joined"
+        : "Socket connected";
+
+  const liveLocationMarkers = Object.values(locations).filter((location) => {
+    if (!Number.isFinite(location.lat) || !Number.isFinite(location.lon)) {
+      return false;
+    }
+
+    return presence[location.riderId]?.isOnline ?? true;
+  });
 
   const handleGetDirections = () => {
     if (!startCoords) return;
@@ -485,6 +824,51 @@ export default function RideDetailScreen() {
                   title={`${s.type} stop`}
                 />
               ))}
+
+            {liveEnabled &&
+              (liveStatus === "active" ||
+                liveStatus === "starting" ||
+                liveStatus === "paused") &&
+              liveLocationMarkers.map((marker) => {
+                const participant = ride.participants?.find(
+                  (p: any) => p.rider_id === marker.riderId,
+                );
+
+                const isCurrentRider = marker.riderId === currentRider?.id;
+                const role = participant?.role || "rider";
+                const roleLabel =
+                  role === "captain"
+                    ? "Captain"
+                    : role === "co_captain"
+                      ? "Co-Captain"
+                      : "Rider";
+
+                return (
+                  <Marker
+                    key={`live-marker-${marker.riderId}`}
+                    coordinate={{
+                      latitude: marker.lat,
+                      longitude: marker.lon,
+                    }}
+                    pinColor={
+                      isCurrentRider
+                        ? "#2563eb"
+                        : role === "captain"
+                          ? "#22c55e"
+                          : role === "co_captain"
+                            ? "#f59e0b"
+                            : "#0ea5e9"
+                    }
+                    title={
+                      isCurrentRider
+                        ? "You"
+                        : participant?.display_name ||
+                          marker.riderId.slice(0, 8)
+                    }
+                    description={roleLabel}
+                  />
+                );
+              })}
           </MapView>
         )}
         <SafeAreaView className='absolute top-0 left-0 right-0 px-4 pt-2 flex-row justify-between items-center'>
@@ -640,6 +1024,158 @@ export default function RideDetailScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* About */}
+        {liveEnabled && isParticipant && (
+          <View
+            className='p-5'
+            style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
+          >
+            <View className='flex-row items-center justify-between mb-3'>
+              <Text
+                className='text-xl font-bold'
+                style={{ color: colors.text }}
+              >
+                Live Session
+              </Text>
+              <Text className='text-xs' style={{ color: colors.textMuted }}>
+                {liveConnectionLabel}
+              </Text>
+            </View>
+
+            <View
+              className='p-4 rounded-xl mb-3'
+              style={{
+                backgroundColor: colors.surface,
+                borderWidth: 1,
+                borderColor: colors.border,
+              }}
+            >
+              <Text className='font-semibold' style={{ color: colors.text }}>
+                Status:{" "}
+                {liveStatus === "not_started" ? "Not Started" : liveStatus}
+              </Text>
+              <Text className='mt-1' style={{ color: colors.textMuted }}>
+                Riders online: {onlineCount}
+              </Text>
+              <Text className='mt-1' style={{ color: colors.textMuted }}>
+                Incidents in this session: {incidents.length}
+              </Text>
+              {appState !== "active" ? (
+                <Text className='mt-1' style={{ color: colors.textMuted }}>
+                  App is backgrounded. Heartbeat/location updates are paused.
+                </Text>
+              ) : null}
+              {liveError ? (
+                <Text className='mt-2' style={{ color: colors.danger }}>
+                  {liveError}
+                </Text>
+              ) : null}
+            </View>
+
+            <View className='flex-row flex-wrap'>
+              {isLeader &&
+                (liveStatus === "not_started" || liveStatus === "ended") && (
+                  <TouchableOpacity
+                    onPress={() => liveStartMutation.mutate()}
+                    disabled={liveStartMutation.isPending}
+                    className='px-4 py-2 rounded-xl mr-2 mb-2'
+                    style={{ backgroundColor: colors.primary }}
+                  >
+                    <Text className='font-bold text-white'>
+                      {liveStartMutation.isPending
+                        ? "Starting..."
+                        : "Start Live"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+              {(liveStatus === "active" ||
+                liveStatus === "starting" ||
+                liveStatus === "paused") &&
+                !inRoom && (
+                  <TouchableOpacity
+                    onPress={() => joinRoom(id!)}
+                    disabled={isJoining}
+                    className='px-4 py-2 rounded-xl mr-2 mb-2'
+                    style={{
+                      backgroundColor: isJoining
+                        ? colors.border
+                        : colors.primary,
+                    }}
+                  >
+                    <Text className='font-bold text-white'>
+                      {isJoining ? "Joining..." : "Join Live Room"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+              {inRoom && (
+                <TouchableOpacity
+                  onPress={leaveRoom}
+                  className='px-4 py-2 rounded-xl mr-2 mb-2'
+                  style={{
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    backgroundColor: colors.surface,
+                  }}
+                >
+                  <Text className='font-bold' style={{ color: colors.text }}>
+                    Leave Room
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {(liveStatus === "active" ||
+                liveStatus === "starting" ||
+                inRoom) && (
+                <TouchableOpacity
+                  onPress={handleSOS}
+                  disabled={liveSOSMutation.isPending || sosSubmitting}
+                  className='px-4 py-2 rounded-xl mr-2 mb-2'
+                  style={{ backgroundColor: colors.danger }}
+                >
+                  <Text className='font-bold text-white'>
+                    {liveSOSMutation.isPending || sosSubmitting
+                      ? "Sending SOS..."
+                      : "SOS"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {isLeader &&
+                (liveStatus === "active" ||
+                  liveStatus === "starting" ||
+                  liveStatus === "paused") && (
+                  <TouchableOpacity
+                    onPress={() => liveEndMutation.mutate()}
+                    disabled={liveEndMutation.isPending}
+                    className='px-4 py-2 rounded-xl mr-2 mb-2'
+                    style={{
+                      borderWidth: 1,
+                      borderColor: colors.danger,
+                      backgroundColor: colors.surface,
+                    }}
+                  >
+                    <Text
+                      className='font-bold'
+                      style={{ color: colors.danger }}
+                    >
+                      {liveEndMutation.isPending ? "Ending..." : "End Live"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+            </View>
+
+            {liveSessionLoading ? (
+              <ActivityIndicator
+                size='small'
+                color={colors.primary}
+                className='mt-3'
+              />
+            ) : null}
+          </View>
+        )}
 
         {/* About */}
         <View

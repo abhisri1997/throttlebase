@@ -86,6 +86,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   authNotice: null,
 
   login: async (token: string, rider: any) => {
+    if (!token || typeof token !== "string") {
+      throw new Error(
+        "Invalid login response from server. Please try signing in again.",
+      );
+    }
+
+    if (!rider || typeof rider !== "object") {
+      throw new Error("Unable to load account profile. Please try again.");
+    }
+
     const normalizedRider = normalizeRider(rider);
     await AsyncStorage.setItem("jwt_token", token);
     await AsyncStorage.setItem("rider_data", JSON.stringify(normalizedRider));

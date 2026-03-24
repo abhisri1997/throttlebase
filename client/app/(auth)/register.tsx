@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   View,
   Text,
+  StyleSheet,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -14,11 +15,12 @@ import { UserPlus } from "lucide-react-native";
 import { Input } from "../../src/components/Input";
 import { Button } from "../../src/components/Button";
 import { apiClient } from "../../src/api/client";
+import { getApiErrorMessage } from "../../src/utils/apiError";
 import { useAuthStore } from "../../src/store/authStore";
 import { useTheme } from "../../src/theme/ThemeContext";
 
 export default function RegisterScreen() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { redirectTo } = useLocalSearchParams<{ redirectTo?: string }>();
   const [form, setForm] = useState({
     username: "",
@@ -48,13 +50,31 @@ export default function RegisterScreen() {
       Alert.alert("Error", "Username, email, and password are required.");
       return;
     }
+
+    if (!form.display_name.trim()) {
+      Alert.alert("Error", "Display name is required.");
+      return;
+    }
+
+    if (form.password.length < 8) {
+      Alert.alert("Error", "Password must be at least 8 characters.");
+      return;
+    }
+
     try {
       setIsLoading(true);
-      const res = await apiClient.post("/auth/register", form); // Auto login after successful register
-      await login(res.data.token, res.data.rider);
+      await apiClient.post("/auth/register", form);
+
+      // Register returns rider only. Fetch JWT via login endpoint before storing auth state.
+      const loginRes = await apiClient.post("/auth/login", {
+        email: form.email,
+        password: form.password,
+      });
+
+      await login(loginRes.data.token, loginRes.data.rider);
       router.replace(resolvePostRegisterRoute() as any);
     } catch (error: any) {
-      const msg = error.response?.data?.error || "Registration failed";
+      const msg = getApiErrorMessage(error, "Registration failed");
       Alert.alert("Registration Error", msg);
     } finally {
       setIsLoading(false);
@@ -63,24 +83,48 @@ export default function RegisterScreen() {
 
   return (
     <SafeAreaView className='flex-1' style={{ backgroundColor: colors.bg }}>
-      <StatusBar style='light' />
+      <StatusBar style={isDark ? "light" : "dark"} />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         className='flex-1'
       >
-        <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 16 }}>
-          <View className='mt-8 mb-8 items-center'>
-            <View className='w-16 h-16 rounded-full items-center justify-center border mb-4'>
-              <UserPlus size={28} color='#22c55e' />
+        <ScrollView contentContainerStyle={styles.scroll}>
+          <View className='items-center mt-12 mb-12'>
+            <View
+              className='w-20 h-20 rounded-3xl items-center justify-center shadow-lg mb-6'
+              style={{ backgroundColor: colors.primary }}
+            >
+              <UserPlus size={40} color='#ffffff' />
             </View>
-            <Text className='text-3xl font-bold '>Join the Pack</Text>
-            <Text className='text-center mt-2 px-6'>
-              {" "}
+            <Text
+              className='text-4xl font-extrabold tracking-tight'
+              style={{ color: colors.text }}
+            >
+              Join the Pack
+            </Text>
+            <Text
+              className='text-center mt-2 px-6 text-base'
+              style={{ color: colors.textMuted }}
+            >
               Create an account to track routes, discover rides, and connect
-              with riders.{" "}
+              with riders.
             </Text>
           </View>
-          <View className='p-6 rounded-3xl border shadow-lg mb-8'>
+
+          <View
+            className='p-6 rounded-3xl mx-4 shadow-2xl mb-8'
+            style={{
+              backgroundColor: colors.surface,
+              borderWidth: 1,
+              borderColor: colors.border,
+            }}
+          >
+            <Text
+              className='text-2xl font-bold mb-6'
+              style={{ color: colors.text }}
+            >
+              Create Account
+            </Text>
             <Input
               label='Username*'
               placeholder='e.g. roadwarrior'
@@ -97,8 +141,8 @@ export default function RegisterScreen() {
               onChangeText={(t) => setForm({ ...form, email: t })}
             />
             <Input
-              label='Display Name'
-              placeholder='e.g. John Doe (Optional)'
+              label='Display Name*'
+              placeholder='e.g. John Doe'
               value={form.display_name}
               onChangeText={(t) => setForm({ ...form, display_name: t })}
             />
@@ -113,12 +157,14 @@ export default function RegisterScreen() {
               title='Create Account'
               onPress={handleRegister}
               isLoading={isLoading}
-              className='mt-6'
+              className='mt-4'
             />
             <View className='flex-row justify-center mt-6'>
-              <Text className=''>Already a rider? </Text>
+              <Text style={{ color: colors.textMuted }}>Already a rider? </Text>
               <Link href={loginHref as any} asChild>
-                <Text className='text-primary-500 font-bold'>Sign In</Text>
+                <Text className='font-bold' style={{ color: colors.primary }}>
+                  Sign In
+                </Text>
               </Link>
             </View>
           </View>
@@ -127,3 +173,7 @@ export default function RegisterScreen() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  scroll: { flexGrow: 1, paddingBottom: 40 },
+});

@@ -2,6 +2,38 @@ import { JOB_TYPES } from "../queue/job-types.js";
 import { enqueueJob } from "../queue/queue.js";
 import { query } from "../config/db.js";
 
+const enqueueRecurringJobIfDue = async (
+  type: string,
+  payload: Record<string, unknown>,
+  minIntervalSeconds: number,
+  maxAttempts: number,
+): Promise<boolean> => {
+  const existing = await query(
+    `SELECT id
+     FROM jobs
+     WHERE type = $1
+       AND (
+         status IN ('pending', 'processing')
+         OR created_at > now() - ($2 || ' seconds')::interval
+       )
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [type, String(minIntervalSeconds)],
+  );
+
+  if (existing.rows.length > 0) {
+    return false;
+  }
+
+  await enqueueJob({
+    type,
+    payload,
+    maxAttempts,
+  });
+
+  return true;
+};
+
 export const enqueueRideStatsRecompute = async (
   rideId: string,
   source: "ride-completed" | "gps-ingest",
@@ -29,4 +61,115 @@ export const enqueueRideStatsRecompute = async (
     },
     maxAttempts: 5,
   });
+};
+
+export const enqueueLiveSessionStarted = async (
+  rideId: string,
+  actorRiderId: string,
+): Promise<void> => {
+  const existing = await query(
+    `SELECT id
+     FROM jobs
+     WHERE type = $1
+       AND status IN ('pending', 'processing')
+       AND payload->>'rideId' = $2
+     LIMIT 1`,
+    [JOB_TYPES.LIVE_SESSION_STARTED, rideId],
+  );
+
+  if (existing.rows.length > 0) {
+    return;
+  }
+
+  await enqueueJob({
+    type: JOB_TYPES.LIVE_SESSION_STARTED,
+    payload: {
+      rideId,
+      actorRiderId,
+      occurredAt: new Date().toISOString(),
+    },
+    maxAttempts: 3,
+  });
+};
+
+export const enqueueLiveSessionEnded = async (
+  rideId: string,
+  actorRiderId: string,
+  reason?: string,
+): Promise<void> => {
+  const existing = await query(
+    `SELECT id
+     FROM jobs
+     WHERE type = $1
+       AND status IN ('pending', 'processing')
+       AND payload->>'rideId' = $2
+     LIMIT 1`,
+    [JOB_TYPES.LIVE_SESSION_ENDED, rideId],
+  );
+
+  if (existing.rows.length > 0) {
+    return;
+  }
+
+  await enqueueJob({
+    type: JOB_TYPES.LIVE_SESSION_ENDED,
+    payload: {
+      rideId,
+      actorRiderId,
+      reason: reason ?? null,
+      occurredAt: new Date().toISOString(),
+    },
+    maxAttempts: 3,
+  });
+};
+
+export const enqueueLiveIncidentReported = async (
+  incidentId: string,
+  rideId: string,
+  severity: string,
+  reporterRiderId: string,
+): Promise<void> => {
+  const existing = await query(
+    `SELECT id
+     FROM jobs
+     WHERE type = $1
+       AND status IN ('pending', 'processing')
+       AND payload->>'incidentId' = $2
+     LIMIT 1`,
+    [JOB_TYPES.LIVE_INCIDENT_REPORTED, incidentId],
+  );
+
+  if (existing.rows.length > 0) {
+    return;
+  }
+
+  await enqueueJob({
+    type: JOB_TYPES.LIVE_INCIDENT_REPORTED,
+    payload: {
+      incidentId,
+      rideId,
+      severity,
+      reporterRiderId,
+      occurredAt: new Date().toISOString(),
+    },
+    maxAttempts: 5,
+  });
+};
+
+export const enqueueLivePresenceSweepJob = async (): Promise<boolean> => {
+  return enqueueRecurringJobIfDue(
+    JOB_TYPES.LIVE_PRESENCE_SWEEP,
+    { enqueuedAt: new Date().toISOString() },
+    30,
+    1,
+  );
+};
+
+export const enqueueLiveIncidentEscalationJob = async (): Promise<boolean> => {
+  return enqueueRecurringJobIfDue(
+    JOB_TYPES.LIVE_INCIDENT_ESCALATE,
+    { enqueuedAt: new Date().toISOString() },
+    45,
+    1,
+  );
 };

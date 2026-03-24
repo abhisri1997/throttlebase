@@ -16,6 +16,7 @@ import { apiClient } from "../../src/api/client";
 import { Button } from "../../src/components/Button";
 import { Input } from "../../src/components/Input";
 import { useTheme } from "../../src/theme/ThemeContext";
+import { getApiErrorMessage } from "../../src/utils/apiError";
 
 const supportCategories = [
   { value: "bug", label: "Bug" },
@@ -84,17 +85,8 @@ export default function SupportModal() {
       );
     },
     onError: (error: any) => {
-      const issues = error.response?.data?.errors;
-      if (Array.isArray(issues) && issues.length > 0) {
-        setSubmitError(
-          String(issues[0]?.message ?? "Please review the form and try again."),
-        );
-        return;
-      }
-
       setSubmitError(
-        error.response?.data?.error ??
-          "Unable to create support ticket right now.",
+        getApiErrorMessage(error, "Unable to create support ticket right now."),
       );
     },
   });

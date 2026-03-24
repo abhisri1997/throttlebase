@@ -279,7 +279,9 @@ export const getFollowers = async (
   res: Response,
 ): Promise<void> => {
   try {
-    res.json(await CommunityService.getFollowers(req.params.id as string));
+    res.json(
+      await CommunityService.getFollowers(req.params.id as string, rid(req)),
+    );
   } catch (error: any) {
     console.error("Error fetching followers:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -291,7 +293,9 @@ export const getFollowing = async (
   res: Response,
 ): Promise<void> => {
   try {
-    res.json(await CommunityService.getFollowing(req.params.id as string));
+    res.json(
+      await CommunityService.getFollowing(req.params.id as string, rid(req)),
+    );
   } catch (error: any) {
     console.error("Error fetching following:", error);
     res.status(500).json({ error: "Internal server error" });

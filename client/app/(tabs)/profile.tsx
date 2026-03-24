@@ -5,6 +5,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuthStore } from "../../src/store/authStore";
@@ -14,13 +15,18 @@ import { apiClient } from "../../src/api/client";
 import { LogOut, Edit2, Settings } from "lucide-react-native";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { NotificationBell } from "../../src/components/NotificationBell";
+import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
 
 export default function ProfileScreen() {
   const { colors } = useTheme();
   const logout = useAuthStore((state) => state.logout);
   const authRider = useAuthStore((state) => state.rider);
 
-  const { data: profileObj, isLoading: profileLoading } = useQuery({
+  const {
+    data: profileObj,
+    isLoading: profileLoading,
+    refetch: profileRefetch,
+  } = useQuery({
     queryKey: ["rider", "me"],
     queryFn: async () => {
       const { data } = await apiClient.get("/api/riders/me");
@@ -28,12 +34,20 @@ export default function ProfileScreen() {
     },
   });
 
-  const { data: badges, isLoading: badgesLoading } = useQuery({
+  const {
+    data: badges,
+    isLoading: badgesLoading,
+    refetch: badgesRefetch,
+  } = useQuery({
     queryKey: ["badges", "me"],
     queryFn: async () => {
       const { data } = await apiClient.get("/api/rewards/badges/me");
       return data;
     },
+  });
+
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    await Promise.all([profileRefetch(), badgesRefetch()]);
   });
 
   const handleLogout = async () => {
@@ -88,7 +102,17 @@ export default function ProfileScreen() {
         </View>
       </SafeAreaView>
 
-      <ScrollView className='flex-1'>
+      <ScrollView
+        className='flex-1'
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }
+      >
         {/* Profile Header */}
         <View
           className='p-6 items-center'
@@ -169,17 +193,46 @@ export default function ProfileScreen() {
                 Distance
               </Text>
             </View>
-            <View className='items-center'>
+            <TouchableOpacity
+              className='items-center'
+              onPress={() =>
+                displayRider?.id &&
+                router.push(
+                  `/follow-list?riderId=${displayRider.id}&mode=followers` as any,
+                )
+              }
+            >
               <Text
                 className='font-bold text-lg'
                 style={{ color: colors.text }}
               >
-                {displayRider?.stats?.followers || 0}
+                {displayRider?.follower_count ??
+                  displayRider?.stats?.followers ??
+                  0}
               </Text>
               <Text className='text-xs' style={{ color: colors.textMuted }}>
                 Followers
               </Text>
-            </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              className='items-center'
+              onPress={() =>
+                displayRider?.id &&
+                router.push(
+                  `/follow-list?riderId=${displayRider.id}&mode=following` as any,
+                )
+              }
+            >
+              <Text
+                className='font-bold text-lg'
+                style={{ color: colors.text }}
+              >
+                {displayRider?.following_count ?? 0}
+              </Text>
+              <Text className='text-xs' style={{ color: colors.textMuted }}>
+                Following
+              </Text>
+            </TouchableOpacity>
           </View>
           <TouchableOpacity
             onPress={() => router.push("/ride-history" as any)}

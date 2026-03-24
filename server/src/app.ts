@@ -1,4 +1,5 @@
 import express from "express";
+import { createServer } from "node:http";
 import { testConnection, query } from "./config/db.js";
 import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./config/swagger.js";
@@ -10,6 +11,8 @@ import communityRoutes from "./routes/community.routes.js";
 import rewardsRoutes from "./routes/rewards.routes.js";
 import notificationRoutes from "./routes/notifications.routes.js";
 import supportRoutes from "./routes/support.routes.js";
+import liveSessionRoutes from "./routes/live-session.routes.js";
+import { createLiveGateway } from "./realtime/gateway.js";
 import cors from "cors";
 
 const app = express();
@@ -45,6 +48,7 @@ app.use("/api/community", communityRoutes);
 app.use("/api/rewards", rewardsRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/support", supportRoutes);
+app.use("/api/live", liveSessionRoutes);
 
 // Database health check route
 app.get("/db-test", async (req, res) => {
@@ -69,7 +73,10 @@ const startServer = async () => {
   // Test DB connection before starting the server
   await testConnection();
 
-  app.listen(5001, () => {
+  const httpServer = createServer(app);
+  createLiveGateway(httpServer);
+
+  httpServer.listen(5001, () => {
     console.log("🚀 Server started on http://localhost:5001");
   });
 };

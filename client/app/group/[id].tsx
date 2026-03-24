@@ -14,6 +14,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Shield, Users } from "lucide-react-native";
 import { apiClient } from "../../src/api/client";
 import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
+import { getApiErrorMessage } from "../../src/utils/apiError";
 import { useTheme } from "../../src/theme/ThemeContext";
 
 type GroupMember = {
@@ -35,6 +36,9 @@ type GroupDetail = {
   members: GroupMember[];
 };
 
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const fetchGroupDetail = async (id: string): Promise<GroupDetail> => {
   const { data } = await apiClient.get(`/api/community/groups/${id}`);
   return data;
@@ -50,7 +54,9 @@ export default function GroupDetailScreen() {
   }>();
   const rawId = params.id ?? params["[id]"];
   const groupId = Array.isArray(rawId) ? rawId[0] : rawId;
-  const normalizedGroupId = groupId?.trim() || "";
+  const decodedGroupId = groupId ? decodeURIComponent(groupId) : "";
+  const normalizedGroupId = decodedGroupId.trim();
+  const isValidGroupId = UUID_REGEX.test(normalizedGroupId);
 
   const {
     data: group,
@@ -60,7 +66,7 @@ export default function GroupDetailScreen() {
   } = useQuery({
     queryKey: ["group", normalizedGroupId],
     queryFn: () => fetchGroupDetail(normalizedGroupId),
-    enabled: Boolean(normalizedGroupId),
+    enabled: isValidGroupId,
   });
 
   const joinMutation = useMutation({
@@ -75,7 +81,7 @@ export default function GroupDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ["group", normalizedGroupId] });
     },
     onError: (err: any) => {
-      Alert.alert("Error", err.response?.data?.error || "Failed to join group");
+      Alert.alert("Error", getApiErrorMessage(err, "Failed to join group"));
     },
   });
 
@@ -91,10 +97,7 @@ export default function GroupDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ["group", normalizedGroupId] });
     },
     onError: (err: any) => {
-      Alert.alert(
-        "Error",
-        err.response?.data?.error || "Failed to leave group",
-      );
+      Alert.alert("Error", getApiErrorMessage(err, "Failed to leave group"));
     },
   });
 
@@ -102,7 +105,7 @@ export default function GroupDetailScreen() {
     await refetch();
   });
 
-  if (!normalizedGroupId) {
+  if (!isValidGroupId) {
     return (
       <SafeAreaView
         className='flex-1 justify-center items-center px-6'

@@ -4,7 +4,8 @@
   "description": "Backend API for ThrottleBase",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "tsx test.ts",
+    "test:live-health": "tsx test.ts",
     "start": "tsx src/app.ts",
     "dev": "nodemon --exec tsx src/app.ts",
     "worker": "tsx src/workers/worker.ts",
@@ -22,6 +23,7 @@
     "jsonwebtoken": "^9.0.3",
     "node-cron": "^4.2.1",
     "pg": "^8.20.0",
+    "socket.io": "^4.8.3",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "zod": "^4.3.6"
@@ -38,6 +40,7 @@
     "@types/swagger-ui-express": "^4.1.8",
     "concurrently": "^9.2.1",
     "nodemon": "^3.1.14",
+    "socket.io-client": "^4.8.3",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"

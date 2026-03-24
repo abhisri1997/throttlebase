@@ -186,7 +186,49 @@ export const createRide = async (
 /**
  * Gets ride details with captain's name, participants, and stops.
  */
-export const getRideById = async (id: string): Promise<Ride | null> => {
+export const getRideById = async (
+  id: string,
+  viewerRiderId?: string,
+): Promise<Ride | null> => {
+  const params: any[] = [id];
+  let visibilityClause = "";
+
+  if (viewerRiderId) {
+    params.push(viewerRiderId);
+    visibilityClause = `
+      AND (
+        -- Active rides are visible only to captain/confirmed participants.
+        (
+          r.status = 'active'
+          AND (
+            r.captain_id = $2 OR EXISTS (
+              SELECT 1
+              FROM ride_participants vrp
+              WHERE vrp.ride_id = r.id
+                AND vrp.rider_id = $2
+                AND vrp.status = 'confirmed'
+            )
+          )
+        )
+        OR
+        (
+          r.status <> 'active'
+          AND (
+            r.visibility = 'public'
+            OR r.captain_id = $2
+            OR EXISTS (
+              SELECT 1
+              FROM ride_participants vrp
+              WHERE vrp.ride_id = r.id
+                AND vrp.rider_id = $2
+                AND vrp.status = 'confirmed'
+            )
+          )
+        )
+      )
+    `;
+  }
+
   const result = await query(
     `SELECT r.*,
             c.display_name as captain_name,
@@ -226,8 +268,9 @@ export const getRideById = async (id: string): Promise<Ride | null> => {
             ) as stops
      FROM rides r
      JOIN riders c ON r.captain_id = c.id
-     WHERE r.id = $1`,
-    [id],
+     WHERE r.id = $1
+       ${visibilityClause}`,
+    params,
   );
   return result.rows.length ? (result.rows[0] as Ride) : null;
 };
@@ -251,7 +294,9 @@ export const listDiscoverableRides = async (
         OR EXISTS (
           SELECT 1
           FROM ride_participants rp
-          WHERE rp.ride_id = r.id AND rp.rider_id = $1
+          WHERE rp.ride_id = r.id
+            AND rp.rider_id = $1
+            AND rp.status = 'confirmed'
         )
       )
   `;
@@ -385,7 +430,7 @@ export const updateRideInfo = async (
     paramIdx++;
   }
 
-  if (setClauses.length === 0) return getRideById(rideId);
+  if (setClauses.length === 0) return getRideById(rideId, captainId);
 
   paramIdx++;
   const rideIdParam = paramIdx;

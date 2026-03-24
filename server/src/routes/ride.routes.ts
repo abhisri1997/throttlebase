@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware.js";
 import * as rideController from "../controllers/ride.controller.js";
+import * as liveSessionController from "../controllers/live-session.controller.js";
 
 const router = Router();
 
@@ -192,6 +193,124 @@ router.delete("/:id", authenticate, rideController.deleteRide);
  *         description: Ride not found
  */
 router.post("/:id/join", authenticate, rideController.joinRide);
+
+/**
+ * @swagger
+ * /api/rides/{id}/live/start:
+ *   post:
+ *     summary: Start or resume a live session for a ride (captain/co-captain)
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Session already active; current session returned
+ *       201:
+ *         description: Session started or resumed
+ */
+router.post(
+  "/:id/live/start",
+  authenticate,
+  liveSessionController.startSession,
+);
+
+/**
+ * @swagger
+ * /api/rides/{id}/live/session:
+ *   get:
+ *     summary: Get current live session for a ride (confirmed participants only)
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Live session payload
+ *       404:
+ *         description: Live session not found
+ */
+router.get("/:id/live/session", authenticate, liveSessionController.getSession);
+
+/**
+ * @swagger
+ * /api/rides/{id}/live/end:
+ *   post:
+ *     summary: End active live session for a ride (captain/co-captain)
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *               mark_ride_completed:
+ *                 type: boolean
+ *                 default: false
+ *     responses:
+ *       200:
+ *         description: Session ended or already ended
+ */
+router.post("/:id/live/end", authenticate, liveSessionController.endSession);
+
+/**
+ * @swagger
+ * /api/rides/{id}/live/incident:
+ *   post:
+ *     summary: Report a live incident (confirmed participants)
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [severity, kind]
+ *             properties:
+ *               severity:
+ *                 type: string
+ *                 enum: [low, medium, high, critical]
+ *               kind:
+ *                 type: string
+ *                 enum: [sos, crash, medical, mechanical, other]
+ *               lon:
+ *                 type: number
+ *               lat:
+ *                 type: number
+ *               metadata:
+ *                 type: object
+ *     responses:
+ *       201:
+ *         description: Incident created
+ */
+router.post(
+  "/:id/live/incident",
+  authenticate,
+  liveSessionController.reportIncident,
+);
+
+/**
+ * @swagger
+ * /api/rides/{id}/live/incident/{incidentId}/ack:
+ *   post:
+ *     summary: Acknowledge a live incident (captain/co-captain)
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Incident acknowledged or already acknowledged
+ */
+router.post(
+  "/:id/live/incident/:incidentId/ack",
+  authenticate,
+  liveSessionController.acknowledgeIncident,
+);
 
 /**
  * @swagger

@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
 import { syncRiderFromResponse, useAuthStore } from "../../src/store/authStore";
+import { getApiErrorMessage } from "../../src/utils/apiError";
 import { useTheme } from "../../src/theme/ThemeContext";
 import LocationPicker from "../../src/components/LocationPicker";
 
@@ -186,10 +187,7 @@ export default function EditProfileModal() {
       closeModal();
     },
     onError: (err: any) => {
-      Alert.alert(
-        "Error",
-        err.response?.data?.error || "Failed to update profile",
-      );
+      Alert.alert("Error", getApiErrorMessage(err, "Failed to update profile"));
     },
   });
 
