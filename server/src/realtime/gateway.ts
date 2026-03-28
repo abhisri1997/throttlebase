@@ -61,6 +61,17 @@ const clearLocationSequenceForRider = (riderId: string): void => {
   }
 };
 
+let _liveNamespace: ReturnType<InstanceType<typeof Server>["of"]> | null =
+  null;
+
+export const emitToLiveRoom = (
+  roomKey: string,
+  event: string,
+  data: unknown,
+): void => {
+  _liveNamespace?.to(roomKey).emit(event, data);
+};
+
 export const createLiveGateway = (httpServer: HttpServer) => {
   const io = new Server(httpServer, {
     cors: {
@@ -70,6 +81,7 @@ export const createLiveGateway = (httpServer: HttpServer) => {
   });
 
   const liveNamespace = io.of("/live");
+  _liveNamespace = liveNamespace;
   liveNamespace.use(authenticateLiveSocket);
 
   liveNamespace.on("connection", (socket) => {

@@ -1,5 +1,5 @@
-import { Router } from 'express';
-import * as AuthController from '../controllers/auth.controller.js';
+import { Router } from "express";
+import * as AuthController from "../controllers/auth.controller.js";
 
 /**
  * Auth Routes
@@ -41,7 +41,8 @@ const router = Router();
  *       400:
  *         description: Validation error or email already exists
  */
-router.post('/register', AuthController.handleRegister);
+router.post("/register", AuthController.handleRegister);
+router.get("/check-username", AuthController.handleCheckUsername);
 
 /**
  * @swagger
@@ -55,12 +56,11 @@ router.post('/register', AuthController.handleRegister);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [email, password]
+ *             required: [identifier, password]
  *             properties:
- *               email:
+ *               identifier:
  *                 type: string
- *                 format: email
- *                 example: rider@example.com
+ *                 example: rider@example.com or roadwarrior
  *               password:
  *                 type: string
  *                 example: mypassword123
@@ -70,6 +70,6 @@ router.post('/register', AuthController.handleRegister);
  *       401:
  *         description: Invalid email or password
  */
-router.post('/login', AuthController.handleLogin);
+router.post("/login", AuthController.handleLogin);
 
 export default router;

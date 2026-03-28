@@ -22,7 +22,7 @@ import { useTheme } from "../../src/theme/ThemeContext";
 export default function LoginScreen() {
   const { colors, isDark } = useTheme();
   const { redirectTo } = useLocalSearchParams<{ redirectTo?: string }>();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const login = useAuthStore((state) => state.login);
@@ -41,13 +41,16 @@ export default function LoginScreen() {
       : "/register";
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert("Error", "Please enter both email and password");
+    if (!identifier || !password) {
+      Alert.alert("Error", "Please enter email/username and password");
       return;
     }
     try {
       setIsLoading(true);
-      const res = await apiClient.post("/auth/login", { email, password });
+      const res = await apiClient.post("/auth/login", {
+        identifier: identifier.trim(),
+        password,
+      });
       await login(res.data.token, res.data.rider);
       router.replace(resolvePostLoginRoute() as any);
     } catch (error: any) {
@@ -102,12 +105,11 @@ export default function LoginScreen() {
               Welcome Back
             </Text>
             <Input
-              label='Email Address'
-              placeholder='rider@example.com'
+              label='Email or Username'
+              placeholder='rider@example.com or roadwarrior'
               autoCapitalize='none'
-              keyboardType='email-address'
-              value={email}
-              onChangeText={setEmail}
+              value={identifier}
+              onChangeText={setIdentifier}
             />
             <Input
               label='Password'

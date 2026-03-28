@@ -5,6 +5,7 @@ import {
   type LiveSessionStateEvent,
   type LocationBroadcastEvent,
   type PresenceUpdateEvent,
+  type SessionEndedEvent,
   type SessionErrorEvent,
 } from "../services/liveSessionSocket";
 
@@ -31,6 +32,7 @@ type LiveSessionState = {
   locations: LocationMap;
   incidents: LiveIncident[];
   lastError: string | null;
+  sessionEndedReason: string | null;
   connect: (token: string) => void;
   joinRoom: (rideId: string) => void;
   leaveRoom: () => void;
@@ -123,6 +125,29 @@ const attachSocketListeners = () => {
       lastError: event.error,
     }));
   });
+
+  liveSessionSocket.off("session:ended");
+  liveSessionSocket.on("session:ended", (event: SessionEndedEvent) => {
+    useLiveSessionStore.setState((state) => ({
+      ...state,
+      session: state.session
+        ? {
+            ...state.session,
+            status: "ended",
+            ended_at: new Date().toISOString(),
+          }
+        : state.session,
+      inRoom: false,
+      isJoining: false,
+      sessionEndedReason: event.reason ?? null,
+      presence: Object.fromEntries(
+        Object.entries(state.presence).map(([k, v]) => [
+          k,
+          { ...v, isOnline: false },
+        ]),
+      ),
+    }));
+  });
 };
 
 export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
@@ -135,6 +160,7 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
   locations: {},
   incidents: [],
   lastError: null,
+  sessionEndedReason: null,
 
   connect: (token: string) => {
     const socket = liveSessionSocket.connect(token);
@@ -310,6 +336,7 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
       locations: {},
       incidents: [],
       lastError: null,
+      sessionEndedReason: null,
     }));
   },
 }));

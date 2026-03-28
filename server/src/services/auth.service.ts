@@ -1,10 +1,10 @@
-import bcrypt from 'bcrypt';
-import jwt, { type SignOptions } from 'jsonwebtoken';
-import { query } from '../config/db.js';
+import bcrypt from "bcrypt";
+import jwt, { type SignOptions } from "jsonwebtoken";
+import { query } from "../config/db.js";
 
 const SALT_ROUNDS = 12;
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_dev_secret';
-const JWT_EXPIRY_SECONDS = parseInt(process.env.JWT_EXPIRY_SECONDS || '86400'); // 24h in seconds
+const JWT_SECRET = process.env.JWT_SECRET || "fallback_dev_secret";
+const JWT_EXPIRY_SECONDS = parseInt(process.env.JWT_EXPIRY_SECONDS || "86400"); // 24h in seconds
 
 /**
  * AuthService — Core authentication business logic.
@@ -21,6 +21,7 @@ export interface RiderPublic {
   id: string;
   email: string;
   display_name: string;
+  username: string | null;
   experience_level: string;
   created_at: string;
 }
@@ -34,16 +35,17 @@ export interface RiderPublic {
 export const register = async (
   email: string,
   password: string,
-  displayName: string
+  displayName: string,
+  username: string,
 ): Promise<RiderPublic> => {
   // Hash the plain-text password
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
   const result = await query(
-    `INSERT INTO riders (email, password_hash, display_name)
-     VALUES ($1, $2, $3)
-     RETURNING id, email, display_name, experience_level, created_at`,
-    [email, passwordHash, displayName]
+    `INSERT INTO riders (email, password_hash, display_name, username)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, email, display_name, username, experience_level, created_at`,
+    [email, passwordHash, displayName, username],
   );
 
   return result.rows[0] as RiderPublic;
@@ -56,19 +58,20 @@ export const register = async (
  * 3. Generate and return a JWT
  */
 export const login = async (
-  email: string,
-  password: string
+  identifier: string,
+  password: string,
 ): Promise<{ token: string; rider: RiderPublic }> => {
-  // Find the rider by email
+  // Find the rider by either email or username (case-insensitive)
   const result = await query(
-    `SELECT id, email, password_hash, display_name, experience_level, created_at
+    `SELECT id, email, username, password_hash, display_name, experience_level, created_at
      FROM riders
-     WHERE email = $1 AND deleted_at IS NULL`,
-    [email]
+     WHERE (lower(email) = lower($1) OR lower(username) = lower($1))
+       AND deleted_at IS NULL`,
+    [identifier],
   );
 
   if (result.rows.length === 0) {
-    throw new Error('Invalid email or password');
+    throw new Error("Invalid email or password");
   }
 
   const rider = result.rows[0] as RiderPublic & { password_hash: string };
@@ -76,14 +79,14 @@ export const login = async (
   // Verify password against the stored bcrypt hash
   const isMatch = await bcrypt.compare(password, rider.password_hash);
   if (!isMatch) {
-    throw new Error('Invalid email or password');
+    throw new Error("Invalid email or password");
   }
 
   // Generate JWT with rider info as payload
   const token = jwt.sign(
     { riderId: rider.id, email: rider.email },
     JWT_SECRET,
-    { expiresIn: JWT_EXPIRY_SECONDS }
+    { expiresIn: JWT_EXPIRY_SECONDS },
   );
 
   // Return token + rider data (strip password_hash)

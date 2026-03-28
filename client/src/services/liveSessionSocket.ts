@@ -47,12 +47,19 @@ export type SessionErrorEvent = {
   code: number;
 };
 
+export type SessionEndedEvent = {
+  rideId: string;
+  sessionId: string;
+  reason: string | null;
+};
+
 export type LiveSocketServerEvents = {
   "session:state": (event: LiveSessionStateEvent) => void;
   "presence:update": (event: PresenceUpdateEvent) => void;
   "location:broadcast": (event: LocationBroadcastEvent) => void;
   "incident:created": (event: IncidentCreatedEvent) => void;
   "session:error": (event: SessionErrorEvent) => void;
+  "session:ended": (event: SessionEndedEvent) => void;
 };
 
 export type LiveSocketClientEvents = {

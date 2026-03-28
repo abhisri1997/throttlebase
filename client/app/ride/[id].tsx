@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -129,9 +129,13 @@ const startLiveSessionReq = async (rideId: string) => {
   return data;
 };
 
-const endLiveSessionReq = async (rideId: string) => {
+const endLiveSessionReq = async (
+  rideId: string,
+  options?: { markRideCompleted?: boolean; reason?: string },
+) => {
   const { data } = await apiClient.post(`/api/rides/${rideId}/live/end`, {
-    mark_ride_completed: false,
+    mark_ride_completed: Boolean(options?.markRideCompleted),
+    ...(options?.reason ? { reason: options.reason } : {}),
   });
   return data;
 };
@@ -226,9 +230,9 @@ export default function RideDetailScreen() {
     locations,
     incidents,
     lastError: liveError,
+    sessionEndedReason,
     connect,
     joinRoom,
-    leaveRoom,
     setRideContext,
     clearRideContext,
     sendHeartbeat,
@@ -280,6 +284,7 @@ export default function RideDetailScreen() {
   const [appState, setAppState] = useState<AppStateStatus>(
     AppState.currentState,
   );
+  const mapRef = useRef<InstanceType<typeof MapView>>(null);
 
   const joinMutation = useMutation({
     mutationFn: (coords?: [number, number]) => joinRide(id!, coords),
@@ -389,9 +394,9 @@ export default function RideDetailScreen() {
   });
 
   const liveEndMutation = useMutation({
-    mutationFn: () => endLiveSessionReq(id!),
+    mutationFn: (options?: { markRideCompleted?: boolean; reason?: string }) =>
+      endLiveSessionReq(id!, options),
     onSuccess: async () => {
-      leaveRoom();
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["ride", id] }),
         queryClient.invalidateQueries({ queryKey: ["live-session", id] }),
@@ -492,27 +497,38 @@ export default function RideDetailScreen() {
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
       setAppState(nextState);
-
-      if (
-        nextState === "active" &&
-        liveEnabled &&
-        id &&
-        isParticipantFromRide &&
-        ((liveSocketSession?.status || liveSession?.status) === "active" ||
-          (liveSocketSession?.status || liveSession?.status) === "starting" ||
-          (liveSocketSession?.status || liveSession?.status) === "paused")
-      ) {
-        joinRoom(id);
-      }
     });
 
     return () => {
       subscription.remove();
     };
+  }, [liveEnabled]);
+
+  useEffect(() => {
+    const currentLiveStatus = liveSocketSession?.status || liveSession?.status;
+    const shouldAutoJoin =
+      liveEnabled &&
+      Boolean(id) &&
+      isParticipantFromRide &&
+      appState === "active" &&
+      liveConnected &&
+      !inRoom &&
+      !isJoining &&
+      (currentLiveStatus === "active" ||
+        currentLiveStatus === "starting" ||
+        currentLiveStatus === "paused");
+
+    if (shouldAutoJoin) {
+      joinRoom(id!);
+    }
   }, [
+    appState,
     id,
+    inRoom,
+    isJoining,
     isParticipantFromRide,
     joinRoom,
+    liveConnected,
     liveEnabled,
     liveSession?.status,
     liveSocketSession?.status,
@@ -552,6 +568,7 @@ export default function RideDetailScreen() {
 
         const speedMs = position.coords.speed;
         const heading = position.coords.heading;
+        const accuracy = position.coords.accuracy;
 
         upsertLocation({
           lon: position.coords.longitude,
@@ -563,10 +580,18 @@ export default function RideDetailScreen() {
               ? speedMs * 3.6
               : undefined,
           heading_deg:
-            typeof heading === "number" && Number.isFinite(heading)
+            typeof heading === "number" &&
+            Number.isFinite(heading) &&
+            heading >= 0 &&
+            heading < 360
               ? heading
               : undefined,
-          accuracy_m: position.coords.accuracy ?? undefined,
+          accuracy_m:
+            typeof accuracy === "number" &&
+            Number.isFinite(accuracy) &&
+            accuracy >= 0
+              ? accuracy
+              : undefined,
           captured_at: new Date(position.timestamp).toISOString(),
         });
       } catch {
@@ -595,6 +620,42 @@ export default function RideDetailScreen() {
       }
     };
   }, [appState, inRoom, upsertLocation]);
+
+  // Alert when session is ended remotely via socket fanout
+  const prevSessionEndedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const currentStatus = liveSocketSession?.status;
+    if (currentStatus === "ended" && prevSessionEndedRef.current !== "ended") {
+      const msg = sessionEndedReason
+        ? `The live session has ended. Reason: ${sessionEndedReason}`
+        : "The live session has ended.";
+      Alert.alert("Live Session Ended", msg);
+    }
+    prevSessionEndedRef.current = currentStatus ?? null;
+  }, [liveSocketSession?.status, sessionEndedReason]);
+
+  // Auto-fit map to live participant locations when riding
+  useEffect(() => {
+    if (!inRoom || !mapRef.current) {
+      return;
+    }
+    const markers = Object.values(locations).filter(
+      (loc) =>
+        Number.isFinite(loc.lat) &&
+        Number.isFinite(loc.lon) &&
+        (presence[loc.riderId]?.isOnline ?? true),
+    );
+    if (markers.length < 2) {
+      return;
+    }
+    mapRef.current.fitToCoordinates(
+      markers.map((m) => ({ latitude: m.lat, longitude: m.lon })),
+      {
+        edgePadding: { top: 60, right: 60, bottom: 60, left: 60 },
+        animated: true,
+      },
+    );
+  }, [inRoom, locations, presence]);
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     await Promise.all([refetch(), refetchReviews()]);
@@ -716,14 +777,44 @@ export default function RideDetailScreen() {
 
   const handleStatusChange = () => {
     if (!nextAction) return;
+
+    const shouldStartLiveWithRide =
+      liveEnabled && isLeader && nextAction.status === "active";
+    const shouldEndLiveWithRide =
+      liveEnabled &&
+      isLeader &&
+      nextAction.status === "completed" &&
+      (liveStatus === "active" ||
+        liveStatus === "starting" ||
+        liveStatus === "paused");
+
     Alert.alert(
       `${nextAction.label}?`,
-      `Change ride status to ${nextAction.status}?`,
+      shouldStartLiveWithRide
+        ? "This will start the ride and begin the live session."
+        : shouldEndLiveWithRide
+          ? "This will complete the ride and end the live session."
+          : `Change ride status to ${nextAction.status}?`,
       [
         { text: "Cancel", style: "cancel" },
         {
           text: nextAction.label,
-          onPress: () => statusMutation.mutate(nextAction.status),
+          onPress: () => {
+            if (shouldStartLiveWithRide) {
+              liveStartMutation.mutate();
+              return;
+            }
+
+            if (shouldEndLiveWithRide) {
+              liveEndMutation.mutate({
+                markRideCompleted: true,
+                reason: "ride_completed",
+              });
+              return;
+            }
+
+            statusMutation.mutate(nextAction.status);
+          },
         },
       ],
     );
@@ -766,6 +857,7 @@ export default function RideDetailScreen() {
       <View className='h-72 w-full relative'>
         {startCoords && (
           <MapView
+            ref={mapRef}
             style={{ flex: 1 }}
             provider={PROVIDER_GOOGLE}
             userInterfaceStyle='dark'
@@ -843,6 +935,15 @@ export default function RideDetailScreen() {
                       ? "Co-Captain"
                       : "Rider";
 
+                const speedLabel =
+                  marker.speedKmh != null
+                    ? ` · ${Math.round(marker.speedKmh)} km/h`
+                    : "";
+                const headingLabel =
+                  marker.headingDeg != null
+                    ? ` · ${Math.round(marker.headingDeg)}°`
+                    : "";
+
                 return (
                   <Marker
                     key={`live-marker-${marker.riderId}`}
@@ -865,7 +966,7 @@ export default function RideDetailScreen() {
                         : participant?.display_name ||
                           marker.riderId.slice(0, 8)
                     }
-                    description={roleLabel}
+                    description={`${roleLabel}${speedLabel}${headingLabel}`}
                   />
                 );
               })}
@@ -1010,11 +1111,11 @@ export default function RideDetailScreen() {
           {isLeader && nextAction && (
             <TouchableOpacity
               onPress={handleStatusChange}
-              disabled={statusMutation.isPending}
+              disabled={statusMutation.isPending || liveStartMutation.isPending}
               className='p-3 rounded-xl mt-3 items-center'
               style={{ backgroundColor: colors.primary }}
             >
-              {statusMutation.isPending ? (
+              {statusMutation.isPending || liveStartMutation.isPending ? (
                 <ActivityIndicator color='white' size='small' />
               ) : (
                 <Text className='font-bold' style={{ color: "#ffffff" }}>
@@ -1071,10 +1172,96 @@ export default function RideDetailScreen() {
                   {liveError}
                 </Text>
               ) : null}
+              {liveStatus === "ended" && (
+                <View
+                  className='mt-2 p-2 rounded-lg'
+                  style={{ backgroundColor: colors.danger + "22" }}
+                >
+                  <Text
+                    className='text-sm font-semibold'
+                    style={{ color: colors.danger }}
+                  >
+                    Session ended
+                    {sessionEndedReason ? `: ${sessionEndedReason}` : "."}
+                  </Text>
+                </View>
+              )}
             </View>
+
+            {/* Live presence list */}
+            {(liveStatus === "active" ||
+              liveStatus === "starting" ||
+              liveStatus === "paused") &&
+              liveSocketSession?.participants &&
+              liveSocketSession.participants.length > 0 && (
+                <View className='mb-3'>
+                  <Text
+                    className='text-sm font-semibold mb-2'
+                    style={{ color: colors.textMuted }}
+                  >
+                    Participants
+                  </Text>
+                  <View className='flex-row flex-wrap'>
+                    {liveSocketSession.participants.map((p) => {
+                      const isOnline =
+                        presence[p.rider_id]?.isOnline ?? p.is_online;
+                      const loc = locations[p.rider_id];
+                      const roleLabel =
+                        p.role === "captain"
+                          ? "Captain"
+                          : p.role === "co_captain"
+                            ? "Co-Captain"
+                            : "Rider";
+                      const speedText =
+                        loc?.speedKmh != null
+                          ? ` · ${Math.round(loc.speedKmh)} km/h`
+                          : "";
+                      return (
+                        <View
+                          key={p.rider_id}
+                          className='flex-row items-center mr-3 mb-2 px-2 py-1 rounded-full'
+                          style={{
+                            backgroundColor: colors.surface,
+                            borderWidth: 1,
+                            borderColor: isOnline
+                              ? colors.primary + "66"
+                              : colors.border,
+                          }}
+                        >
+                          <View
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: 4,
+                              backgroundColor: isOnline
+                                ? "#22c55e"
+                                : colors.textMuted,
+                              marginRight: 6,
+                            }}
+                          />
+                          <Text
+                            className='text-xs'
+                            style={{ color: colors.text }}
+                          >
+                            {p.display_name}
+                          </Text>
+                          <Text
+                            className='text-xs ml-1'
+                            style={{ color: colors.textMuted }}
+                          >
+                            {roleLabel}
+                            {speedText}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
 
             <View className='flex-row flex-wrap'>
               {isLeader &&
+                ride.status !== "scheduled" &&
                 (liveStatus === "not_started" || liveStatus === "ended") && (
                   <TouchableOpacity
                     onPress={() => liveStartMutation.mutate()}
@@ -1092,42 +1279,6 @@ export default function RideDetailScreen() {
 
               {(liveStatus === "active" ||
                 liveStatus === "starting" ||
-                liveStatus === "paused") &&
-                !inRoom && (
-                  <TouchableOpacity
-                    onPress={() => joinRoom(id!)}
-                    disabled={isJoining}
-                    className='px-4 py-2 rounded-xl mr-2 mb-2'
-                    style={{
-                      backgroundColor: isJoining
-                        ? colors.border
-                        : colors.primary,
-                    }}
-                  >
-                    <Text className='font-bold text-white'>
-                      {isJoining ? "Joining..." : "Join Live Room"}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-
-              {inRoom && (
-                <TouchableOpacity
-                  onPress={leaveRoom}
-                  className='px-4 py-2 rounded-xl mr-2 mb-2'
-                  style={{
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    backgroundColor: colors.surface,
-                  }}
-                >
-                  <Text className='font-bold' style={{ color: colors.text }}>
-                    Leave Room
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              {(liveStatus === "active" ||
-                liveStatus === "starting" ||
                 inRoom) && (
                 <TouchableOpacity
                   onPress={handleSOS}
@@ -1142,29 +1293,6 @@ export default function RideDetailScreen() {
                   </Text>
                 </TouchableOpacity>
               )}
-
-              {isLeader &&
-                (liveStatus === "active" ||
-                  liveStatus === "starting" ||
-                  liveStatus === "paused") && (
-                  <TouchableOpacity
-                    onPress={() => liveEndMutation.mutate()}
-                    disabled={liveEndMutation.isPending}
-                    className='px-4 py-2 rounded-xl mr-2 mb-2'
-                    style={{
-                      borderWidth: 1,
-                      borderColor: colors.danger,
-                      backgroundColor: colors.surface,
-                    }}
-                  >
-                    <Text
-                      className='font-bold'
-                      style={{ color: colors.danger }}
-                    >
-                      {liveEndMutation.isPending ? "Ending..." : "End Live"}
-                    </Text>
-                  </TouchableOpacity>
-                )}
             </View>
 
             {liveSessionLoading ? (
@@ -1391,61 +1519,67 @@ export default function RideDetailScreen() {
                 borderColor: colors.border,
               }}
             >
-              <View
-                className='w-10 h-10 rounded-full items-center justify-center mr-3'
-                style={{ backgroundColor: colors.border }}
+              <TouchableOpacity
+                onPress={() => router.push(`/rider/${p.rider_id}` as any)}
+                className='flex-1 flex-row items-center mr-2'
+                activeOpacity={0.8}
               >
-                <Text
-                  className='font-bold text-lg'
-                  style={{ color: colors.text }}
+                <View
+                  className='w-10 h-10 rounded-full items-center justify-center mr-3'
+                  style={{ backgroundColor: colors.border }}
                 >
-                  {p.display_name?.charAt(0)}
-                </Text>
-              </View>
-              <View className='flex-1'>
-                <View className='flex-row items-center'>
                   <Text
-                    className='font-bold text-base'
+                    className='font-bold text-lg'
                     style={{ color: colors.text }}
                   >
-                    {p.display_name}
+                    {p.display_name?.charAt(0)}
                   </Text>
-                  {/* Role Badge */}
-                  {p.role === "captain" && (
-                    <View
-                      className='ml-2 px-2 py-0.5 rounded-full'
-                      style={{ backgroundColor: colors.primary }}
-                    >
-                      <Text
-                        className='text-[10px] font-bold'
-                        style={{ color: "#ffffff" }}
-                      >
-                        Captain
-                      </Text>
-                    </View>
-                  )}
-                  {p.role === "co_captain" && (
-                    <View
-                      className='ml-2 px-2 py-0.5 rounded-full flex-row items-center'
-                      style={{ backgroundColor: "#3b82f6" }}
-                    >
-                      <Shield color='#ffffff' size={10} />
-                      <Text
-                        className='text-[10px] font-bold ml-0.5'
-                        style={{ color: "#ffffff" }}
-                      >
-                        Co-Captain
-                      </Text>
-                    </View>
-                  )}
                 </View>
-                <Text
-                  className='text-xs capitalize'
-                  style={{ color: colors.textMuted }}
-                >
-                  {p.role.replace("_", "-")}
-                </Text>
-              </View>
+                <View className='flex-1'>
+                  <View className='flex-row items-center'>
+                    <Text
+                      className='font-bold text-base'
+                      style={{ color: colors.text }}
+                    >
+                      {p.display_name}
+                    </Text>
+                    {/* Role Badge */}
+                    {p.role === "captain" && (
+                      <View
+                        className='ml-2 px-2 py-0.5 rounded-full'
+                        style={{ backgroundColor: colors.primary }}
+                      >
+                        <Text
+                          className='text-[10px] font-bold'
+                          style={{ color: "#ffffff" }}
+                        >
+                          Captain
+                        </Text>
+                      </View>
+                    )}
+                    {p.role === "co_captain" && (
+                      <View
+                        className='ml-2 px-2 py-0.5 rounded-full flex-row items-center'
+                        style={{ backgroundColor: "#3b82f6" }}
+                      >
+                        <Shield color='#ffffff' size={10} />
+                        <Text
+                          className='text-[10px] font-bold ml-0.5'
+                          style={{ color: "#ffffff" }}
+                        >
+                          Co-Captain
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text
+                    className='text-xs capitalize'
+                    style={{ color: colors.textMuted }}
+                  >
+                    {p.role.replace("_", "-")}
+                  </Text>
+                </View>
+              </TouchableOpacity>
               {/* Captain: Promote button for regular riders */}
               {isCaptain && p.role === "rider" && (
                 <TouchableOpacity

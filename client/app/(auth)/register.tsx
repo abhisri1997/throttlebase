@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -32,6 +32,53 @@ export default function RegisterScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const login = useAuthStore((state) => state.login);
 
+  type UsernameStatus =
+    | "idle"
+    | "checking"
+    | "available"
+    | "taken"
+    | "invalid"
+    | "error";
+  const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>("idle");
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestUsernameRef = useRef("");
+
+  useEffect(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+
+    const username = form.username.trim();
+    latestUsernameRef.current = username;
+
+    if (!username) {
+      setUsernameStatus("idle");
+      return;
+    }
+    if (username.length < 3 || !/^[a-zA-Z0-9_]+$/.test(username)) {
+      setUsernameStatus("invalid");
+      return;
+    }
+
+    setUsernameStatus("checking");
+    debounceTimer.current = setTimeout(async () => {
+      try {
+        const res = await apiClient.get(
+          `/auth/check-username?username=${encodeURIComponent(username)}`,
+        );
+        if (latestUsernameRef.current === username) {
+          setUsernameStatus(res.data.available ? "available" : "taken");
+        }
+      } catch {
+        if (latestUsernameRef.current === username) {
+          setUsernameStatus("error");
+        }
+      }
+    }, 500);
+
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [form.username]);
+
   const resolvePostRegisterRoute = () => {
     if (typeof redirectTo === "string" && redirectTo.startsWith("/")) {
       return redirectTo;
@@ -61,13 +108,42 @@ export default function RegisterScreen() {
       return;
     }
 
+    if (usernameStatus === "taken") {
+      Alert.alert(
+        "Error",
+        "That username is already taken. Please choose another.",
+      );
+      return;
+    }
+
+    if (usernameStatus === "checking") {
+      Alert.alert("Error", "Please wait while we check username availability.");
+      return;
+    }
+
+    if (usernameStatus === "invalid") {
+      Alert.alert(
+        "Error",
+        "Username must be 3–50 characters and contain only letters, numbers, or underscores.",
+      );
+      return;
+    }
+
+    if (usernameStatus === "error") {
+      Alert.alert(
+        "Error",
+        "Unable to verify username availability right now. Please try again.",
+      );
+      return;
+    }
+
     try {
       setIsLoading(true);
       await apiClient.post("/auth/register", form);
 
       // Register returns rider only. Fetch JWT via login endpoint before storing auth state.
       const loginRes = await apiClient.post("/auth/login", {
-        email: form.email,
+        identifier: form.email,
         password: form.password,
       });
 
@@ -131,7 +207,39 @@ export default function RegisterScreen() {
               autoCapitalize='none'
               value={form.username}
               onChangeText={(t) => setForm({ ...form, username: t })}
+              error={
+                usernameStatus === "taken"
+                  ? "Username already taken"
+                  : usernameStatus === "invalid"
+                    ? "3–50 chars, letters/numbers/underscores only"
+                    : undefined
+              }
             />
+            <Text
+              className='text-xs -mt-3 mb-3 ml-1'
+              style={{
+                color:
+                  usernameStatus === "available"
+                    ? "#22c55e"
+                    : usernameStatus === "taken" ||
+                        usernameStatus === "invalid" ||
+                        usernameStatus === "error"
+                      ? "#ef4444"
+                      : colors.textMuted,
+              }}
+            >
+              {usernameStatus === "idle"
+                ? "Use 3-50 chars: letters, numbers, underscores"
+                : usernameStatus === "checking"
+                  ? "Checking availability..."
+                  : usernameStatus === "available"
+                    ? "Username is available"
+                    : usernameStatus === "taken"
+                      ? "Username already taken"
+                      : usernameStatus === "invalid"
+                        ? "Invalid username format"
+                        : "Could not verify username right now"}
+            </Text>
             <Input
               label='Email Address*'
               placeholder='rider@example.com'
@@ -157,6 +265,12 @@ export default function RegisterScreen() {
               title='Create Account'
               onPress={handleRegister}
               isLoading={isLoading}
+              disabled={
+                usernameStatus === "taken" ||
+                usernameStatus === "checking" ||
+                usernameStatus === "invalid" ||
+                usernameStatus === "error"
+              }
               className='mt-4'
             />
             <View className='flex-row justify-center mt-6'>

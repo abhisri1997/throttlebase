@@ -94,6 +94,12 @@ export default function RiderProfileScreen() {
 
   const isMe = currentRider?.id === rider.id;
   const initial = rider.display_name?.charAt(0) || "?";
+  const riderHandle =
+    rider.username ||
+    (typeof rider.display_name === "string"
+      ? rider.display_name.trim().toLowerCase().replace(/\s+/g, "")
+      : null) ||
+    "rider";
 
   return (
     <View className='flex-1' style={{ backgroundColor: colors.bg }}>
@@ -112,7 +118,7 @@ export default function RiderProfileScreen() {
           <ChevronLeft color={colors.text} size={24} />
         </TouchableOpacity>
         <Text className='text-xl font-bold' style={{ color: colors.text }}>
-          @{rider.username || "rider"}
+          @{riderHandle}
         </Text>
       </SafeAreaView>
 

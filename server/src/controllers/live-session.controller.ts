@@ -3,6 +3,8 @@ import {
   CreateIncidentSchema,
   EndLiveSessionSchema,
 } from "../schemas/live-session.schemas.js";
+import { emitToLiveRoom } from "../realtime/gateway.js";
+import { buildLiveRoomKey } from "../realtime/session-room.js";
 import {
   LiveSessionError,
   createLiveIncident,
@@ -91,6 +93,19 @@ export const endSession = async (
       rid(req),
       options,
     );
+
+    if (result.ended && result.session) {
+      const roomKey = buildLiveRoomKey(
+        result.session.ride_id,
+        result.session.id,
+      );
+      emitToLiveRoom(roomKey, "session:ended", {
+        rideId: result.session.ride_id,
+        sessionId: result.session.id,
+        reason: data.reason ?? null,
+      });
+    }
+
     res.json(result);
   } catch (error: any) {
     handleLiveSessionError(res, error, "Error ending live session");

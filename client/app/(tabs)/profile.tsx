@@ -71,6 +71,15 @@ export default function ProfileScreen() {
     displayRider?.display_name?.charAt(0) ||
     displayRider?.username?.charAt(0) ||
     "?";
+  const profileHandle =
+    displayRider?.username ||
+    (typeof displayRider?.display_name === "string"
+      ? displayRider.display_name.trim().toLowerCase().replace(/\s+/g, "")
+      : null) ||
+    (typeof displayRider?.email === "string"
+      ? displayRider.email.split("@")[0]
+      : null) ||
+    "rider";
 
   return (
     <View className='flex-1' style={{ backgroundColor: colors.bg }}>
@@ -137,7 +146,7 @@ export default function ProfileScreen() {
             {displayRider?.display_name || displayRider?.username}
           </Text>
           <Text className='mt-1' style={{ color: colors.textMuted }}>
-            @{displayRider?.username || "rider"}
+            @{profileHandle}
           </Text>
           <Text
             className='mt-2 text-center'
