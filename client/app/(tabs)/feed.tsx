@@ -77,22 +77,9 @@ export default function FeedScreen() {
       );
     }
 
-    if (!posts || posts.length === 0) {
-      return (
-        <View className='flex-1 justify-center items-center p-8'>
-          <Text
-            className='text-center text-lg'
-            style={{ color: colors.textMuted }}
-          >
-            No posts yet. Follow some riders or share a route to get started!
-          </Text>
-        </View>
-      );
-    }
-
     return (
       <FlatList
-        data={posts}
+        data={posts ?? []}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <PostCard
@@ -110,7 +97,21 @@ export default function FeedScreen() {
             onDelete={() => deletePostMutation.mutate(item.id)}
           />
         )}
-        contentContainerStyle={{ paddingVertical: 16, paddingBottom: 80 }}
+        ListEmptyComponent={
+          <View className='flex-1 justify-center items-center p-8'>
+            <Text
+              className='text-center text-lg'
+              style={{ color: colors.textMuted }}
+            >
+              No posts yet. Follow some riders or share a route to get started!
+            </Text>
+          </View>
+        }
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingVertical: 16,
+          paddingBottom: 80,
+        }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

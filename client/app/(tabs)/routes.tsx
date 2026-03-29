@@ -64,19 +64,9 @@ export default function ExploreRoutesScreen() {
       );
     }
 
-    if (!routes || routes.length === 0) {
-      return (
-        <View className='flex-1 justify-center items-center'>
-          <Text className='mb-4' style={{ color: colors.textMuted }}>
-            No routes found.
-          </Text>
-        </View>
-      );
-    }
-
     return (
       <FlatList
-        data={routes}
+        data={routes ?? []}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <RouteCard
@@ -84,7 +74,18 @@ export default function ExploreRoutesScreen() {
             onPress={() => router.push(`/route/${item.id}` as any)}
           />
         )}
-        contentContainerStyle={{ paddingVertical: 16, paddingBottom: 80 }}
+        ListEmptyComponent={
+          <View className='flex-1 justify-center items-center px-6'>
+            <Text className='mb-4 text-center' style={{ color: colors.textMuted }}>
+              No routes found.
+            </Text>
+          </View>
+        }
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingVertical: 16,
+          paddingBottom: 80,
+        }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
