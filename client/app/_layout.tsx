@@ -110,6 +110,10 @@ function AppInner() {
         <Stack.Screen name='(auth)' options={{ headerShown: false }} />
         <Stack.Screen name='(tabs)' options={{ headerShown: false }} />
         <Stack.Screen name='ride/[id]' options={{ headerShown: false }} />
+        <Stack.Screen
+          name='ride/[id]/navigation'
+          options={{ headerShown: false }}
+        />
         <Stack.Screen name='route/[id]' options={{ headerShown: false }} />
         <Stack.Screen name='rider/[id]' options={{ headerShown: false }} />
         <Stack.Screen name='group/[id]' options={{ headerShown: false }} />

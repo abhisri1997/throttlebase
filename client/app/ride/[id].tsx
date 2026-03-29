@@ -382,8 +382,9 @@ export default function RideDetailScreen() {
         queryClient.invalidateQueries({ queryKey: ["ride", id] }),
         queryClient.invalidateQueries({ queryKey: ["live-session", id] }),
       ]);
-      refetchLiveSession();
+      await refetchLiveSession();
       joinRoom(id!);
+      router.replace(`/ride/${id}/navigation` as any);
     },
     onError: (err: any) => {
       Alert.alert(
@@ -1187,6 +1188,23 @@ export default function RideDetailScreen() {
                 </View>
               )}
             </View>
+
+            {(liveStatus === "active" || liveStatus === "starting") && (
+              <TouchableOpacity
+                onPress={() => router.push(`/ride/${id}/navigation` as any)}
+                className='p-3 rounded-xl'
+                style={{
+                  backgroundColor: colors.primary,
+                }}
+              >
+                <Text
+                  className='font-bold text-center'
+                  style={{ color: "#ffffff" }}
+                >
+                  Open Full-Screen Navigation
+                </Text>
+              </TouchableOpacity>
+            )}
 
             {/* Live presence list */}
             {(liveStatus === "active" ||
