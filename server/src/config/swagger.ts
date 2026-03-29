@@ -42,6 +42,12 @@ const options: swaggerJsdoc.Options = {
   apis: ['./src/routes/*.ts'],
 };
 
-const swaggerSpec = swaggerJsdoc(options);
+let cachedSwaggerSpec: object | null = null;
 
-export default swaggerSpec;
+export const getSwaggerSpec = () => {
+  if (!cachedSwaggerSpec) {
+    cachedSwaggerSpec = swaggerJsdoc(options);
+  }
+
+  return cachedSwaggerSpec;
+};

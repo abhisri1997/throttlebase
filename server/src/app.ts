@@ -2,7 +2,7 @@ import express from "express";
 import { createServer } from "node:http";
 import { testConnection, query } from "./config/db.js";
 import swaggerUi from "swagger-ui-express";
-import swaggerSpec from "./config/swagger.js";
+import { getSwaggerSpec } from "./config/swagger.js";
 import authRoutes from "./routes/auth.routes.js";
 import riderRoutes from "./routes/rider.routes.js";
 import rideRoutes from "./routes/ride.routes.js";
@@ -24,17 +24,25 @@ app.use(cors());
 app.use(express.json());
 
 // Global health check
-app.get("/health", (req, res) => {
+app.get("/health", (req: express.Request, res: express.Response) => {
   res.json({ status: "up", timestamp: new Date().toISOString() });
 });
 
 // --- Swagger API Docs ---
+let swaggerDocsHandler: express.RequestHandler | null = null;
+
 app.use(
   "/api-docs",
   swaggerUi.serve,
-  swaggerUi.setup(swaggerSpec, {
-    customSiteTitle: "ThrottleBase API Docs",
-  }),
+  (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (!swaggerDocsHandler) {
+      swaggerDocsHandler = swaggerUi.setup(getSwaggerSpec(), {
+        customSiteTitle: "ThrottleBase API Docs",
+      });
+    }
+
+    return swaggerDocsHandler(req, res, next);
+  },
 );
 
 // --- Auth routes (public) ---
