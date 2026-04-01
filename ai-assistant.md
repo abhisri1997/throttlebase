@@ -271,15 +271,19 @@ All migration files through `010_background_jobs.sql` have been executed. Full s
 - [x] Client auth state sync fix for profile edits (`rider_data` + Zustand rider now refresh from API response)
 - [x] Workspace-level Copilot context memory setup (`.github/copilot-instructions.md`)
 - [x] Workspace hook config draft for context workflow (`.github/hooks/ai-context-memory.json`)
+- [x] 2FA/TOTP setup+verify+disable flows implemented: migration 017 adds `totp_verified_at`; `otplib` added; `POST /auth/2fa/setup`, `POST /auth/2fa/verify`, `POST /auth/2fa/disable`, `GET /auth/2fa/status` endpoints added to auth routes (auth-required); service in `server/src/services/security.service.ts`.
+- [x] Login activity + session management implemented: `POST /auth/login` now records `login_activity` + `sessions` rows (non-blocking); `GET /api/security/login-activity`, `GET /api/security/sessions`, `DELETE /api/security/sessions/:id`, `DELETE /api/security/sessions` endpoints in new `security.routes.ts` + `security.controller.ts`.
+- [x] Notification delivery infrastructure added: `NOTIFICATION_PUSH` + `NOTIFICATION_EMAIL` job types; `enqueueNotificationPush`/`enqueueNotificationEmail` helpers; `notification-delivery.processor.ts` checks `notification_preferences.push_enabled`/`email_enabled` per rider before delivery; FCM/APNs/SMTP stubs ready for real provider wiring; registered in `worker.ts`.
+- [x] Security client screen (`client/app/(modals)/security.tsx`): 2FA QR-code setup (via api.qrserver.com), verify, disable with password+token confirmation; login activity list; active session list with per-session and bulk revoke actions. Linked from settings.tsx "2FA & Session Security" row.
 
 ## Known Gaps vs Docs
 
 ### Backend: Partial / Missing
 
-- [ ] 2FA/TOTP flow (schema fields exist; auth setup/verify flow not implemented)
-- [ ] Remaining background job consumers (rewards/notification/cleanup) on top of the implemented queue + worker foundation
-- [ ] Push notifications (FCM/APNs) and email notification delivery infrastructure
-- [ ] Live session timeline/replay APIs and session-ended socket event fanout are not implemented yet
+- [x] ~~2FA/TOTP flow~~ (DONE — setup/verify/disable/status on `feature/remaining-features`)
+- [ ] Remaining background job consumers (rewards/cleanup) on top of the implemented queue + worker foundation
+- [x] ~~Push notifications (FCM/APNs) and email notification delivery infrastructure~~ (DONE — processor stubs with preference filtering; FCM/SMTP wiring stubs ready)
+- [ ] Live session timeline/replay APIs
 
 ### Frontend: Missing UX Surface
 
@@ -307,9 +311,9 @@ All migration files through `010_background_jobs.sql` have been executed. Full s
 
 ### P1 — Security & Reliability
 
-1. Implement 2FA setup/verify flows and security settings surface
-2. Add login activity and active session management APIs + UI
-3. Integrate push/email delivery pipelines (respecting notification preferences)
+1. ~~Implement 2FA setup/verify flows and security settings surface~~ (DONE)
+2. ~~Add login activity and active session management APIs + UI~~ (DONE)
+3. ~~Integrate push/email delivery pipelines (respecting notification preferences)~~ (DONE — stubs)
 4. Add mention parsing and mention-triggered notification dispatch
 
 ### P2 — Realtime & Scale Enhancements
