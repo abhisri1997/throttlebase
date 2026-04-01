@@ -14,6 +14,8 @@ import {
   recoverExpiredLocks,
 } from "../queue/queue.js";
 import { processRideStatsRecompute } from "./processors/ride-stats.processor.js";
+import { processRewardsRecompute } from "./processors/rewards.processor.js";
+import { processCleanupExpiredSessions } from "./processors/cleanup.processor.js";
 import {
   processLiveSessionEnded,
   processLiveSessionStarted,
@@ -30,6 +32,7 @@ import {
 import {
   enqueueLiveIncidentEscalationJob,
   enqueueLivePresenceSweepJob,
+  enqueueCleanupExpiredSessionsJob,
 } from "../services/jobs.service.js";
 
 type JobProcessor = (
@@ -41,6 +44,8 @@ let tickInProgress = false;
 
 const processors: Record<string, JobProcessor> = {
   [JOB_TYPES.RIDE_STATS_RECOMPUTE]: processRideStatsRecompute,
+  [JOB_TYPES.REWARDS_RECOMPUTE]: processRewardsRecompute,
+  [JOB_TYPES.CLEANUP_EXPIRED_SESSIONS]: processCleanupExpiredSessions,
   [JOB_TYPES.LIVE_SESSION_STARTED]: processLiveSessionStarted,
   [JOB_TYPES.LIVE_SESSION_ENDED]: processLiveSessionEnded,
   [JOB_TYPES.LIVE_INCIDENT_REPORTED]: processLiveIncidentReported,
@@ -55,6 +60,7 @@ const scheduleOperationalJobs = async (): Promise<void> => {
     await Promise.all([
       enqueueLivePresenceSweepJob(),
       enqueueLiveIncidentEscalationJob(),
+      enqueueCleanupExpiredSessionsJob(),
     ]);
   } catch (error) {
     console.error("[worker] Failed to enqueue operational live jobs:", error);

@@ -156,6 +156,45 @@ export const enqueueLiveIncidentReported = async (
   });
 };
 
+export const enqueueRewardsRecompute = async (
+  riderId: string,
+  source: "stats-recompute" | "manual",
+): Promise<void> => {
+  const existing = await query(
+    `SELECT id
+     FROM jobs
+     WHERE type = $1
+       AND status IN ('pending', 'processing')
+       AND payload->>'riderId' = $2
+     LIMIT 1`,
+    [JOB_TYPES.REWARDS_RECOMPUTE, riderId],
+  );
+
+  if (existing.rows.length > 0) {
+    return;
+  }
+
+  await enqueueJob({
+    type: JOB_TYPES.REWARDS_RECOMPUTE,
+    payload: {
+      riderId,
+      source,
+      requestedAt: new Date().toISOString(),
+    },
+    maxAttempts: 3,
+  });
+};
+
+export const enqueueCleanupExpiredSessionsJob =
+  async (): Promise<boolean> => {
+    return enqueueRecurringJobIfDue(
+      JOB_TYPES.CLEANUP_EXPIRED_SESSIONS,
+      { enqueuedAt: new Date().toISOString() },
+      3600, // once per hour
+      1,
+    );
+  };
+
 export const enqueueLivePresenceSweepJob = async (): Promise<boolean> => {
   return enqueueRecurringJobIfDue(
     JOB_TYPES.LIVE_PRESENCE_SWEEP,
