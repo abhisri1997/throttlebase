@@ -44,6 +44,7 @@ import { useTheme } from "../../src/theme/ThemeContext";
 import LocationPicker from "../../src/components/LocationPicker";
 import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
 import { getApiErrorMessage } from "../../src/utils/apiError";
+import { rideSocket } from "../../src/services/rideSocket";
 
 const fetchRideDetails = async (id: string) => {
   const { data } = await apiClient.get(`/api/rides/${id}`);
@@ -634,6 +635,40 @@ export default function RideDetailScreen() {
     }
     prevSessionEndedRef.current = currentStatus ?? null;
   }, [liveSocketSession?.status, sessionEndedReason]);
+
+  // ── Ride-room WebSocket subscription ────────────────────────────────────────
+  // Subscribe to ride-level events (join, stop requests, stop updates) via the
+  // /rides namespace so all participants get real-time UI updates.
+  useEffect(() => {
+    if (!id || !token) return;
+
+    rideSocket.connect(token);
+    rideSocket.subscribe(id);
+
+    const handleJoined = () => {
+      queryClient.invalidateQueries({ queryKey: ["ride", id] });
+      queryClient.invalidateQueries({ queryKey: ["rides"] });
+    };
+
+    const handleStopRequested = () => {
+      queryClient.invalidateQueries({ queryKey: ["ride", id] });
+    };
+
+    const handleStopUpdated = () => {
+      queryClient.invalidateQueries({ queryKey: ["ride", id] });
+    };
+
+    rideSocket.on("ride:joined", handleJoined);
+    rideSocket.on("ride:stop_requested", handleStopRequested);
+    rideSocket.on("ride:stop_updated", handleStopUpdated);
+
+    return () => {
+      rideSocket.off("ride:joined", handleJoined);
+      rideSocket.off("ride:stop_requested", handleStopRequested);
+      rideSocket.off("ride:stop_updated", handleStopUpdated);
+      rideSocket.unsubscribe(id);
+    };
+  }, [id, token, queryClient]);
 
   // Auto-fit map to live participant locations when riding
   useEffect(() => {

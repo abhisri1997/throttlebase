@@ -64,12 +64,26 @@ const clearLocationSequenceForRider = (riderId: string): void => {
 let _liveNamespace: ReturnType<InstanceType<typeof Server>["of"]> | null =
   null;
 
+let _io: InstanceType<typeof Server> | null = null;
+
 export const emitToLiveRoom = (
   roomKey: string,
   event: string,
   data: unknown,
 ): void => {
   _liveNamespace?.to(roomKey).emit(event, data);
+};
+
+/**
+ * Broadcast a ride-level event to all subscribers of a ride room.
+ * Riders join `ride:<rideId>` rooms when they open ride detail pages.
+ */
+export const emitToRideRoom = (
+  rideId: string,
+  event: string,
+  data: unknown,
+): void => {
+  _io?.to(`ride:${rideId}`).emit(event, data);
 };
 
 export const createLiveGateway = (httpServer: HttpServer) => {
@@ -79,6 +93,8 @@ export const createLiveGateway = (httpServer: HttpServer) => {
       credentials: true,
     },
   });
+
+  _io = io;
 
   const liveNamespace = io.of("/live");
   _liveNamespace = liveNamespace;
@@ -313,6 +329,41 @@ export const createLiveGateway = (httpServer: HttpServer) => {
       }
 
       clearLocationSequenceForRider(rider.riderId);
+    });
+  });
+
+  // ── /rides namespace — lightweight ride-room subscription ──────────────────
+  // Clients join `ride:<rideId>` rooms to receive broadcast events for that
+  // ride without the full live-session authentication requirement.
+  const ridesNamespace = io.of("/rides");
+  ridesNamespace.use(authenticateLiveSocket);
+
+  ridesNamespace.on("connection", (socket) => {
+    const rider = socket.data.rider as RiderPayload | undefined;
+
+    if (!rider?.riderId) {
+      socket.emit("ride:error", { error: "Authentication context missing", code: 401 });
+      socket.disconnect(true);
+      return;
+    }
+
+    socket.on("ride:subscribe", (rawPayload) => {
+      try {
+        const payload = JoinPayloadSchema.parse(rawPayload);
+        void socket.join(`ride:${payload.rideId}`);
+        socket.emit("ride:subscribed", { rideId: payload.rideId });
+      } catch {
+        socket.emit("ride:error", { error: "Invalid ride:subscribe payload", code: 400 });
+      }
+    });
+
+    socket.on("ride:unsubscribe", (rawPayload) => {
+      try {
+        const payload = JoinPayloadSchema.parse(rawPayload);
+        void socket.leave(`ride:${payload.rideId}`);
+      } catch {
+        // Ignore malformed unsubscribe
+      }
     });
   });
 
