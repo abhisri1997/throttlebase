@@ -629,7 +629,7 @@ Go/no-go checklist before each ramp:
 10. ~~Build the Rewards engine API (badges, achievements, leaderboard)~~ (DONE)
 11. ~~Build the Notifications & Settings API~~ (DONE)
 12. **Core server API modules are complete (Auth, Riders, Rides, Routes, Community, Rewards, Notifications)** ✅
-13. **Some documented modules remain partial/missing (2FA, push/email infra, background job consumers, websockets, support admin workflow)** ⚠️
+13. ~~Some documented modules remain partial/missing (2FA, push/email infra, background job consumers, websockets, support admin workflow)~~ → Background job processors (rewards, cleanup), mention notifications, live timeline/replay, and support admin workflow are now complete. ✅
 14. ~~Initialize Expo React Native client application (`npx create-expo-app`)~~ (DONE)
 15. ~~Configure Expo Router, NativeWind (Tailwind), Zustand, and TanStack Query~~ (DONE)
 16. ~~Build Authentication Flow (Login/Register)~~ (DONE)
@@ -644,14 +644,21 @@ Go/no-go checklist before each ramp:
 25. ~~Implement Support module end-to-end~~: API + basic client UX for support tickets. (DONE - rider-facing first slice)
 26. Implement **Security module features**: 2FA setup/verify, login activity, active session management.
 27. Implement **Notification delivery infra**: push/email workers and preference-aware dispatch.
-28. ~~Add Background jobs + queue~~ foundation. Next: wire stats/reward/cleanup processors and enqueue triggers.
-29. Add **Realtime transport** (WebSocket channels) for ride/live events where required.
-30. **Future Refactor**: Migrate from Raw SQL to Drizzle ORM or Prisma.
-31. Validate hook behavior in active tooling and tune script messages/strictness if needed (current config is a non-blocking draft).
+28. ~~Add Background jobs + queue~~ foundation. ~~Wire stats/reward/cleanup processors and enqueue triggers.~~ (DONE - rewards.recompute and cleanup.expired_sessions fully wired)
+29. ~~Mention parsing + notifications~~: @username handles parsed on post/comment create; mention notifications inserted and push/email jobs enqueued. (DONE)
+30. ~~Live session timeline/replay APIs~~: GET /api/rides/:id/live/timeline (ordered ride_live_events) and GET /api/rides/:id/live/replay (paginated location samples, cursor + time range). (DONE)
+31. ~~Support admin workflow~~: migration 018 (is_admin + agent_reply), requireAdmin middleware, GET /api/support/admin/tickets, PATCH /api/support/:id/status, client support-admin.tsx modal, settings screen isAdmin guard. (DONE)
+32. Add **Realtime transport** (WebSocket channels) for ride/live events where required.
+33. **Future Refactor**: Migrate from Raw SQL to Drizzle ORM or Prisma.
+34. Validate hook behavior in active tooling and tune script messages/strictness if needed (current config is a non-blocking draft).
 
 ## Recent AI Assistant Updates
 
-- Added workspace skill [`.github/skills/git-commit-organizer/SKILL.md`](.github/skills/git-commit-organizer/SKILL.md) to standardize "check status -> group relevant commits -> commit -> push" workflow.
+- **Rewards/cleanup background job consumers (2026-04-01)**: `rewards.recompute` processor awards badges and updates achievement tiers from `ride_history_stats` + DB badge/achievement definitions. `cleanup.expired_sessions` purges expired/revoked sessions and hard-deletes riders past 30-day grace. Both wired in `worker.ts`; rewards auto-enqueued after stats recompute via `stats.service.ts`.
+- **@mention notifications (2026-04-01)**: `mention.service.ts` parses `@username` handles, resolves to rider UUIDs, inserts mention notifications with dedup, and enqueues push/email jobs. Hooked fire-and-forget in `community.controller.ts` after post + comment creation.
+- **Live timeline/replay APIs (2026-04-01)**: `GET /api/rides/:id/live/timeline` returns ordered `ride_live_events` + actor names. `GET /api/rides/:id/live/replay` returns paginated `ride_live_location_samples` (decoded lon/lat, cursor + from/to time range). Both require confirmed participant access.
+- **Support admin workflow (2026-04-01)**: Migration `018` adds `is_admin` to riders and `agent_reply` to support_tickets. `requireAdmin` middleware checks DB flag. `GET /api/support/admin/tickets` (filter by status/rider) and `PATCH /api/support/:id/status` (status + optional reply). Client `support-admin.tsx` modal with status filter bar and ticket detail/update form. Settings screen shows admin link guarded by `rider.is_admin`.
+
 - Skill includes commit-boundary decision logic, staged-diff validation checks, push/rebase handling, and quoted-path safety for files like `[id].tsx`.
 - Local server bootstrap hardening (2026-03-28): `server/src/config/db.ts` now supports `DATABASE_URL`, honors `PG*` env fallbacks, and no longer defaults DB user to `postgres` when `.env` is absent.
 - Fresh-machine DB setup validated: installed PostGIS, created `throttle_base`, and applied migrations `001`-`016`; prior startup blockers were `role "postgres" does not exist`, then `database "throttle_base" does not exist`, then missing `jobs` relation on unmigrated DB.
