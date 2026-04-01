@@ -314,6 +314,90 @@ router.post(
 
 /**
  * @swagger
+ * /api/rides/{id}/live/timeline:
+ *   get:
+ *     summary: Get ordered event timeline for a live session (confirmed participants)
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Ride ID
+ *     responses:
+ *       200:
+ *         description: Session metadata + ordered event list
+ *       403:
+ *         description: Not a confirmed participant
+ *       404:
+ *         description: Ride or live session not found
+ */
+router.get(
+  "/:id/live/timeline",
+  authenticate,
+  liveSessionController.getTimeline,
+);
+
+/**
+ * @swagger
+ * /api/rides/{id}/live/replay:
+ *   get:
+ *     summary: Paginated location samples for map playback (confirmed participants)
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Ride ID
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 500
+ *         description: Max samples per page
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: integer
+ *         description: Opaque cursor (last seen sample id) for pagination
+ *       - in: query
+ *         name: from
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: ISO timestamp lower bound for captured_at
+ *       - in: query
+ *         name: to
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: ISO timestamp upper bound for captured_at
+ *     responses:
+ *       200:
+ *         description: Session metadata + paginated location samples + next_cursor
+ *       403:
+ *         description: Not a confirmed participant
+ *       404:
+ *         description: Ride or live session not found
+ */
+router.get(
+  "/:id/live/replay",
+  authenticate,
+  liveSessionController.getReplay,
+);
+
+/**
+ * @swagger
  * /api/rides/{id}/promote:
  *   post:
  *     summary: Promote a rider to co-captain (captain only)

@@ -802,3 +802,216 @@ export const updateLivePresenceLocation = async (
     client.release();
   }
 };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TIMELINE — ordered event stream for a completed (or any) live session
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export const getLiveSessionTimeline = async (
+  rideId: string,
+  callerId: string,
+): Promise<{
+  session: { id: string; ride_id: string; status: string; started_at: string | null; ended_at: string | null };
+  events: Array<{
+    id: string;
+    event_type: string;
+    actor_rider_id: string | null;
+    actor_display_name: string | null;
+    payload: Record<string, unknown>;
+    created_at: string;
+  }>;
+}> => {
+  // Verify the ride exists and the caller is a confirmed participant
+  const rideCheck = await query(
+    `SELECT r.id,
+            (
+              r.captain_id = $2 OR EXISTS (
+                SELECT 1 FROM ride_participants rp
+                WHERE rp.ride_id = r.id
+                  AND rp.rider_id = $2
+                  AND rp.status = 'confirmed'
+              )
+            ) AS is_participant
+     FROM rides r
+     WHERE r.id = $1`,
+    [rideId, callerId],
+  );
+
+  if (!rideCheck.rows.length) {
+    throw new LiveSessionError("Ride not found", 404);
+  }
+  if (!rideCheck.rows[0].is_participant) {
+    throw new LiveSessionError("Only confirmed participants can view the timeline", 403);
+  }
+
+  const sessionResult = await query(
+    `SELECT id, ride_id, status, started_at, ended_at
+     FROM ride_live_sessions
+     WHERE ride_id = $1`,
+    [rideId],
+  );
+
+  if (!sessionResult.rows.length) {
+    throw new LiveSessionError("No live session found for this ride", 404);
+  }
+
+  const session = sessionResult.rows[0] as {
+    id: string;
+    ride_id: string;
+    status: string;
+    started_at: string | null;
+    ended_at: string | null;
+  };
+
+  const eventsResult = await query(
+    `SELECT e.id::text,
+            e.event_type,
+            e.actor_rider_id::text,
+            r.display_name AS actor_display_name,
+            e.payload,
+            e.created_at
+     FROM ride_live_events e
+     LEFT JOIN riders r ON r.id = e.actor_rider_id
+     WHERE e.session_id = $1
+     ORDER BY e.created_at ASC, e.id ASC`,
+    [session.id],
+  );
+
+  const events = eventsResult.rows.map((row) => ({
+    id: row.id as string,
+    event_type: row.event_type as string,
+    actor_rider_id: (row.actor_rider_id as string | null) ?? null,
+    actor_display_name: (row.actor_display_name as string | null) ?? null,
+    payload: (row.payload as Record<string, unknown>) ?? {},
+    created_at: row.created_at as string,
+  }));
+
+  return { session, events };
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// REPLAY — paginated location samples for map playback
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface ReplayOptions {
+  limit?: number;
+  cursor?: number; // last seen sample id (BIGINT, used as opaque cursor)
+  fromTs?: string; // ISO timestamp lower bound (captured_at >= fromTs)
+  toTs?: string;   // ISO timestamp upper bound (captured_at <= toTs)
+}
+
+export const getLiveSessionReplay = async (
+  rideId: string,
+  callerId: string,
+  opts: ReplayOptions = {},
+): Promise<{
+  session: { id: string; ride_id: string; status: string; started_at: string | null };
+  samples: Array<{
+    id: string;
+    rider_id: string;
+    display_name: string | null;
+    lon: number;
+    lat: number;
+    speed_kmh: number | null;
+    heading_deg: number | null;
+    accuracy_m: number | null;
+    captured_at: string;
+  }>;
+  next_cursor: string | null;
+}> => {
+  // Verify participation
+  const rideCheck = await query(
+    `SELECT r.id,
+            (
+              r.captain_id = $2 OR EXISTS (
+                SELECT 1 FROM ride_participants rp
+                WHERE rp.ride_id = r.id
+                  AND rp.rider_id = $2
+                  AND rp.status = 'confirmed'
+              )
+            ) AS is_participant
+     FROM rides r
+     WHERE r.id = $1`,
+    [rideId, callerId],
+  );
+
+  if (!rideCheck.rows.length) {
+    throw new LiveSessionError("Ride not found", 404);
+  }
+  if (!rideCheck.rows[0].is_participant) {
+    throw new LiveSessionError("Only confirmed participants can access replay", 403);
+  }
+
+  const sessionResult = await query(
+    `SELECT id, ride_id, status, started_at
+     FROM ride_live_sessions
+     WHERE ride_id = $1`,
+    [rideId],
+  );
+
+  if (!sessionResult.rows.length) {
+    throw new LiveSessionError("No live session found for this ride", 404);
+  }
+
+  const session = sessionResult.rows[0] as {
+    id: string;
+    ride_id: string;
+    status: string;
+    started_at: string | null;
+  };
+
+  const limit = Math.min(opts.limit ?? 200, 500);
+  const params: unknown[] = [session.id, limit + 1]; // +1 to detect next page
+  const conditions: string[] = ["s.session_id = $1"];
+  let pidx = 3;
+
+  if (opts.cursor) {
+    conditions.push(`s.id > $${pidx++}`);
+    params.push(opts.cursor);
+  }
+  if (opts.fromTs) {
+    conditions.push(`s.captured_at >= $${pidx++}`);
+    params.push(opts.fromTs);
+  }
+  if (opts.toTs) {
+    conditions.push(`s.captured_at <= $${pidx++}`);
+    params.push(opts.toTs);
+  }
+
+  const samplesResult = await query(
+    `SELECT s.id,
+            s.rider_id,
+            r.display_name,
+            ST_X(s.location::geometry) AS lon,
+            ST_Y(s.location::geometry) AS lat,
+            s.speed_kmh,
+            s.heading_deg,
+            s.accuracy_m,
+            s.captured_at
+     FROM ride_live_location_samples s
+     LEFT JOIN riders r ON r.id = s.rider_id
+     WHERE ${conditions.join(" AND ")}
+     ORDER BY s.captured_at ASC, s.id ASC
+     LIMIT $2`,
+    params,
+  );
+
+  const rows = samplesResult.rows;
+  const hasMore = rows.length === limit + 1;
+  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+  const nextCursor = hasMore ? String(pageRows[pageRows.length - 1]!.id) : null;
+
+  const samples = pageRows.map((row) => ({
+    id: String(row.id),
+    rider_id: row.rider_id as string,
+    display_name: (row.display_name as string | null) ?? null,
+    lon: Number(row.lon),
+    lat: Number(row.lat),
+    speed_kmh: row.speed_kmh != null ? Number(row.speed_kmh) : null,
+    heading_deg: row.heading_deg != null ? Number(row.heading_deg) : null,
+    accuracy_m: row.accuracy_m != null ? Number(row.accuracy_m) : null,
+    captured_at: row.captured_at as string,
+  }));
+
+  return { session, samples, next_cursor: nextCursor };
+};
