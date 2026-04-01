@@ -24,6 +24,10 @@ import {
   processLivePresenceSweep,
 } from "./processors/live-ops.processor.js";
 import {
+  processNotificationPush,
+  processNotificationEmail,
+} from "./processors/notification-delivery.processor.js";
+import {
   enqueueLiveIncidentEscalationJob,
   enqueueLivePresenceSweepJob,
 } from "../services/jobs.service.js";
@@ -42,6 +46,8 @@ const processors: Record<string, JobProcessor> = {
   [JOB_TYPES.LIVE_INCIDENT_REPORTED]: processLiveIncidentReported,
   [JOB_TYPES.LIVE_PRESENCE_SWEEP]: processLivePresenceSweep,
   [JOB_TYPES.LIVE_INCIDENT_ESCALATE]: processLiveIncidentEscalation,
+  [JOB_TYPES.NOTIFICATION_PUSH]: processNotificationPush,
+  [JOB_TYPES.NOTIFICATION_EMAIL]: processNotificationEmail,
 };
 
 const scheduleOperationalJobs = async (): Promise<void> => {

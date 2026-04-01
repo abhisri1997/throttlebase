@@ -1,6 +1,8 @@
 import bcrypt from "bcrypt";
 import jwt, { type SignOptions } from "jsonwebtoken";
+import { randomUUID } from "crypto";
 import { query } from "../config/db.js";
+import { recordLoginActivity, createSession } from "./security.service.js";
 
 const SALT_ROUNDS = 12;
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_dev_secret";
@@ -60,6 +62,7 @@ export const register = async (
 export const login = async (
   identifier: string,
   password: string,
+  meta?: { ipAddress?: string; deviceInfo?: string },
 ): Promise<{ token: string; rider: RiderPublic }> => {
   // Find the rider by either email or username (case-insensitive)
   const result = await query(
@@ -91,5 +94,25 @@ export const login = async (
 
   // Return token + rider data (strip password_hash)
   const { password_hash: _, ...riderPublic } = rider;
+
+  // Record login activity and create a tracked session (fire-and-forget, non-blocking)
+  void (async () => {
+    try {
+      const activityInput: Parameters<typeof recordLoginActivity>[0] = { riderId: rider.id };
+      if (meta?.ipAddress) activityInput.ipAddress = meta.ipAddress;
+      if (meta?.deviceInfo) activityInput.deviceFingerprint = meta.deviceInfo;
+      await recordLoginActivity(activityInput);
+
+      const sessionInput: Parameters<typeof createSession>[0] = {
+        riderId: rider.id,
+        sessionToken: randomUUID(),
+      };
+      if (meta?.deviceInfo) sessionInput.deviceInfo = meta.deviceInfo;
+      if (meta?.ipAddress) sessionInput.ipAddress = meta.ipAddress;
+      await createSession(sessionInput);
+    } catch (err) {
+      console.error("[auth] Failed to record login activity/session:", err);
+    }
+  })();
   return { token, rider: riderPublic };
 };

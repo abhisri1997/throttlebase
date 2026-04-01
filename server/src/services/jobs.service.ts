@@ -173,3 +173,42 @@ export const enqueueLiveIncidentEscalationJob = async (): Promise<boolean> => {
     1,
   );
 };
+
+// ── Notification delivery jobs ────────────────────────────────────────────────
+
+export interface NotificationPushJobPayload {
+  riderId: string;
+  notificationId: string;
+  type: string;
+  title?: string | null;
+  body?: string | null;
+  data?: Record<string, unknown> | null;
+}
+
+export interface NotificationEmailJobPayload {
+  riderId: string;
+  notificationId: string;
+  type: string;
+  subject: string;
+  body: string;
+}
+
+export const enqueueNotificationPush = async (
+  input: NotificationPushJobPayload,
+): Promise<void> => {
+  await enqueueJob({
+    type: JOB_TYPES.NOTIFICATION_PUSH,
+    payload: { ...input, enqueuedAt: new Date().toISOString() },
+    maxAttempts: 3,
+  });
+};
+
+export const enqueueNotificationEmail = async (
+  input: NotificationEmailJobPayload,
+): Promise<void> => {
+  await enqueueJob({
+    type: JOB_TYPES.NOTIFICATION_EMAIL,
+    payload: { ...input, enqueuedAt: new Date().toISOString() },
+    maxAttempts: 3,
+  });
+};
