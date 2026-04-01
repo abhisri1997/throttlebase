@@ -281,9 +281,9 @@ All migration files through `010_background_jobs.sql` have been executed. Full s
 ### Backend: Partial / Missing
 
 - [x] ~~2FA/TOTP flow~~ (DONE — setup/verify/disable/status on `feature/remaining-features`)
-- [ ] Remaining background job consumers (rewards/cleanup) on top of the implemented queue + worker foundation
+- [x] ~~Remaining background job consumers (rewards/cleanup)~~ (DONE — `rewards.recompute` awards badges/achievements from `ride_history_stats`; `cleanup.expired_sessions` purges expired sessions + grace-period-expired riders; both wired in `worker.ts`)
 - [x] ~~Push notifications (FCM/APNs) and email notification delivery infrastructure~~ (DONE — processor stubs with preference filtering; FCM/SMTP wiring stubs ready)
-- [ ] Live session timeline/replay APIs
+- [x] ~~Live session timeline/replay APIs~~ (DONE — `GET /api/rides/:id/live/timeline` + `/replay` with cursor pagination)
 
 ### Frontend: Missing UX Surface
 
@@ -292,7 +292,7 @@ All migration files through `010_background_jobs.sql` have been executed. Full s
 - [x] Live session map/presence UX polish (real-time rider markers/timeline, reconnect/background behavior hardening)
 - [x] Ride reviews UX on ride detail flows
 - [x] Followers/following list UX implemented and hardened: viewer-context `is_following` now comes from both `/api/riders/:id` and follower-list endpoints, `client/app/follow-list.tsx` avoids nested-tap conflicts for follow/unfollow actions, and pull-to-refresh is enabled on both follow-list and profile screens.
-- [ ] Support agent/admin workflow beyond rider submission and self-history
+- [x] ~~Support agent/admin workflow~~ (DONE — migration `018`, `requireAdmin` middleware, admin ticket list/update API, `support-admin.tsx` modal, settings guard)
 
 ### Notes
 
@@ -642,13 +642,13 @@ Go/no-go checklist before each ramp:
 23. ~~Build **UX for Community Groups**: Tab or Modal structures to browse, view, and create `throttlebase` groups under `/api/community/groups`.~~ (DONE - tab + detail + create)
 24. Build **UX for Followers lists and Ride Reviews**: Extend `/rider/[id]` and `/ride/[id]` with follower/review sub-views. (DONE - ride reviews done; followers/following list UX done via `client/app/follow-list.tsx`)
 25. ~~Implement Support module end-to-end~~: API + basic client UX for support tickets. (DONE - rider-facing first slice)
-26. Implement **Security module features**: 2FA setup/verify, login activity, active session management.
-27. Implement **Notification delivery infra**: push/email workers and preference-aware dispatch.
+26. ~~Implement **Security module features**: 2FA setup/verify, login activity, active session management.~~ (DONE — `security.service.ts`, `security.controller.ts`, TOTP setup/verify/disable, login activity, session management, client security screen)
+27. ~~Implement **Notification delivery infra**: push/email workers and preference-aware dispatch.~~ (DONE — `notification-delivery.processor.ts` with push/email stubs, preference gating, `enqueueNotificationPush`/`Email` helpers)
 28. ~~Add Background jobs + queue~~ foundation. ~~Wire stats/reward/cleanup processors and enqueue triggers.~~ (DONE - rewards.recompute and cleanup.expired_sessions fully wired)
 29. ~~Mention parsing + notifications~~: @username handles parsed on post/comment create; mention notifications inserted and push/email jobs enqueued. (DONE)
 30. ~~Live session timeline/replay APIs~~: GET /api/rides/:id/live/timeline (ordered ride_live_events) and GET /api/rides/:id/live/replay (paginated location samples, cursor + time range). (DONE)
 31. ~~Support admin workflow~~: migration 018 (is_admin + agent_reply), requireAdmin middleware, GET /api/support/admin/tickets, PATCH /api/support/:id/status, client support-admin.tsx modal, settings screen isAdmin guard. (DONE)
-32. Add **Realtime transport** (WebSocket channels) for ride/live events where required.
+32. ~~Add **Realtime transport** (WebSocket channels) for ride/live events where required.~~ (DONE — `ride:joined`, `ride:stop_requested`, `ride:stop_updated` events wired from ride controller; client `rideSocket.ts` + listeners in `ride/[id].tsx`)
 33. **Future Refactor**: Migrate from Raw SQL to Drizzle ORM or Prisma.
 34. Validate hook behavior in active tooling and tune script messages/strictness if needed (current config is a non-blocking draft).
 
