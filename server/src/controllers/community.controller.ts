@@ -6,12 +6,22 @@ import {
   CreateReviewSchema,
 } from "../schemas/community.schemas.js";
 import * as CommunityService from "../services/community.service.js";
+import { dispatchMentionNotifications } from "../services/mention.service.js";
+import { query } from "../config/db.js";
 
 interface RiderPayload {
   riderId: string;
   email: string;
 }
 const rid = (req: Request) => (req.rider as unknown as RiderPayload).riderId;
+
+const getRiderDisplayName = async (riderId: string): Promise<string> => {
+  const result = await query(
+    `SELECT display_name FROM riders WHERE id = $1 AND deleted_at IS NULL`,
+    [riderId],
+  );
+  return (result.rows[0]?.display_name as string | undefined) ?? "A rider";
+};
 
 // ── Posts ────────────────────────────────────────────────────────────────────
 
@@ -23,6 +33,22 @@ export const createPost = async (
     const data = CreatePostSchema.parse(req.body);
     const post = await CommunityService.createPost(rid(req), data);
     res.status(201).json(post);
+
+    // Dispatch mention notifications asynchronously (non-blocking)
+    const actorRiderId = rid(req);
+    getRiderDisplayName(actorRiderId)
+      .then((displayName) =>
+        dispatchMentionNotifications(data.content, {
+          actorRiderId,
+          actorDisplayName: displayName,
+          contentType: "post",
+          contentId: post.id as string,
+          contentSnippet: data.content,
+        }),
+      )
+      .catch((err) =>
+        console.error("[mention] post mention dispatch failed:", err),
+      );
   } catch (error: any) {
     if (error.name === "ZodError") {
       res.status(400).json({ errors: error.issues });
@@ -120,6 +146,26 @@ export const addComment = async (
       data,
     );
     res.status(201).json(comment);
+
+    // Dispatch mention notifications asynchronously (non-blocking)
+    const actorRiderId = rid(req);
+    const postId = req.params.id as string;
+    getRiderDisplayName(actorRiderId)
+      .then((displayName) =>
+        dispatchMentionNotifications(data.content, {
+          actorRiderId,
+          actorDisplayName: displayName,
+          contentType: "comment",
+          contentId: comment.id as string,
+          contentSnippet: data.content,
+        }),
+      )
+      .catch((err) =>
+        console.error(
+          `[mention] comment mention dispatch failed for post ${postId}:`,
+          err,
+        ),
+      );
   } catch (error: any) {
     if (error.name === "ZodError") {
       res.status(400).json({ errors: error.issues });
