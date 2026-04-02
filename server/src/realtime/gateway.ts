@@ -64,6 +64,9 @@ const clearLocationSequenceForRider = (riderId: string): void => {
 let _liveNamespace: ReturnType<InstanceType<typeof Server>["of"]> | null =
   null;
 
+let _ridesNamespace: ReturnType<InstanceType<typeof Server>["of"]> | null =
+  null;
+
 let _io: InstanceType<typeof Server> | null = null;
 
 export const emitToLiveRoom = (
@@ -83,7 +86,7 @@ export const emitToRideRoom = (
   event: string,
   data: unknown,
 ): void => {
-  _io?.to(`ride:${rideId}`).emit(event, data);
+  _ridesNamespace?.to(`ride:${rideId}`).emit(event, data);
 };
 
 export const createLiveGateway = (httpServer: HttpServer) => {
@@ -340,6 +343,7 @@ export const createLiveGateway = (httpServer: HttpServer) => {
   // Clients join `ride:<rideId>` rooms to receive broadcast events for that
   // ride without the full live-session authentication requirement.
   const ridesNamespace = io.of("/rides");
+  _ridesNamespace = ridesNamespace;
   ridesNamespace.use(authenticateLiveSocket);
 
   ridesNamespace.on("connection", (socket) => {
