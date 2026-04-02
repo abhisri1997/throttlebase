@@ -6,7 +6,7 @@ For request/response schema details, use Swagger at `/api-docs`.
 ## Auth
 
 - `POST /auth/register`
-- `POST /auth/login`
+- `POST /auth/login` (accepts `identifier` + `password`, and optional `totp_token` when 2FA challenge is required)
 - `GET /auth/check-username`
 - `GET /auth/2fa/status`
 - `POST /auth/2fa/setup`

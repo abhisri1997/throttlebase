@@ -9,6 +9,8 @@
 - Background jobs foundation with queue + worker runtime.
 - Ride analytics pipeline writing to `ride_history_stats` with enqueue hooks.
 - 2FA setup/verify/disable, login activity capture, and session management APIs are implemented.
+- Login now enforces TOTP verification for riders with 2FA enabled.
+- Session revocation now invalidates existing JWT access through session-bound token checks.
 - Support admin workflow is implemented with admin-only ticket list, status updates, and agent reply support.
 - Mention-triggered notification fanout is implemented for posts and comments.
 - Live session lifecycle APIs, realtime gateway, ride-room realtime updates, client room/session integration, and worker-backed notification fanout are implemented.
@@ -23,7 +25,6 @@
 
 ### Backend
 
-- Login does not yet enforce a second-step TOTP challenge when 2FA is enabled.
 - Push notification (FCM/APNs) and email delivery processors are still provider stubs.
 - Rider notification on admin ticket updates is not yet automated.
 
@@ -41,9 +42,9 @@
 
 ## P1 (Security and Delivery)
 
-1. Enforce 2FA during login for riders who have it enabled.
-2. Integrate real push/email providers and add rider device registration.
-3. Add rider-facing updates when support tickets are changed by admins.
+1. Integrate real push/email providers and add rider device registration.
+2. Add rider-facing updates when support tickets are changed by admins.
+3. Expand test coverage for session revocation and 2FA challenge edge-cases.
 
 ## P2 (Scale and Evolution)
 

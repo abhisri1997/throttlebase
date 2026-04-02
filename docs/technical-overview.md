@@ -38,12 +38,14 @@ This keeps permission checks and state transitions in service logic while contro
 
 - Register/login flows with JWT identity context
 - Email-or-username login with login-activity capture on successful auth
+- JWTs are session-bound; API/socket auth validates active non-revoked session records
 - Rider profile CRUD and privacy-aware public views
 - Follow/follower context support in rider/community flows
 
 ### Security and Account Protection
 
 - TOTP-based 2FA setup, verification, status lookup, and disable flow
+- Login requires a valid TOTP token when `two_factor_enabled = true`
 - Session inventory and rider-initiated session revocation endpoints
 - Login activity audit trail with device fingerprint and IP capture
 - Admin access gating via rider-level `is_admin` flag and middleware
@@ -75,6 +77,7 @@ This keeps permission checks and state transitions in service logic while contro
 - Ride-scoped live session lifecycle APIs
 - Realtime presence/location/incident events over `/live`
 - Lightweight ride-room subscriptions over `/rides` for join and stop-request updates on ride detail
+- Ride-room subscription authorization enforces ride visibility/participation checks
 - Client store-driven live controls and participant map behavior
 - Worker-backed presence sweep, incident escalation scheduling, and lifecycle notification fanout
 - Navigation Phase 1 full-screen route and map UX base

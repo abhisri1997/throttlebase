@@ -62,10 +62,10 @@ Primary code locations:
 
 ## Active Priorities
 
-1. Enforce 2FA during login for riders who have it enabled.
-2. Complete notification delivery infrastructure for push/email channels and device registration.
-3. Continue live session reliability hardening (token refresh reconnect, broader soak testing, ops observability tuning).
-4. Maintain API/UI contract consistency as features mature.
+1. Complete notification delivery infrastructure for push/email channels and device registration.
+2. Continue live session reliability hardening (token refresh reconnect, broader soak testing, ops observability tuning).
+3. Maintain API/UI contract consistency as features mature.
+4. Expand integration coverage for security and realtime edge-cases.
 
 ## Recent Verified Updates
 
@@ -81,6 +81,10 @@ Primary code locations:
 - Live session lifecycle, presence, incidents, worker fanout, and client map/presence states are integrated.
 - Ride detail screens subscribe to lightweight realtime ride-room updates for joins and stop-request changes.
 - Navigation screen stability and UX polish completed for overlays, bottom sheet behavior, recenter flow, and waypoint rendering.
+- Login now enforces TOTP when 2FA is enabled and requires a valid session record for API/socket auth.
+- Ride-room subscriptions now enforce ride visibility/participation checks before joining `ride:<rideId>` rooms.
+- Mention push/email fanout now uses recipient-scoped notification identifiers to prevent dedupe collapse.
+- Security/profile flows now tolerate older schemas where `riders.is_admin` and `riders.totp_verified_at` are not present.
 
 ## Assistant Operating Notes
 
