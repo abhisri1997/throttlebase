@@ -13,6 +13,7 @@ This phase intentionally stops short of full multi-rider live map behavior. The 
 - Forward-offset camera follow for the current rider
 - Turn-by-turn instruction card with ETA and remaining distance
 - Live-session integration for start/end flow, room join, heartbeat, and location emit
+- Ride-detail realtime subscription for join and stop-request updates before entering navigation
 - Bottom sheet for rider presence and captain-only end-ride control
 - Waypoint stop markers and recenter action for map recovery
 
@@ -71,6 +72,7 @@ This section maps the current codebase against the existing Phase 2 contract alr
 ## What Is Already Scaffolded for the Next Navigation Step
 
 - The client already has a shared socket transport layer in `client/src/services/liveSessionSocket.ts`.
+- The ride detail screen now has a separate lightweight socket transport in `client/src/services/rideSocket.ts` for non-navigation realtime updates.
 - The Zustand store already tracks session state, presence, live locations, incidents, and ended-session reason in `client/src/store/liveSessionStore.ts`.
 - The navigation screen already consumes live session status and presence summary, so it has the right entry point for richer map overlays.
 - The backend already persists sampled live locations and incidents, so later map/history features do not need a new transport foundation.

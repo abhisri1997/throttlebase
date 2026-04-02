@@ -7,6 +7,18 @@ For request/response schema details, use Swagger at `/api-docs`.
 
 - `POST /auth/register`
 - `POST /auth/login`
+- `GET /auth/check-username`
+- `GET /auth/2fa/status`
+- `POST /auth/2fa/setup`
+- `POST /auth/2fa/verify`
+- `POST /auth/2fa/disable`
+
+## Security
+
+- `GET /api/security/login-activity`
+- `GET /api/security/sessions`
+- `DELETE /api/security/sessions`
+- `DELETE /api/security/sessions/:id`
 
 ## Riders
 
@@ -92,6 +104,8 @@ For request/response schema details, use Swagger at `/api-docs`.
 - `GET /api/support`
 - `POST /api/support`
 - `GET /api/support/:id`
+- `GET /api/support/admin/tickets`
+- `PATCH /api/support/:id/status`
 
 ## Live Session
 
@@ -101,3 +115,15 @@ For request/response schema details, use Swagger at `/api-docs`.
 - `GET /api/rides/:id/live/session`
 - `POST /api/rides/:id/live/incident`
 - `POST /api/rides/:id/live/incident/:incidentId/ack`
+
+## Realtime Socket Events
+
+### `/live` namespace
+
+- Client -> server: `session:join`, `session:leave`, `presence:heartbeat`, `location:update`, `incident:create`
+- Server -> client: `session:state`, `presence:update`, `location:broadcast`, `incident:created`, `session:ended`, `session:error`
+
+### `/rides` namespace
+
+- Client -> server: `ride:subscribe`, `ride:unsubscribe`
+- Server -> client: `ride:subscribed`, `ride:joined`, `ride:stop_requested`, `ride:stop_updated`, `ride:error`

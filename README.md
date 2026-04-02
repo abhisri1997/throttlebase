@@ -8,8 +8,9 @@ ThrottleBase is a mobile-first rider platform where users can create and join ri
 - Route and GPS: route creation, sharing, bookmarks, trace ingestion
 - Community: posts, comments, likes, follows, groups, ride reviews
 - Rewards and engagement: badges, achievements, leaderboard
-- Notifications and account controls: preferences, privacy, support
-- Live group sessions: realtime ride coordination and safety flow
+- Notifications and account controls: preferences, privacy, 2FA, login activity, session management, support
+- Operations and moderation: admin support ticket triage plus mention-triggered notification fanout
+- Live group sessions: realtime ride coordination, ride-room updates, and safety flow
 
 ## Tech Stack
 
@@ -59,4 +60,6 @@ npm start
 - Architecture: `docs/architecture.md`
 - Technical overview: `docs/technical-overview.md`
 - API inventory: `docs/api-endpoints.md`
+- Database design: `docs/database-design.md`
+- Technical decisions: `docs/technical-decisions.md`
 - Status/backlog: `docs/project-status.md`

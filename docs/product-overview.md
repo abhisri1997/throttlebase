@@ -26,23 +26,26 @@ Provide a single rider platform that supports:
 
 - Rider profiles with stats and identity details
 - Posts, comments, likes, follows, and groups
-- Ride reviews and social feedback loops
+- Ride reviews, @mention notifications, and social feedback loops
 
 ### Engagement and Operations
 
 - Rewards: badges, achievements, leaderboard
-- Notifications, settings, and privacy controls
-- Support ticketing and account-help surfaces
+- Notifications, settings, privacy controls, and delivery preferences
+- Account security surfaces: 2FA, login activity, and session revocation
+- Support ticketing for riders plus admin ticket triage and reply workflow
 
 ### Live Group Coordination
 
 - Live session start/end lifecycle
 - Realtime presence and location sharing
 - Incident reporting and acknowledgment flow
+- Ride-detail room updates for joins and stop-request handling before entering full live navigation
 
 ## Success Principles
 
 - Reliable core ride lifecycle
 - Clear role and visibility boundaries
 - Mobile-first UX that remains usable under real ride conditions
+- Fast operational response for security events, support issues, and safety incidents
 - Maintainable architecture with explicit contracts and documentation

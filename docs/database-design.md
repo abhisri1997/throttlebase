@@ -84,7 +84,9 @@ Primary user table. Soft-deletable with a grace period.
 | `total_distance_km`   | `DECIMAL(10,2)`          | DEFAULT `0`                     | Denormalized counter                 |
 | `total_ride_time_sec` | `BIGINT`                 | DEFAULT `0`                     | Denormalized counter                 |
 | `two_factor_enabled`  | `BOOLEAN`                | DEFAULT `false`                 |                                      |
-| `two_factor_secret`   | `VARCHAR(255)`           |                                 | TOTP secret (encrypted)              |
+| `two_factor_secret`   | `VARCHAR(255)`           |                                 | TOTP secret, currently stored server-side for verification |
+| `totp_verified_at`    | `TIMESTAMPTZ`            |                                 | Audit timestamp for last successful TOTP enablement |
+| `is_admin`            | `BOOLEAN`                | DEFAULT `false`                 | Gates admin-only support operations  |
 | `created_at`          | `TIMESTAMPTZ`            | DEFAULT `now()`                 |                                      |
 | `updated_at`          | `TIMESTAMPTZ`            | DEFAULT `now()`                 |                                      |
 | `deleted_at`          | `TIMESTAMPTZ`            |                                 | Soft-delete; purged after 30 days    |
@@ -538,7 +540,7 @@ General preferences stored as a JSONB document for flexibility.
 
 ### `sessions`
 
-Active sessions managed via refresh tokens.
+Tracked rider sessions used for activity review and revocation.
 
 | Column               | Type           | Constraints                | Notes                |
 | -------------------- | -------------- | -------------------------- | -------------------- |
@@ -568,6 +570,7 @@ Active sessions managed via refresh tokens.
 | `status`          | `VARCHAR(20)`  | DEFAULT `'open'`           | `open`, `in_progress`, `awaiting_rider`, `resolved`, `closed` |
 | `created_at`      | `TIMESTAMPTZ`  | DEFAULT `now()`            |                                                               |
 | `updated_at`      | `TIMESTAMPTZ`  | DEFAULT `now()`            |                                                               |
+| `agent_reply`     | `TEXT`         |                            | Latest admin response shown in the rider/admin support UI     |
 
 ---
 
@@ -576,8 +579,13 @@ Active sessions managed via refresh tokens.
 | Table               | Index                                  | Type                             | Purpose                                |
 | ------------------- | -------------------------------------- | -------------------------------- | -------------------------------------- |
 | `riders`            | `email`                                | UNIQUE B-tree                    | Login lookup                           |
+| `riders`            | `is_admin`                             | Partial B-tree (`WHERE is_admin = true`) | Fast admin permission checks          |
 | `riders`            | `location_coords`                      | GiST (spatial)                   | Regional queries & leaderboard         |
 | `riders`            | `deleted_at`                           | B-tree (partial, WHERE NOT NULL) | Purge job                              |
+| `login_activity`    | `(rider_id, logged_in_at DESC)`        | B-tree composite                 | Recent login activity lookup           |
+| `sessions`          | `(rider_id, revoked_at, expires_at)`   | B-tree composite                 | Active session listing and revocation  |
+| `support_tickets`   | `(rider_id, updated_at DESC)`          | B-tree composite                 | Rider support history                  |
+| `support_tickets`   | `(status, updated_at DESC)`            | B-tree composite                 | Admin support queue filters            |
 | `rides`             | `status, scheduled_at`                 | B-tree composite                 | Active/upcoming ride queries           |
 | `rides`             | `captain_id`                           | B-tree                           | Captain's ride list                    |
 | `rides`             | `start_point`, `end_point`             | GiST (spatial)                   | Nearby ride discovery                  |
@@ -601,4 +609,5 @@ Active sessions managed via refresh tokens.
 | **Leaderboard**      | Powered by materialized views aggregating ride stats, refreshed hourly. Riders with `leaderboard_opt_in = false` are excluded.                                                                |
 | **GPS Data**         | High-volume `gps_traces` table — consider time-based partitioning (monthly) and archival for rides older than 1 year.                                                                         |
 | **Password Storage** | `bcrypt` or `Argon2id` with appropriate cost factors. Never store plaintext.                                                                                                                  |
+| **2FA Secrets**      | TOTP secrets are currently stored server-side to support verification and disable flows. Encrypt-at-rest or dedicated secret storage is a recommended follow-up.                             |
 | **Tokens**           | Invitation and share tokens are signed (JWT/HMAC), time-limited, and stored hashed.                                                                                                           |
