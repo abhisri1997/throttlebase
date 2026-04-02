@@ -18,7 +18,6 @@ const TEST_PASSWORD = process.env.TEST_USER_PASSWORD || "Ch@ngeMeInCI!23";
 type LoginResponse = {
   token?: string;
 };
-const TEST_PASSWORD = process.env.TEST_USER_PASSWORD || "Ch@ngeMeInCI!23";
 
 type RiderProfileResponse = {
   rider?: {
@@ -828,10 +827,7 @@ const run = async () => {
 
   // ── Live timeline + replay ────────────────────────────────────────────────
   // The ride ended above (mark_ride_completed: true). Use rideId from existing session.
-  const timelineRes = await authedRequest(TEST_PASSWORD
-    captainToken,
-    `/api/rides/${rideId}/live/timeline`,
-  );
+  const timelineRes = await authedRequest(captainToken, `/api/rides/${rideId}/live/timeline`);
   assert(
     timelineRes.ok,
     `GET /api/rides/:id/live/timeline failed with status ${timelineRes.status}`,
@@ -904,7 +900,7 @@ const run = async () => {
   const ticketId = ticketData.ticket?.id ?? (ticketData as unknown as { id?: string }).id;
   assert(Boolean(ticketId), "Support ticket ID missing from response");
 
-  // Admin listsTEST_PASSWORD
+  // Admin lists
   const adminTicketsRes = await authedRequest(
     adminUser,
     "/api/support/admin/tickets",
