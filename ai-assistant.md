@@ -314,12 +314,12 @@ All migration files through `010_background_jobs.sql` have been executed. Full s
 1. ~~Implement 2FA setup/verify flows and security settings surface~~ (DONE)
 2. ~~Add login activity and active session management APIs + UI~~ (DONE)
 3. ~~Integrate push/email delivery pipelines (respecting notification preferences)~~ (DONE — stubs)
-4. Add mention parsing and mention-triggered notification dispatch
+4. ~~Add mention parsing and mention-triggered notification dispatch~~ (DONE)
 
 ### P2 — Realtime & Scale Enhancements
 
-1. Add WebSocket channels for ride joins, stop requests, and other live events
-2. Add reliable retry/idempotency around async jobs and notification delivery
+1. ~~Add WebSocket channels for ride joins, stop requests, and other live events~~ (DONE — `ride:joined`, `ride:stop_requested`, `ride:stop_updated` events via `/rides` Socket.IO namespace)
+2. ~~Add reliable retry/idempotency around async jobs and notification delivery~~ (DONE — push/email job dedup by `notificationId` + retry backoff in `jobs.service.ts`)
 3. Refactor data layer from raw SQL to Drizzle ORM or Prisma after feature stabilization
 
 ## Live Group Ride Session Rollout Plan (Phased Implementation)
@@ -581,31 +581,31 @@ Go/no-go checklist before each ramp:
 
 ### Server
 
-1. Add migrations `011`-`015` under `server/src/db/migrations/`
-2. Add Zod schema file `server/src/schemas/live-session.schemas.ts`
-3. Add service `server/src/services/live-session.service.ts`
-4. Add controller `server/src/controllers/live-session.controller.ts`
-5. Add routes `server/src/routes/live-session.routes.ts`
-6. Mount route in `server/src/app.ts`
-7. Add socket gateway under `server/src/realtime/*`
-8. Wire queue producers/consumers for live events
-9. Extend swagger docs in `server/src/config/swagger.ts`
+1. ~~Add migrations `011`-`015` under `server/src/db/migrations/`~~ (DONE)
+2. ~~Add Zod schema file `server/src/schemas/live-session.schemas.ts`~~ (DONE)
+3. ~~Add service `server/src/services/live-session.service.ts`~~ (DONE)
+4. ~~Add controller `server/src/controllers/live-session.controller.ts`~~ (DONE)
+5. ~~Add routes `server/src/routes/live-session.routes.ts`~~ (DONE)
+6. ~~Mount route in `server/src/app.ts`~~ (DONE)
+7. ~~Add socket gateway under `server/src/realtime/*`~~ (DONE)
+8. ~~Wire queue producers/consumers for live events~~ (DONE)
+9. ~~Extend swagger docs in `server/src/config/swagger.ts`~~ (DONE)
 
 ### Client
 
-1. Add socket service/store/hooks in `client/src/services/`, `client/src/store/`, `client/src/hooks/`
-2. Add live ride UI in `client/app/ride/[id].tsx` or nested route
-3. Add participant marker and control components in `client/src/components/`
-4. Add feature-flag guards in app bootstrap/layout
+1. ~~Add socket service/store/hooks in `client/src/services/`, `client/src/store/`, `client/src/hooks/`~~ (DONE)
+2. ~~Add live ride UI in `client/app/ride/[id].tsx` or nested route~~ (DONE)
+3. ~~Add participant marker and control components in `client/src/components/`~~ (DONE)
+4. ~~Add feature-flag guards in app bootstrap/layout~~ (DONE)
 5. Add pull-to-refresh fallback when socket unavailable
 
 ### QA and Validation
 
-1. API contract tests for lifecycle and incidents
-2. Permission matrix tests for captain/co-captain/member/non-member
+1. ~~API contract tests for lifecycle and incidents~~ (DONE — `server/test.ts`)
+2. ~~Permission matrix tests for captain/co-captain/member/non-member~~ (DONE — outsider 403 + muted preference tests)
 3. Socket soak tests with concurrent simulated riders
 4. Battery/network resilience tests on mobile (background/resume)
-5. Security checks for JWT handshake and room authorization
+5. ~~Security checks for JWT handshake and room authorization~~ (DONE — `authenticateLiveSocket` middleware + `requireAdmin`)
 
 ### Suggested Phase Ownership
 
