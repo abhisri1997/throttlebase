@@ -5,6 +5,10 @@ import {
   processLiveSessionEnded,
   processLiveSessionStarted,
 } from "./src/workers/processors/live-session.processor.js";
+import {
+  getLiveLocationDropTelemetry,
+  updateLivePresenceLocation,
+} from "./src/services/live-session.service.js";
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:5001";
 
@@ -40,6 +44,10 @@ type LiveSessionEnvelope = {
     id: string;
     ride_id: string;
     status: string;
+    participants?: Array<{
+      rider_id: string;
+      last_heartbeat_at: string | null;
+    }>;
   };
 };
 
@@ -69,6 +77,7 @@ const assert = (condition: unknown, message: string) => {
 const registerAndLogin = async (label: string) => {
   const now = Date.now();
   const email = `${label}.${now}@example.com`;
+  const username = `${label.replace(/[^a-zA-Z0-9_]/g, "_")}_${now}`;
   const password = "Passw0rd123";
 
   const registerRes = await fetch(`${BASE_URL}/auth/register`, {
@@ -78,6 +87,7 @@ const registerAndLogin = async (label: string) => {
       email,
       password,
       display_name: `${label} ${now}`,
+      username,
     }),
   });
   assert(registerRes.ok, `Register failed with status ${registerRes.status}`);
@@ -85,7 +95,7 @@ const registerAndLogin = async (label: string) => {
   const loginRes = await fetch(`${BASE_URL}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ identifier: email, password }),
   });
   assert(loginRes.ok, `Login failed with status ${loginRes.status}`);
 
@@ -170,6 +180,24 @@ const countNotificationsByDedupeKey = (
     (notification) =>
       notification.type === type && notification.data?.dedupe_key === dedupeKey,
   ).length;
+
+const getParticipantHeartbeatMs = (
+  session: LiveSessionEnvelope,
+  riderId: string,
+): number => {
+  const participant = session.session?.participants?.find(
+    (entry) => entry.rider_id === riderId,
+  );
+  assert(Boolean(participant), `Missing participant in session: ${riderId}`);
+  assert(
+    Boolean(participant?.last_heartbeat_at),
+    `Missing last_heartbeat_at for participant: ${riderId}`,
+  );
+
+  const parsed = Date.parse(participant!.last_heartbeat_at as string);
+  assert(Number.isFinite(parsed), "Participant heartbeat timestamp is invalid");
+  return parsed;
+};
 
 const run = async () => {
   const captainToken = await registerAndLogin("live.health.captain");
@@ -274,6 +302,112 @@ const run = async () => {
     sessionData?.session?.status === "active",
     "Fetched session is not active",
   );
+
+  const acceptedLocation = await updateLivePresenceLocation(
+    rideId as string,
+    participant.id,
+    {
+      lon: 77.612,
+      lat: 12.933,
+      speed_kmh: 24,
+      captured_at: new Date().toISOString(),
+    },
+  );
+  assert(Boolean(acceptedLocation), "Expected fresh location update to be accepted");
+
+  const sessionAfterAcceptedRes = await authedRequest(
+    participantToken,
+    `/api/rides/${rideId}/live/session`,
+  );
+  assert(
+    sessionAfterAcceptedRes.ok,
+    `Get live session after accepted location failed with status ${sessionAfterAcceptedRes.status}`,
+  );
+  const sessionAfterAccepted =
+    (await sessionAfterAcceptedRes.json()) as LiveSessionEnvelope;
+  const baselineHeartbeatMs = getParticipantHeartbeatMs(
+    sessionAfterAccepted,
+    participant.id,
+  );
+
+  const staleLocation = await updateLivePresenceLocation(
+    rideId as string,
+    participant.id,
+    {
+      lon: 77.613,
+      lat: 12.934,
+      captured_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+    },
+  );
+  assert(staleLocation === null, "Expected stale location update to be dropped");
+
+  const futureLocation = await updateLivePresenceLocation(
+    rideId as string,
+    participant.id,
+    {
+      lon: 77.614,
+      lat: 12.935,
+      captured_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    },
+  );
+  assert(
+    futureLocation === null,
+    "Expected future-skewed location update to be dropped",
+  );
+
+  const outOfOrderLocation = await updateLivePresenceLocation(
+    rideId as string,
+    participant.id,
+    {
+      lon: 77.615,
+      lat: 12.936,
+      captured_at: new Date(baselineHeartbeatMs - 60 * 1000).toISOString(),
+    },
+  );
+  assert(
+    outOfOrderLocation === null,
+    "Expected out-of-order location update to be dropped",
+  );
+
+  const sessionAfterDropsRes = await authedRequest(
+    participantToken,
+    `/api/rides/${rideId}/live/session`,
+  );
+  assert(
+    sessionAfterDropsRes.ok,
+    `Get live session after dropped location checks failed with status ${sessionAfterDropsRes.status}`,
+  );
+  const sessionAfterDrops =
+    (await sessionAfterDropsRes.json()) as LiveSessionEnvelope;
+  const heartbeatAfterDropsMs = getParticipantHeartbeatMs(
+    sessionAfterDrops,
+    participant.id,
+  );
+
+  assert(
+    heartbeatAfterDropsMs === baselineHeartbeatMs,
+    "Dropped location packets should not advance participant heartbeat timestamp",
+  );
+
+  const locationDropTelemetry = getLiveLocationDropTelemetry();
+  if (locationDropTelemetry.enabled) {
+    assert(
+      locationDropTelemetry.total_dropped >= 3,
+      "Expected telemetry total_dropped to include stale/future/out-of-order drops",
+    );
+    assert(
+      locationDropTelemetry.stale >= 1,
+      "Expected telemetry stale drop counter to increment",
+    );
+    assert(
+      locationDropTelemetry.future_skew >= 1,
+      "Expected telemetry future_skew drop counter to increment",
+    );
+    assert(
+      locationDropTelemetry.out_of_order >= 1,
+      "Expected telemetry out_of_order drop counter to increment",
+    );
+  }
 
   const startedDedupeKey = `live_session_started:${sessionId}`;
   const captainNotificationsAfterStart = await getNotifications(captainToken);
@@ -521,6 +655,9 @@ const run = async () => {
   );
   console.log(
     "PASS: Live notification processors respect preferences, exclude actors/reporters, and dedupe retries",
+  );
+  console.log(
+    "PASS: Live location guards reject stale/future/out-of-order packets without mutating participant heartbeat",
   );
 };
 

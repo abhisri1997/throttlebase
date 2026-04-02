@@ -242,6 +242,10 @@ export const createLiveGateway = (httpServer: HttpServer) => {
           { persistSample: nextShouldPersistSample(sequenceKey) },
         );
 
+        if (!location) {
+          return;
+        }
+
         liveNamespace
           .to(buildLiveRoomKey(payload.rideId, session.id))
           .emit("location:broadcast", location);

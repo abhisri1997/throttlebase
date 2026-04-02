@@ -46,6 +46,73 @@ type LiveSessionSummary = {
   }>;
 };
 
+const DEFAULT_MAX_LOCATION_AGE_MS = 2 * 60 * 1000;
+const DEFAULT_MAX_LOCATION_FUTURE_SKEW_MS = 30 * 1000;
+const DEFAULT_OUT_OF_ORDER_GRACE_MS = 15 * 1000;
+
+const LOCATION_MAX_AGE_MS = Number.parseInt(
+  process.env.LIVE_LOCATION_MAX_AGE_MS || `${DEFAULT_MAX_LOCATION_AGE_MS}`,
+  10,
+);
+const LOCATION_MAX_FUTURE_SKEW_MS = Number.parseInt(
+  process.env.LIVE_LOCATION_MAX_FUTURE_SKEW_MS ||
+    `${DEFAULT_MAX_LOCATION_FUTURE_SKEW_MS}`,
+  10,
+);
+const LOCATION_OUT_OF_ORDER_GRACE_MS = Number.parseInt(
+  process.env.LIVE_LOCATION_OUT_OF_ORDER_GRACE_MS ||
+    `${DEFAULT_OUT_OF_ORDER_GRACE_MS}`,
+  10,
+);
+
+type LiveLocationDropReason = "stale" | "future_skew" | "out_of_order";
+
+type LiveLocationDropTelemetry = {
+  enabled: boolean;
+  total_dropped: number;
+  stale: number;
+  future_skew: number;
+  out_of_order: number;
+  last_dropped_at: string | null;
+};
+
+const LIVE_LOCATION_DROP_TELEMETRY_ENABLED =
+  process.env.LIVE_LOCATION_DROP_TELEMETRY === "true";
+
+const liveLocationDropTelemetry: LiveLocationDropTelemetry = {
+  enabled: LIVE_LOCATION_DROP_TELEMETRY_ENABLED,
+  total_dropped: 0,
+  stale: 0,
+  future_skew: 0,
+  out_of_order: 0,
+  last_dropped_at: null,
+};
+
+const recordLiveLocationDrop = (reason: LiveLocationDropReason) => {
+  if (!LIVE_LOCATION_DROP_TELEMETRY_ENABLED) {
+    return;
+  }
+
+  liveLocationDropTelemetry.total_dropped += 1;
+  liveLocationDropTelemetry.last_dropped_at = new Date().toISOString();
+
+  if (reason === "stale") {
+    liveLocationDropTelemetry.stale += 1;
+    return;
+  }
+
+  if (reason === "future_skew") {
+    liveLocationDropTelemetry.future_skew += 1;
+    return;
+  }
+
+  liveLocationDropTelemetry.out_of_order += 1;
+};
+
+export const getLiveLocationDropTelemetry = (): LiveLocationDropTelemetry => ({
+  ...liveLocationDropTelemetry,
+});
+
 const normalizePresenceRole = (
   role: string,
 ): "captain" | "co_captain" | "member" => {
@@ -697,7 +764,16 @@ export const updateLivePresenceLocation = async (
   riderId: string,
   input: LiveLocationUpdateInput,
   options?: { persistSample?: boolean },
-) => {
+): Promise<{
+  sessionId: string;
+  riderId: string;
+  lon: number;
+  lat: number;
+  speedKmh: number | null;
+  headingDeg: number | null;
+  accuracyM: number | null;
+  capturedAt: string;
+} | null> => {
   const client = await pool.connect();
 
   try {
@@ -719,7 +795,53 @@ export const updateLivePresenceLocation = async (
     }
 
     const capturedAt = input.captured_at ?? new Date().toISOString();
+    const capturedAtMs = Date.parse(capturedAt);
+    const nowMs = Date.now();
+
+    if (
+      Number.isFinite(capturedAtMs) &&
+      nowMs - capturedAtMs > LOCATION_MAX_AGE_MS
+    ) {
+      recordLiveLocationDrop("stale");
+      await client.query("ROLLBACK");
+      return null;
+    }
+
+    if (
+      Number.isFinite(capturedAtMs) &&
+      capturedAtMs - nowMs > LOCATION_MAX_FUTURE_SKEW_MS
+    ) {
+      recordLiveLocationDrop("future_skew");
+      await client.query("ROLLBACK");
+      return null;
+    }
+
     const role = normalizePresenceRole(ctx.caller_role ?? "member");
+
+    const latestPresence = await client.query(
+      `SELECT last_heartbeat_at
+       FROM ride_live_presence
+       WHERE session_id = $1
+         AND rider_id = $2
+       FOR UPDATE`,
+      [session.id, riderId],
+    );
+
+    const previousTimestamp = latestPresence.rows[0]?.last_heartbeat_at as
+      | string
+      | null
+      | undefined;
+    const previousMs = previousTimestamp ? Date.parse(previousTimestamp) : NaN;
+
+    if (
+      Number.isFinite(capturedAtMs) &&
+      Number.isFinite(previousMs) &&
+      capturedAtMs + LOCATION_OUT_OF_ORDER_GRACE_MS < previousMs
+    ) {
+      recordLiveLocationDrop("out_of_order");
+      await client.query("ROLLBACK");
+      return null;
+    }
 
     await client.query(
       `INSERT INTO ride_live_presence (

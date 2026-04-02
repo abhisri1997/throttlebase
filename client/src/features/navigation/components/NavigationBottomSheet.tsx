@@ -9,6 +9,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../../theme/ThemeContext";
 import type { RideParticipantView } from "../types/navigation";
 
@@ -19,10 +20,14 @@ type Props = {
   canEndRide: boolean;
   onEndRide: () => void;
   ending: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
+  onSnapHeightChange?: (height: number) => void;
 };
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
+
+export const NAVIGATION_SHEET_COLLAPSED_HEIGHT = 138;
 
 export function NavigationBottomSheet({
   rideName,
@@ -31,17 +36,22 @@ export function NavigationBottomSheet({
   canEndRide,
   onEndRide,
   ending,
+  onExpandedChange,
+  onSnapHeightChange,
 }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  const [chromeHeight, setChromeHeight] = useState(118);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [chromeHeight, setChromeHeight] = useState(NAVIGATION_SHEET_COLLAPSED_HEIGHT);
   const [scrollContentHeight, setScrollContentHeight] = useState(0);
+  const onlineCount = participants.filter((participant) => participant.isOnline).length;
 
-  const collapsedHeight = 170;
+  const collapsedHeight = NAVIGATION_SHEET_COLLAPSED_HEIGHT;
   const expandedHeight = clamp(
-    chromeHeight + scrollContentHeight,
+    chromeHeight + scrollContentHeight + insets.bottom,
     collapsedHeight,
-    Math.round(windowHeight * 0.82),
+    Math.round(windowHeight * 0.76),
   );
   const snapThreshold = (collapsedHeight + expandedHeight) / 2;
 
@@ -49,6 +59,9 @@ export function NavigationBottomSheet({
   const dragStartHeight = useRef(collapsedHeight);
 
   const snapToHeight = (targetHeight: number) => {
+    const nextExpanded = targetHeight > collapsedHeight + 8;
+    setIsExpanded(nextExpanded);
+    onExpandedChange?.(nextExpanded);
     Animated.spring(heightValue, {
       toValue: targetHeight,
       damping: 24,
@@ -90,12 +103,35 @@ export function NavigationBottomSheet({
   );
 
   useEffect(() => {
+    if (!onSnapHeightChange) {
+      return;
+    }
+
+    const listenerId = heightValue.addListener(({ value }) => {
+      onSnapHeightChange(Math.round(value));
+    });
+
+    return () => {
+      heightValue.removeListener(listenerId);
+    };
+  }, [heightValue, onSnapHeightChange]);
+
+  useEffect(() => {
     heightValue.stopAnimation((value: number) => {
       if (value > expandedHeight) {
         heightValue.setValue(expandedHeight);
       }
+
+      const nextExpanded = value > collapsedHeight + 8;
+      setIsExpanded(nextExpanded);
+      onExpandedChange?.(nextExpanded);
     });
-  }, [expandedHeight, heightValue]);
+  }, [
+    collapsedHeight,
+    expandedHeight,
+    heightValue,
+    onExpandedChange,
+  ]);
 
   return (
     <Animated.View
@@ -130,24 +166,46 @@ export function NavigationBottomSheet({
             });
           }}
           {...panResponder.panHandlers}
-          className='items-center pt-3 pb-2'
+          className='pt-3 pb-4 px-4'
         >
-          <View
-            style={{ width: 42, height: 5, borderRadius: 999, backgroundColor: colors.textMuted }}
-          />
-        </Pressable>
+          <View className='items-center'>
+            <View
+              style={{ width: 42, height: 5, borderRadius: 999, backgroundColor: colors.textMuted }}
+            />
+          </View>
 
-        <View className='px-4 pb-4'>
-          <Text className='text-lg font-bold' style={{ color: colors.text }} numberOfLines={1}>
-            {rideName}
+          <View className='mt-4 flex-row items-start justify-between'>
+            <View className='flex-1 pr-3'>
+              <Text className='text-lg font-bold' style={{ color: colors.text }} numberOfLines={1}>
+                {rideName}
+              </Text>
+              <Text className='mt-1 text-xs' style={{ color: colors.textMuted }}>
+                {onlineCount}/{participants.length || 0} riders online
+              </Text>
+            </View>
+
+            <View
+              className='rounded-full px-3 py-1.5'
+              style={{ backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border }}
+            >
+              <Text className='text-xs font-semibold' style={{ color: colors.text }}>
+                {isExpanded ? "Collapse" : "Crew"}
+              </Text>
+            </View>
+          </View>
+
+          <Text className='mt-3 text-xs' style={{ color: colors.textMuted }}>
+            {isExpanded ? "Tap or drag down to return to the map." : "Swipe up to check rider presence and controls."}
           </Text>
-        </View>
+        </Pressable>
       </View>
 
       <ScrollView
         className='px-4'
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: 24 }}
+        style={{ flex: 1, opacity: isExpanded ? 1 : 0 }}
+        scrollEnabled={isExpanded}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 18 }}
         onContentSizeChange={(_, contentHeight) => {
           const nextHeight = Math.round(contentHeight);
           setScrollContentHeight((previous) =>
@@ -155,9 +213,14 @@ export function NavigationBottomSheet({
           );
         }}
       >
-        <Text className='text-xs font-semibold mb-2' style={{ color: colors.textMuted }}>
-          Participants
-        </Text>
+        <View className='mb-3 flex-row items-center justify-between'>
+          <Text className='text-xs font-semibold' style={{ color: colors.textMuted }}>
+            Participants
+          </Text>
+          <Text className='text-xs' style={{ color: colors.textMuted }}>
+            {participants.length} total
+          </Text>
+        </View>
 
         {participants.map((participant) => (
           <View
@@ -186,6 +249,17 @@ export function NavigationBottomSheet({
             </Text>
           </View>
         ))}
+
+        {participants.length === 0 ? (
+          <View
+            className='rounded-2xl px-4 py-5'
+            style={{ backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border }}
+          >
+            <Text className='text-sm' style={{ color: colors.textMuted }}>
+              Live participants will appear here once the session starts.
+            </Text>
+          </View>
+        ) : null}
 
         {isHost && canEndRide ? (
           <TouchableOpacity
