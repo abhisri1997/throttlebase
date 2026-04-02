@@ -3,6 +3,7 @@ import { Server, type Socket } from "socket.io";
 import { z } from "zod";
 import { authenticateLiveSocket } from "./auth.js";
 import { buildLiveRoomKey, buildRideSocketKey } from "./session-room.js";
+import { query } from "../config/db.js";
 import {
   CreateIncidentSchema,
   LiveLocationUpdateSchema,
@@ -67,8 +68,6 @@ let _liveNamespace: ReturnType<InstanceType<typeof Server>["of"]> | null =
 let _ridesNamespace: ReturnType<InstanceType<typeof Server>["of"]> | null =
   null;
 
-let _io: InstanceType<typeof Server> | null = null;
-
 export const emitToLiveRoom = (
   roomKey: string,
   event: string,
@@ -89,6 +88,31 @@ export const emitToRideRoom = (
   _ridesNamespace?.to(`ride:${rideId}`).emit(event, data);
 };
 
+const canAccessRideRoom = async (
+  rideId: string,
+  riderId: string,
+): Promise<boolean> => {
+  const result = await query(
+    `SELECT r.id
+     FROM rides r
+     WHERE r.id = $1
+       AND (
+         r.visibility = 'public'
+         OR r.captain_id = $2
+         OR EXISTS (
+           SELECT 1
+           FROM ride_participants rp
+           WHERE rp.ride_id = r.id
+             AND rp.rider_id = $2
+             AND rp.status = 'confirmed'
+         )
+       )`,
+    [rideId, riderId],
+  );
+
+  return result.rows.length > 0;
+};
+
 export const createLiveGateway = (httpServer: HttpServer) => {
   const io = new Server(httpServer, {
     cors: {
@@ -96,8 +120,6 @@ export const createLiveGateway = (httpServer: HttpServer) => {
       credentials: true,
     },
   });
-
-  _io = io;
 
   const liveNamespace = io.of("/live");
   _liveNamespace = liveNamespace;
@@ -355,9 +377,19 @@ export const createLiveGateway = (httpServer: HttpServer) => {
       return;
     }
 
-    socket.on("ride:subscribe", (rawPayload) => {
+    socket.on("ride:subscribe", async (rawPayload) => {
       try {
         const payload = JoinPayloadSchema.parse(rawPayload);
+
+        const allowed = await canAccessRideRoom(payload.rideId, rider.riderId);
+        if (!allowed) {
+          socket.emit("ride:error", {
+            error: "Not allowed to subscribe to this ride",
+            code: 403,
+          });
+          return;
+        }
+
         void socket.join(`ride:${payload.rideId}`);
         socket.emit("ride:subscribed", { rideId: payload.rideId });
       } catch {

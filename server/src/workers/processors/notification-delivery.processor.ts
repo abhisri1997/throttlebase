@@ -132,7 +132,10 @@ export const processNotificationPush = async (
     processor: "notification-push",
     riderId,
     notificationType,
-    delivered: true,
+    attempted: true,
+    delivered: false,
+    skipped: true,
+    reason: "provider_not_configured",
     handledAt: new Date().toISOString(),
   };
 };
@@ -191,7 +194,10 @@ export const processNotificationEmail = async (
     processor: "notification-email",
     riderId,
     notificationType,
-    delivered: true,
+    attempted: true,
+    delivered: false,
+    skipped: true,
+    reason: "provider_not_configured",
     email,
     handledAt: new Date().toISOString(),
   };

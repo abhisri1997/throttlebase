@@ -1017,7 +1017,7 @@ export const getLiveSessionTimeline = async (
 
 export interface ReplayOptions {
   limit?: number;
-  cursor?: number; // last seen sample id (BIGINT, used as opaque cursor)
+  cursor?: string; // opaque cursor in the format <captured_at_iso>|<id>
   fromTs?: string; // ISO timestamp lower bound (captured_at >= fromTs)
   toTs?: string;   // ISO timestamp upper bound (captured_at <= toTs)
 }
@@ -1088,8 +1088,15 @@ export const getLiveSessionReplay = async (
   let pidx = 3;
 
   if (opts.cursor) {
-    conditions.push(`s.id > $${pidx++}`);
-    params.push(opts.cursor);
+    const [cursorCapturedAt, cursorId] = opts.cursor.split("|");
+    const parsedCursorId = Number.parseInt(cursorId ?? "", 10);
+
+    if (cursorCapturedAt && Number.isFinite(parsedCursorId)) {
+      conditions.push(
+        `(s.captured_at, s.id) > ($${pidx++}::timestamptz, $${pidx++}::bigint)`,
+      );
+      params.push(cursorCapturedAt, parsedCursorId);
+    }
   }
   if (opts.fromTs) {
     conditions.push(`s.captured_at >= $${pidx++}`);
@@ -1121,7 +1128,9 @@ export const getLiveSessionReplay = async (
   const rows = samplesResult.rows;
   const hasMore = rows.length === limit + 1;
   const pageRows = hasMore ? rows.slice(0, limit) : rows;
-  const nextCursor = hasMore ? String(pageRows[pageRows.length - 1]!.id) : null;
+  const nextCursor = hasMore
+    ? `${pageRows[pageRows.length - 1]!.captured_at as string}|${String(pageRows[pageRows.length - 1]!.id)}`
+    : null;
 
   const samples = pageRows.map((row) => ({
     id: String(row.id),

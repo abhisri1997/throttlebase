@@ -104,9 +104,10 @@ export const dispatchMentionNotifications = async (
   );
 
   for (const riderId of eligibleForPush) {
+    const recipientNotificationId = `${dedupeKey}:${riderId}:push`;
     await enqueueNotificationPush({
       riderId,
-      notificationId: dedupeKey,
+      notificationId: recipientNotificationId,
       type: MENTION_NOTIFICATION_TYPE,
       title,
       body,
@@ -120,9 +121,10 @@ export const dispatchMentionNotifications = async (
 
   // Email delivery — only for email-opted-in riders (handled inside processor)
   for (const riderId of riderIds) {
+    const recipientNotificationId = `${dedupeKey}:${riderId}:email`;
     await enqueueNotificationEmail({
       riderId,
-      notificationId: dedupeKey,
+      notificationId: recipientNotificationId,
       type: MENTION_NOTIFICATION_TYPE,
       subject: title,
       body,

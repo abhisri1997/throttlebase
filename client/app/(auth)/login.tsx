@@ -24,6 +24,8 @@ export default function LoginScreen() {
   const { redirectTo } = useLocalSearchParams<{ redirectTo?: string }>();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [totpToken, setTotpToken] = useState("");
+  const [requiresTotp, setRequiresTotp] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const login = useAuthStore((state) => state.login);
 
@@ -50,10 +52,16 @@ export default function LoginScreen() {
       const res = await apiClient.post("/auth/login", {
         identifier: identifier.trim(),
         password,
+        ...(requiresTotp ? { totp_token: totpToken.trim() } : {}),
       });
       await login(res.data.token, res.data.rider);
       router.replace(resolvePostLoginRoute() as any);
     } catch (error: any) {
+      if (error?.response?.data?.code === "TWO_FACTOR_REQUIRED") {
+        setRequiresTotp(true);
+        Alert.alert("Two-Factor Required", "Enter your 6-digit authenticator code to continue.");
+        return;
+      }
       const msg = getApiErrorMessage(error, "Failed to connect to server");
       Alert.alert("Login Failed", msg);
     } finally {
@@ -118,6 +126,15 @@ export default function LoginScreen() {
               value={password}
               onChangeText={setPassword}
             />
+            {requiresTotp ? (
+              <Input
+                label='Authenticator Code'
+                placeholder='123456'
+                keyboardType='number-pad'
+                value={totpToken}
+                onChangeText={setTotpToken}
+              />
+            ) : null}
             <Button
               title='Sign In'
               onPress={handleLogin}

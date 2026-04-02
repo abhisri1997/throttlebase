@@ -180,7 +180,7 @@ export const getReplay = async (
   try {
     const opts: import("../services/live-session.service.js").ReplayOptions = {};
     if (req.query.limit) opts.limit = Number(req.query.limit);
-    if (req.query.cursor) opts.cursor = Number(req.query.cursor);
+    if (typeof req.query.cursor === "string") opts.cursor = req.query.cursor;
     if (typeof req.query.from === "string") opts.fromTs = req.query.from;
     if (typeof req.query.to === "string") opts.toTs = req.query.to;
 

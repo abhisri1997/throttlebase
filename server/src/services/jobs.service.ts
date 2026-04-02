@@ -235,15 +235,16 @@ export interface NotificationEmailJobPayload {
 export const enqueueNotificationPush = async (
   input: NotificationPushJobPayload,
 ): Promise<void> => {
-  // Dedup: skip if a push job for this notificationId is already pending/processing.
+  // Dedup per rider + notificationId so fanout across recipients is preserved.
   const existing = await query(
     `SELECT id
      FROM jobs
      WHERE type = $1
        AND status IN ('pending', 'processing')
        AND payload->>'notificationId' = $2
+       AND payload->>'riderId' = $3
      LIMIT 1`,
-    [JOB_TYPES.NOTIFICATION_PUSH, input.notificationId],
+    [JOB_TYPES.NOTIFICATION_PUSH, input.notificationId, input.riderId],
   );
   if (existing.rows.length > 0) {
     return;
@@ -259,15 +260,16 @@ export const enqueueNotificationPush = async (
 export const enqueueNotificationEmail = async (
   input: NotificationEmailJobPayload,
 ): Promise<void> => {
-  // Dedup: skip if an email job for this notificationId is already pending/processing.
+  // Dedup per rider + notificationId so fanout across recipients is preserved.
   const existing = await query(
     `SELECT id
      FROM jobs
      WHERE type = $1
        AND status IN ('pending', 'processing')
        AND payload->>'notificationId' = $2
+       AND payload->>'riderId' = $3
      LIMIT 1`,
-    [JOB_TYPES.NOTIFICATION_EMAIL, input.notificationId],
+    [JOB_TYPES.NOTIFICATION_EMAIL, input.notificationId, input.riderId],
   );
   if (existing.rows.length > 0) {
     return;

@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   TextInput,
   Alert,
-  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -17,11 +16,9 @@ import { useTheme } from "../../src/theme/ThemeContext";
 import {
   ChevronLeft,
   ShieldCheck,
-  ShieldOff,
   Clock,
   Monitor,
   Trash2,
-  QrCode,
 } from "lucide-react-native";
 
 type TotpStatus = { enabled: boolean; verified_at: string | null };
@@ -223,29 +220,29 @@ export default function SecurityModal() {
               </TouchableOpacity>
             )}
 
-            {/* QR + verify flow */}
+            {/* Secure setup flow without third-party QR rendering */}
             {setupData && (
               <View>
                 <Text className="text-sm mb-2" style={{ color: colors.textMuted }}>
-                  Scan this QR code with your authenticator app (e.g. Google Authenticator, Authy):
+                  Add this account in your authenticator app using the manual key below.
                 </Text>
                 <View
-                  className="items-center py-4 mb-3 rounded-xl"
+                  className="py-4 mb-3 rounded-xl"
                   style={{ backgroundColor: colors.bg }}
                 >
-                  <Image
-                    source={{
-                      uri: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(setupData.otpauthUrl)}`,
-                    }}
-                    style={{ width: 200, height: 200 }}
-                    resizeMode="contain"
-                  />
                   <Text
-                    className="text-xs mt-3 font-mono text-center px-4"
+                    className="text-xs font-mono text-center px-4"
                     style={{ color: colors.textMuted }}
                     selectable
                   >
                     Manual key: {setupData.secret}
+                  </Text>
+                  <Text
+                    className="text-[11px] mt-2 px-4"
+                    style={{ color: colors.textMuted }}
+                    selectable
+                  >
+                    Setup URI: {setupData.otpauthUrl}
                   </Text>
                 </View>
 

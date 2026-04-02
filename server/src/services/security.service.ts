@@ -3,6 +3,24 @@ import bcrypt from "bcrypt";
 import { query } from "../config/db.js";
 
 const APP_NAME = "ThrottleBase";
+let hasTotpVerifiedAtColumn: boolean | null = null;
+
+const ridersHasTotpVerifiedAt = async (): Promise<boolean> => {
+  if (hasTotpVerifiedAtColumn !== null) {
+    return hasTotpVerifiedAtColumn;
+  }
+
+  const result = await query(
+    `SELECT 1
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'riders'
+       AND column_name = 'totp_verified_at'
+     LIMIT 1`,
+  );
+  hasTotpVerifiedAtColumn = result.rows.length > 0;
+  return hasTotpVerifiedAtColumn;
+};
 
 // ── TOTP ──────────────────────────────────────────────────────────────────────
 
@@ -22,10 +40,24 @@ export const setupTotp = async (
   if (riderResult.rows.length === 0) throw new Error("Rider not found");
   const email = riderResult.rows[0].email as string;
 
-  await query(
-    `UPDATE riders SET two_factor_secret = $1, totp_verified_at = NULL WHERE id = $2`,
-    [secret, riderId],
-  );
+  if (await ridersHasTotpVerifiedAt()) {
+    await query(
+      `UPDATE riders
+       SET two_factor_secret = $1,
+           two_factor_enabled = false,
+           totp_verified_at = NULL
+       WHERE id = $2`,
+      [secret, riderId],
+    );
+  } else {
+    await query(
+      `UPDATE riders
+       SET two_factor_secret = $1,
+           two_factor_enabled = false
+       WHERE id = $2`,
+      [secret, riderId],
+    );
+  }
 
   const otpauthUrl = generateURI({ secret, label: email, issuer: APP_NAME, strategy: "totp" });
   return { secret, otpauthUrl };
@@ -50,12 +82,21 @@ export const verifyTotp = async (
   const verifyResult = await verify({ token, secret, strategy: "totp" });
   if (!verifyResult.valid) throw new Error("Invalid TOTP token");
 
-  await query(
-    `UPDATE riders
-     SET two_factor_enabled = true, totp_verified_at = now()
-     WHERE id = $1`,
-    [riderId],
-  );
+  if (await ridersHasTotpVerifiedAt()) {
+    await query(
+      `UPDATE riders
+       SET two_factor_enabled = true, totp_verified_at = now()
+       WHERE id = $1`,
+      [riderId],
+    );
+  } else {
+    await query(
+      `UPDATE riders
+       SET two_factor_enabled = true
+       WHERE id = $1`,
+      [riderId],
+    );
+  }
 };
 
 /**
@@ -88,12 +129,21 @@ export const disableTotp = async (
   const tokenResult = await verify({ token, secret: two_factor_secret, strategy: "totp" });
   if (!tokenResult.valid) throw new Error("Invalid TOTP token");
 
-  await query(
-    `UPDATE riders
-     SET two_factor_enabled = false, two_factor_secret = NULL, totp_verified_at = NULL
-     WHERE id = $1`,
-    [riderId],
-  );
+  if (await ridersHasTotpVerifiedAt()) {
+    await query(
+      `UPDATE riders
+       SET two_factor_enabled = false, two_factor_secret = NULL, totp_verified_at = NULL
+       WHERE id = $1`,
+      [riderId],
+    );
+  } else {
+    await query(
+      `UPDATE riders
+       SET two_factor_enabled = false, two_factor_secret = NULL
+       WHERE id = $1`,
+      [riderId],
+    );
+  }
 };
 
 /**
@@ -103,7 +153,8 @@ export const getTotpStatus = async (
   riderId: string,
 ): Promise<{ enabled: boolean; verified_at: string | null }> => {
   const result = await query(
-    `SELECT two_factor_enabled, totp_verified_at
+    `SELECT two_factor_enabled,
+            COALESCE((to_jsonb(riders)->>'totp_verified_at')::timestamptz::text, NULL) AS totp_verified_at
      FROM riders WHERE id = $1 AND deleted_at IS NULL`,
     [riderId],
   );

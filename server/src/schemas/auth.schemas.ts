@@ -33,10 +33,16 @@ export const LoginSchema = z
     email: z.email().optional(),
     identifier: z.string().trim().min(1).optional(),
     password: z.string().min(1, "Password is required"),
+    totp_token: z
+      .string()
+      .trim()
+      .regex(/^\d{6}$/, "Two-factor token must be 6 digits")
+      .optional(),
   })
   .transform((data) => ({
     identifier: data.identifier || data.email || "",
     password: data.password,
+    totp_token: data.totp_token,
   }))
   .superRefine((data, ctx) => {
     if (!data.identifier) {
