@@ -12,6 +12,7 @@ import { useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
 import { useTheme } from "../../src/theme/ThemeContext";
+import { useAuthStore } from "../../src/store/authStore";
 import {
   Bell,
   ChevronLeft,
@@ -19,12 +20,14 @@ import {
   Shield,
   UserX,
   Settings as SettingsIcon,
+  Lock,
 } from "lucide-react-native";
 
 export default function SettingsModal() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { colors, isDark, setTheme } = useTheme();
+  const rider = useAuthStore((s) => s.rider);
 
   const { data: general, isLoading: gLoading } = useQuery({
     queryKey: ["settings", "general"],
@@ -261,6 +264,21 @@ export default function SettingsModal() {
               privacy?.leaderboard_opt_in ?? true,
               (val) => updatePrivacy.mutate({ leaderboard_opt_in: val }),
             )}
+            <TouchableOpacity
+              onPress={() => router.push("/(modals)/security")}
+              className='mx-4 py-4 flex-row items-center justify-between'
+            >
+              <View className='flex-row items-center'>
+                <Lock color={colors.textMuted} size={16} />
+                <Text
+                  className='ml-2 text-base font-medium'
+                  style={{ color: colors.text }}
+                >
+                  2FA &amp; Session Security
+                </Text>
+              </View>
+              <Text style={{ color: colors.textMuted }}>➔</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -369,6 +387,32 @@ export default function SettingsModal() {
               </View>
               <Text style={{ color: colors.textMuted }}>➔</Text>
             </TouchableOpacity>
+            {rider?.is_admin ? (
+              <TouchableOpacity
+                onPress={() => router.push("/(modals)/support-admin")}
+                className='px-4 py-4 flex-row items-center justify-between'
+                style={{ borderTopWidth: 1, borderTopColor: colors.border }}
+              >
+                <View className='flex-row items-center'>
+                  <Shield color={colors.primary} size={16} />
+                  <View className='ml-2'>
+                    <Text
+                      className='text-base font-medium'
+                      style={{ color: colors.primary }}
+                    >
+                      Admin — Manage Tickets
+                    </Text>
+                    <Text
+                      className='text-sm mt-0.5'
+                      style={{ color: colors.textMuted }}
+                    >
+                      View and update all support tickets.
+                    </Text>
+                  </View>
+                </View>
+                <Text style={{ color: colors.textMuted }}>➔</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
       </ScrollView>

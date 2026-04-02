@@ -5,28 +5,33 @@
 ### Completed
 
 - Core backend modules: Auth, Riders, Rides, Routes, Community, Rewards, Notifications, Support, Live Session.
-- Core client experience: auth, tabs, ride/route/detail flows, groups, reviews, follower/following list, notifications center, support entry points.
+- Core client experience: auth, tabs, ride/route/detail flows, groups, reviews, follower/following list, notifications center, security modal, and support entry points.
 - Background jobs foundation with queue + worker runtime.
 - Ride analytics pipeline writing to `ride_history_stats` with enqueue hooks.
-- Live session lifecycle APIs, realtime gateway, client room/session integration, and worker-backed notification fanout.
+- 2FA setup/verify/disable, login activity capture, and session management APIs are implemented.
+- Login now enforces TOTP verification for riders with 2FA enabled.
+- Session revocation now invalidates existing JWT access through session-bound token checks.
+- Support admin workflow is implemented with admin-only ticket list, status updates, and agent reply support.
+- Mention-triggered notification fanout is implemented for posts and comments.
+- Live session lifecycle APIs, realtime gateway, ride-room realtime updates, client room/session integration, and worker-backed notification fanout are implemented.
 - Navigation Phase 1 full-screen experience and stabilization updates.
 
 ### In Progress
 
 - Reliability hardening around live-session reconnect behavior and operational tuning.
+- Push/email notification provider integration and device-token registration.
 
 ## Known Gaps
 
 ### Backend
 
-- 2FA/TOTP setup and verification flows are not complete.
-- Push notification (FCM/APNs) and email delivery workers are not complete.
-- Full support/admin operational workflow is not complete.
+- Push notification (FCM/APNs) and email delivery processors are still provider stubs.
+- Rider notification on admin ticket updates is not yet automated.
 
 ### Client
 
-- Security/settings surfaces for 2FA and session management remain incomplete.
 - Some advanced live session operational UX is still pending broader QA hardening.
+- Push-device registration UX and delivery verification are not yet present.
 
 ## Prioritized Backlog
 
@@ -37,9 +42,9 @@
 
 ## P1 (Security and Delivery)
 
-1. Implement 2FA setup/verify and active session management APIs + UI.
-2. Add push/email notification pipelines and preference-aware dispatch.
-3. Add mention-triggered notification flow.
+1. Integrate real push/email providers and add rider device registration.
+2. Add rider-facing updates when support tickets are changed by admins.
+3. Expand test coverage for session revocation and 2FA challenge edge-cases.
 
 ## P2 (Scale and Evolution)
 

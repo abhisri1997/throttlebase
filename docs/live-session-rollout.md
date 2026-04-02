@@ -11,6 +11,7 @@ Goal: provide reliable participant-only live ride coordination with lifecycle co
 - Realtime location transport and sampled persistence
 - Incident reporting and role-aware acknowledgment
 - Notification fanout for lifecycle and incident events
+- Ride-detail room updates for join and stop-request coordination
 
 ### Out of Scope (Initial)
 
@@ -50,6 +51,14 @@ Goal: provide reliable participant-only live ride coordination with lifecycle co
 - Add recurring sweeps and escalation jobs.
 - Enforce preference-aware notifications for live events.
 - Add event-level logs and reliability metrics.
+
+## Current Implementation Status
+
+- Phase 1 is implemented for live session lifecycle, incident creation, and participant-only access checks.
+- Phase 2 transport is implemented on `/live` with join/leave, heartbeat, location, incident, and session-ended events.
+- A lighter `/rides` namespace is also implemented for ride-detail synchronization such as join broadcasts and stop-request updates.
+- Phase 4 is partially implemented: presence sweep, incident escalation scheduling, cleanup scheduling, and notification delivery jobs are in place; external push/email providers are still pending.
+- Token-refresh-aware reconnect hardening remains open.
 
 ## Phase 5 - Progressive Release
 

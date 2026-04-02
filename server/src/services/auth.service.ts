@@ -1,6 +1,9 @@
 import bcrypt from "bcrypt";
 import jwt, { type SignOptions } from "jsonwebtoken";
+import { randomUUID } from "crypto";
+import { verify as verifyTotpToken } from "otplib";
 import { query } from "../config/db.js";
+import { recordLoginActivity, createSession } from "./security.service.js";
 
 const SALT_ROUNDS = 12;
 const JWT_SECRET = process.env.JWT_SECRET || "fallback_dev_secret";
@@ -22,6 +25,7 @@ export interface RiderPublic {
   email: string;
   display_name: string;
   username: string | null;
+  is_admin: boolean;
   experience_level: string;
   created_at: string;
 }
@@ -60,11 +64,20 @@ export const register = async (
 export const login = async (
   identifier: string,
   password: string,
+  totpToken?: string,
+  meta?: { ipAddress?: string; deviceInfo?: string },
 ): Promise<{ token: string; rider: RiderPublic }> => {
   // Find the rider by either email or username (case-insensitive)
   const result = await query(
-    `SELECT id, email, username, password_hash, display_name, experience_level, created_at
-     FROM riders
+    `SELECT id,
+            email,
+            username,
+            COALESCE((to_jsonb(r)->>'is_admin')::boolean, false) AS is_admin,
+            password_hash,
+            display_name,
+            experience_level,
+            created_at, two_factor_enabled, two_factor_secret
+     FROM riders r
      WHERE (lower(email) = lower($1) OR lower(username) = lower($1))
        AND deleted_at IS NULL`,
     [identifier],
@@ -74,7 +87,11 @@ export const login = async (
     throw new Error("Invalid email or password");
   }
 
-  const rider = result.rows[0] as RiderPublic & { password_hash: string };
+  const rider = result.rows[0] as RiderPublic & {
+    password_hash: string;
+    two_factor_enabled: boolean;
+    two_factor_secret: string | null;
+  };
 
   // Verify password against the stored bcrypt hash
   const isMatch = await bcrypt.compare(password, rider.password_hash);
@@ -82,14 +99,51 @@ export const login = async (
     throw new Error("Invalid email or password");
   }
 
+  if (rider.two_factor_enabled) {
+    if (!totpToken) {
+      throw new Error("TWO_FACTOR_REQUIRED");
+    }
+
+    if (!rider.two_factor_secret) {
+      throw new Error("Two-factor setup is incomplete");
+    }
+
+    const verification = await verifyTotpToken({
+      token: totpToken,
+      secret: rider.two_factor_secret,
+      strategy: "totp",
+    });
+
+    if (!verification.valid) {
+      throw new Error("Invalid two-factor token");
+    }
+  }
+
+  const sessionInput: Parameters<typeof createSession>[0] = {
+    riderId: rider.id,
+    sessionToken: randomUUID(),
+  };
+  if (meta?.deviceInfo) sessionInput.deviceInfo = meta.deviceInfo;
+  if (meta?.ipAddress) sessionInput.ipAddress = meta.ipAddress;
+
+  const sessionId = await createSession(sessionInput);
+
   // Generate JWT with rider info as payload
   const token = jwt.sign(
-    { riderId: rider.id, email: rider.email },
+    { riderId: rider.id, email: rider.email, sessionId },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRY_SECONDS },
   );
 
   // Return token + rider data (strip password_hash)
   const { password_hash: _, ...riderPublic } = rider;
+
+  const activityInput: Parameters<typeof recordLoginActivity>[0] = {
+    riderId: rider.id,
+  };
+  if (meta?.ipAddress) activityInput.ipAddress = meta.ipAddress;
+  if (meta?.deviceInfo) activityInput.deviceFingerprint = meta.deviceInfo;
+  await recordLoginActivity(activityInput);
+
   return { token, rider: riderPublic };
 };

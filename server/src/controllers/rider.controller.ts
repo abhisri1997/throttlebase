@@ -73,7 +73,7 @@ export const getPublicProfile = async (
     }
 
     // Return public profile (strip sensitive fields)
-    const { email, phone_number, weight_kg, ...publicProfile } = rider;
+    const { email, is_admin, phone_number, weight_kg, ...publicProfile } = rider;
     res.json({ rider: { ...publicProfile, is_following } });
   } catch (error: any) {
     console.error("Get public profile error:", error.message);

@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { query } from '../config/db.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_dev_secret';
 
@@ -13,6 +14,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback_dev_secret';
 export interface JwtPayload {
   riderId: string;
   email: string;
+  sessionId?: string;
 }
 
 // Extend Express Request to include rider info from the JWT
@@ -36,11 +38,11 @@ declare global {
  * This is the "gatekeeper" pattern. Any route that uses this middleware
  * can trust that req.rider is always populated with a valid user.
  */
-export const authenticate = (
+export const authenticate = async (
   req: Request,
   res: Response,
   next: NextFunction
-): void => {
+): Promise<void> => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -57,6 +59,27 @@ export const authenticate = (
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+
+    if (!decoded.sessionId) {
+      res.status(401).json({ error: 'Invalid or expired token.' });
+      return;
+    }
+
+    const sessionResult = await query(
+      `SELECT id
+       FROM sessions
+       WHERE id = $1
+         AND rider_id = $2
+         AND revoked_at IS NULL
+         AND expires_at > now()`,
+      [decoded.sessionId, decoded.riderId],
+    );
+
+    if (sessionResult.rows.length === 0) {
+      res.status(401).json({ error: 'Invalid or expired token.' });
+      return;
+    }
+
     req.rider = decoded;
     next();
   } catch (err) {

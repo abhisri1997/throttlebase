@@ -27,11 +27,24 @@ export const ListSupportTicketsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(25),
 });
 
+export const UpdateTicketStatusSchema = z.object({
+  status: SupportTicketStatusSchema,
+  agent_reply: z.string().trim().max(5000).optional(),
+});
+
+export const AdminListTicketsQuerySchema = z.object({
+  status: SupportTicketStatusSchema.optional(),
+  rider_id: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
 export type CreateSupportTicketInput = z.infer<
   typeof CreateSupportTicketSchema
 >;
 export type ListSupportTicketsQuery = z.infer<
   typeof ListSupportTicketsQuerySchema
 >;
+export type UpdateTicketStatusInput = z.infer<typeof UpdateTicketStatusSchema>;
+export type AdminListTicketsQuery = z.infer<typeof AdminListTicketsQuerySchema>;
 export type SupportTicketCategory = z.infer<typeof SupportTicketCategorySchema>;
 export type SupportTicketStatus = z.infer<typeof SupportTicketStatusSchema>;

@@ -7,6 +7,7 @@ import {
   HandleStopSchema,
 } from "../schemas/ride.schemas.js";
 import * as RideService from "../services/ride.service.js";
+import { emitToRideRoom } from "../realtime/gateway.js";
 
 interface RiderPayload {
   riderId: string;
@@ -168,6 +169,7 @@ export const joinRide = async (req: Request, res: Response): Promise<void> => {
     const success = await RideService.joinRide(rideId, riderId);
 
     if (success) {
+      emitToRideRoom(rideId, "ride:joined", { rideId, riderId });
       res.json({ message: "Successfully joined the ride" });
     } else {
       res
@@ -239,6 +241,7 @@ export const requestStop = async (
     const stop = await RideService.requestStop(rideId, riderId, validated);
 
     if (stop) {
+      emitToRideRoom(rideId, "ride:stop_requested", { rideId, stop });
       res.status(201).json({ message: "Stop request submitted", stop });
     } else {
       res
@@ -275,6 +278,7 @@ export const handleStopRequest = async (
     );
 
     if (success) {
+      emitToRideRoom(rideId, "ride:stop_updated", { rideId, stopId, status: validated.status });
       res.json({ message: `Stop request ${validated.status}` });
     } else {
       res.status(400).json({

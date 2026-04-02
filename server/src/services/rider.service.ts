@@ -19,6 +19,7 @@ import type { UpdateRiderInput } from "../schemas/rider.schemas.js";
 export interface RiderProfile {
   id: string;
   email: string;
+  is_admin: boolean;
   display_name: string;
   username: string | null;
   bio: string | null;
@@ -43,7 +44,13 @@ export interface RiderProfile {
 
 // Columns to SELECT for a full profile (never include password_hash)
 const PROFILE_COLUMNS = `
-  id, email, display_name, username, bio, profile_picture_url,
+  id,
+  email,
+  COALESCE((to_jsonb(riders)->>'is_admin')::boolean, false) AS is_admin,
+  display_name,
+  username,
+  bio,
+  profile_picture_url,
   experience_level, location_city, location_region,
   phone_number, weight_kg, total_rides, total_distance_km,
   total_ride_time_sec, created_at, updated_at,

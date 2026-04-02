@@ -14,6 +14,8 @@ import {
   getLiveSessionFoundationStatus,
   startLiveSession,
   acknowledgeLiveIncident,
+  getLiveSessionTimeline,
+  getLiveSessionReplay,
 } from "../services/live-session.service.js";
 
 interface RiderPayload {
@@ -149,5 +151,46 @@ export const acknowledgeIncident = async (
     res.json({ incident });
   } catch (error: any) {
     handleLiveSessionError(res, error, "Error acknowledging live incident");
+  }
+};
+
+// ── Timeline ─────────────────────────────────────────────────────────────────
+
+export const getTimeline = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const result = await getLiveSessionTimeline(
+      req.params.id as string,
+      rid(req),
+    );
+    res.json(result);
+  } catch (error: any) {
+    handleLiveSessionError(res, error, "Error fetching live session timeline");
+  }
+};
+
+// ── Replay ────────────────────────────────────────────────────────────────────
+
+export const getReplay = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const opts: import("../services/live-session.service.js").ReplayOptions = {};
+    if (req.query.limit) opts.limit = Number(req.query.limit);
+    if (typeof req.query.cursor === "string") opts.cursor = req.query.cursor;
+    if (typeof req.query.from === "string") opts.fromTs = req.query.from;
+    if (typeof req.query.to === "string") opts.toTs = req.query.to;
+
+    const result = await getLiveSessionReplay(
+      req.params.id as string,
+      rid(req),
+      opts,
+    );
+    res.json(result);
+  } catch (error: any) {
+    handleLiveSessionError(res, error, "Error fetching live session replay");
   }
 };

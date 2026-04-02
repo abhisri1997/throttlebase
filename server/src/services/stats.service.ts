@@ -1,4 +1,5 @@
 import { query } from "../config/db.js";
+import { enqueueRewardsRecompute } from "./jobs.service.js";
 
 interface TracePoint {
   rider_id: string;
@@ -257,6 +258,7 @@ export const recomputeRideHistoryStats = async (
     const stats = computeForRider(riderId, points);
     await upsertRiderStats(rideId, stats);
     await refreshRiderAggregateTotals(riderId);
+    await enqueueRewardsRecompute(riderId, "stats-recompute");
   }
 
   return { rideId, ridersProcessed: grouped.size };

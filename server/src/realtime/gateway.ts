@@ -3,6 +3,7 @@ import { Server, type Socket } from "socket.io";
 import { z } from "zod";
 import { authenticateLiveSocket } from "./auth.js";
 import { buildLiveRoomKey, buildRideSocketKey } from "./session-room.js";
+import { query } from "../config/db.js";
 import {
   CreateIncidentSchema,
   LiveLocationUpdateSchema,
@@ -64,12 +65,52 @@ const clearLocationSequenceForRider = (riderId: string): void => {
 let _liveNamespace: ReturnType<InstanceType<typeof Server>["of"]> | null =
   null;
 
+let _ridesNamespace: ReturnType<InstanceType<typeof Server>["of"]> | null =
+  null;
+
 export const emitToLiveRoom = (
   roomKey: string,
   event: string,
   data: unknown,
 ): void => {
   _liveNamespace?.to(roomKey).emit(event, data);
+};
+
+/**
+ * Broadcast a ride-level event to all subscribers of a ride room.
+ * Riders join `ride:<rideId>` rooms when they open ride detail pages.
+ */
+export const emitToRideRoom = (
+  rideId: string,
+  event: string,
+  data: unknown,
+): void => {
+  _ridesNamespace?.to(`ride:${rideId}`).emit(event, data);
+};
+
+const canAccessRideRoom = async (
+  rideId: string,
+  riderId: string,
+): Promise<boolean> => {
+  const result = await query(
+    `SELECT r.id
+     FROM rides r
+     WHERE r.id = $1
+       AND (
+         r.visibility = 'public'
+         OR r.captain_id = $2
+         OR EXISTS (
+           SELECT 1
+           FROM ride_participants rp
+           WHERE rp.ride_id = r.id
+             AND rp.rider_id = $2
+             AND rp.status = 'confirmed'
+         )
+       )`,
+    [rideId, riderId],
+  );
+
+  return result.rows.length > 0;
 };
 
 export const createLiveGateway = (httpServer: HttpServer) => {
@@ -317,6 +358,52 @@ export const createLiveGateway = (httpServer: HttpServer) => {
       }
 
       clearLocationSequenceForRider(rider.riderId);
+    });
+  });
+
+  // ── /rides namespace — lightweight ride-room subscription ──────────────────
+  // Clients join `ride:<rideId>` rooms to receive broadcast events for that
+  // ride without the full live-session authentication requirement.
+  const ridesNamespace = io.of("/rides");
+  _ridesNamespace = ridesNamespace;
+  ridesNamespace.use(authenticateLiveSocket);
+
+  ridesNamespace.on("connection", (socket) => {
+    const rider = socket.data.rider as RiderPayload | undefined;
+
+    if (!rider?.riderId) {
+      socket.emit("ride:error", { error: "Authentication context missing", code: 401 });
+      socket.disconnect(true);
+      return;
+    }
+
+    socket.on("ride:subscribe", async (rawPayload) => {
+      try {
+        const payload = JoinPayloadSchema.parse(rawPayload);
+
+        const allowed = await canAccessRideRoom(payload.rideId, rider.riderId);
+        if (!allowed) {
+          socket.emit("ride:error", {
+            error: "Not allowed to subscribe to this ride",
+            code: 403,
+          });
+          return;
+        }
+
+        void socket.join(`ride:${payload.rideId}`);
+        socket.emit("ride:subscribed", { rideId: payload.rideId });
+      } catch {
+        socket.emit("ride:error", { error: "Invalid ride:subscribe payload", code: 400 });
+      }
+    });
+
+    socket.on("ride:unsubscribe", (rawPayload) => {
+      try {
+        const payload = JoinPayloadSchema.parse(rawPayload);
+        void socket.leave(`ride:${payload.rideId}`);
+      } catch {
+        // Ignore malformed unsubscribe
+      }
     });
   });
 

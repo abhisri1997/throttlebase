@@ -1,4 +1,11 @@
 {
+  "_validated": "2026-04-02 — both scripts confirmed present and executable at .github/hooks/scripts/",
+  "_notes": [
+    "context-memory-pre.sh: allows all tool calls; injects systemMessage to read ai-assistant.md first.",
+    "context-memory-post.sh: injects systemMessage reminding agent to update ai-assistant.md after code changes.",
+    "Scripts are non-blocking (permissionDecision: allow / decision: continue) — purely advisory.",
+    "No gaps: referenced paths exist. Consider adding a PostToolUse hook for post-commit doc sync if needed."
+  ],
   "hooks": {
     "PreToolUse": [
       {

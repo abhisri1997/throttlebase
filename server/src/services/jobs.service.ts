@@ -156,6 +156,45 @@ export const enqueueLiveIncidentReported = async (
   });
 };
 
+export const enqueueRewardsRecompute = async (
+  riderId: string,
+  source: "stats-recompute" | "manual",
+): Promise<void> => {
+  const existing = await query(
+    `SELECT id
+     FROM jobs
+     WHERE type = $1
+       AND status IN ('pending', 'processing')
+       AND payload->>'riderId' = $2
+     LIMIT 1`,
+    [JOB_TYPES.REWARDS_RECOMPUTE, riderId],
+  );
+
+  if (existing.rows.length > 0) {
+    return;
+  }
+
+  await enqueueJob({
+    type: JOB_TYPES.REWARDS_RECOMPUTE,
+    payload: {
+      riderId,
+      source,
+      requestedAt: new Date().toISOString(),
+    },
+    maxAttempts: 3,
+  });
+};
+
+export const enqueueCleanupExpiredSessionsJob =
+  async (): Promise<boolean> => {
+    return enqueueRecurringJobIfDue(
+      JOB_TYPES.CLEANUP_EXPIRED_SESSIONS,
+      { enqueuedAt: new Date().toISOString() },
+      3600, // once per hour
+      1,
+    );
+  };
+
 export const enqueueLivePresenceSweepJob = async (): Promise<boolean> => {
   return enqueueRecurringJobIfDue(
     JOB_TYPES.LIVE_PRESENCE_SWEEP,
@@ -172,4 +211,73 @@ export const enqueueLiveIncidentEscalationJob = async (): Promise<boolean> => {
     45,
     1,
   );
+};
+
+// ── Notification delivery jobs ────────────────────────────────────────────────
+
+export interface NotificationPushJobPayload {
+  riderId: string;
+  notificationId: string;
+  type: string;
+  title?: string | null;
+  body?: string | null;
+  data?: Record<string, unknown> | null;
+}
+
+export interface NotificationEmailJobPayload {
+  riderId: string;
+  notificationId: string;
+  type: string;
+  subject: string;
+  body: string;
+}
+
+export const enqueueNotificationPush = async (
+  input: NotificationPushJobPayload,
+): Promise<void> => {
+  // Dedup per rider + notificationId so fanout across recipients is preserved.
+  const existing = await query(
+    `SELECT id
+     FROM jobs
+     WHERE type = $1
+       AND status IN ('pending', 'processing')
+       AND payload->>'notificationId' = $2
+       AND payload->>'riderId' = $3
+     LIMIT 1`,
+    [JOB_TYPES.NOTIFICATION_PUSH, input.notificationId, input.riderId],
+  );
+  if (existing.rows.length > 0) {
+    return;
+  }
+
+  await enqueueJob({
+    type: JOB_TYPES.NOTIFICATION_PUSH,
+    payload: { ...input, enqueuedAt: new Date().toISOString() },
+    maxAttempts: 3,
+  });
+};
+
+export const enqueueNotificationEmail = async (
+  input: NotificationEmailJobPayload,
+): Promise<void> => {
+  // Dedup per rider + notificationId so fanout across recipients is preserved.
+  const existing = await query(
+    `SELECT id
+     FROM jobs
+     WHERE type = $1
+       AND status IN ('pending', 'processing')
+       AND payload->>'notificationId' = $2
+       AND payload->>'riderId' = $3
+     LIMIT 1`,
+    [JOB_TYPES.NOTIFICATION_EMAIL, input.notificationId, input.riderId],
+  );
+  if (existing.rows.length > 0) {
+    return;
+  }
+
+  await enqueueJob({
+    type: JOB_TYPES.NOTIFICATION_EMAIL,
+    payload: { ...input, enqueuedAt: new Date().toISOString() },
+    maxAttempts: 3,
+  });
 };

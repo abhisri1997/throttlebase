@@ -83,10 +83,23 @@ export const handleLogin = async (
       return;
     }
 
-    const { identifier, password } = parseResult.data;
+    const { identifier, password, totp_token } = parseResult.data;
+
+    // Pass client IP and user-agent for login activity recording
+    const rawIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+      ?? req.socket.remoteAddress;
+    const rawAgent = (req.headers["user-agent"] as string | undefined)?.substring(0, 255);
+    const meta: { ipAddress?: string; deviceInfo?: string } = {};
+    if (rawIp) meta.ipAddress = rawIp;
+    if (rawAgent) meta.deviceInfo = rawAgent;
 
     // Call the service to login
-    const result = await AuthService.login(identifier, password);
+    const result = await AuthService.login(
+      identifier,
+      password,
+      totp_token,
+      meta,
+    );
 
     res.status(200).json({
       message: "Login successful",
@@ -97,6 +110,17 @@ export const handleLogin = async (
     // Don't leak specific info about which field was wrong
     if (error.message === "Invalid email or password") {
       res.status(401).json({ error: "Invalid email or password" });
+      return;
+    }
+    if (error.message === "TWO_FACTOR_REQUIRED") {
+      res.status(401).json({
+        error: "Two-factor authentication code is required",
+        code: "TWO_FACTOR_REQUIRED",
+      });
+      return;
+    }
+    if (error.message === "Invalid two-factor token") {
+      res.status(401).json({ error: "Invalid two-factor token" });
       return;
     }
     console.error("Login error:", error.message);

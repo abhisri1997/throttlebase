@@ -12,6 +12,7 @@ import rewardsRoutes from "./routes/rewards.routes.js";
 import notificationRoutes from "./routes/notifications.routes.js";
 import supportRoutes from "./routes/support.routes.js";
 import liveSessionRoutes from "./routes/live-session.routes.js";
+import securityRoutes from "./routes/security.routes.js";
 import { createLiveGateway } from "./realtime/gateway.js";
 import cors from "cors";
 
@@ -57,6 +58,7 @@ app.use("/api/rewards", rewardsRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/support", supportRoutes);
 app.use("/api/live", liveSessionRoutes);
+app.use("/api/security", securityRoutes);
 
 // Database health check route
 app.get("/db-test", async (req, res) => {
