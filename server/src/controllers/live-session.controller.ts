@@ -10,6 +10,7 @@ import {
   createLiveIncident,
   endLiveSession,
   getLiveSession,
+  getLiveLocationDropTelemetry,
   getLiveSessionFoundationStatus,
   startLiveSession,
   acknowledgeLiveIncident,
@@ -45,10 +46,14 @@ export const getFoundationStatus = async (
 ): Promise<void> => {
   try {
     const status = await getLiveSessionFoundationStatus();
+    const location_drop_telemetry = getLiveLocationDropTelemetry();
     res.json({
       module: "live-session",
       phase: 0,
       status,
+      ...(location_drop_telemetry.enabled
+        ? { location_drop_telemetry }
+        : {}),
     });
   } catch (error: any) {
     console.error("Error checking live-session foundation status:", error);
@@ -104,7 +109,9 @@ export const endSession = async (
       emitToLiveRoom(roomKey, "session:ended", {
         rideId: result.session.ride_id,
         sessionId: result.session.id,
-        reason: data.reason ?? null,
+        endedAt: result.session.ended_at,
+        endedBy: result.session.ended_by,
+        reason: result.session.ended_reason ?? data.reason ?? null,
       });
     }
 

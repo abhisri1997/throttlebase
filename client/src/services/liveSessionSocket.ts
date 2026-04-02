@@ -50,6 +50,8 @@ export type SessionErrorEvent = {
 export type SessionEndedEvent = {
   rideId: string;
   sessionId: string;
+  endedAt: string | null;
+  endedBy: string | null;
   reason: string | null;
 };
 

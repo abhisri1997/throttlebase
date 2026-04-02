@@ -9,6 +9,7 @@ type Props = {
   remainingLabel: string;
   statusLabel: "NOT_STARTED" | "ACTIVE" | "COMPLETED";
   topOffset?: number;
+  onMeasuredHeight?: (height: number) => void;
 };
 
 export function NavigationInstructionOverlay({
@@ -18,6 +19,7 @@ export function NavigationInstructionOverlay({
   remainingLabel,
   statusLabel,
   topOffset = 0,
+  onMeasuredHeight,
 }: Props) {
   const { colors } = useTheme();
 
@@ -32,6 +34,9 @@ export function NavigationInstructionOverlay({
           backgroundColor: colors.surface + "F0",
           borderWidth: 1,
           borderColor: colors.border,
+        }}
+        onLayout={(event) => {
+          onMeasuredHeight?.(Math.round(event.nativeEvent.layout.height));
         }}
       >
         <View className='flex-row justify-between items-center'>

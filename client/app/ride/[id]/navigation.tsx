@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Alert,
   AppState,
   type AppStateStatus,
@@ -21,7 +22,10 @@ import { apiClient } from "../../../src/api/client";
 import { useAuthStore } from "../../../src/store/authStore";
 import { useLiveSessionStore } from "../../../src/store/liveSessionStore";
 import { useTheme } from "../../../src/theme/ThemeContext";
-import { NavigationBottomSheet } from "../../../src/features/navigation/components/NavigationBottomSheet";
+import {
+  NAVIGATION_SHEET_COLLAPSED_HEIGHT,
+  NavigationBottomSheet,
+} from "../../../src/features/navigation/components/NavigationBottomSheet";
 import { NavigationInstructionOverlay } from "../../../src/features/navigation/components/NavigationInstructionOverlay";
 import {
   fetchNavigationRoute,
@@ -32,7 +36,7 @@ import type {
   NavigationRoute,
   RideParticipantView,
 } from "../../../src/features/navigation/types/navigation";
-import { ChevronLeft } from "lucide-react-native";
+import { ChevronLeft, Navigation } from "lucide-react-native";
 
 const DARK_MAP_STYLE = [
   { elementType: "geometry", stylers: [{ color: "#0b1220" }] },
@@ -152,6 +156,7 @@ export default function RideNavigationScreen() {
     isJoining,
     session: liveSocketSession,
     presence,
+    locations,
     sessionEndedReason,
   } = useLiveSessionStore();
 
@@ -162,6 +167,10 @@ export default function RideNavigationScreen() {
   const [routeLoading, setRouteLoading] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [topControlsHeight, setTopControlsHeight] = useState(0);
+  const [instructionOverlayHeight, setInstructionOverlayHeight] = useState(0);
+  const bottomSheetHeightValue = useRef(
+    new Animated.Value(NAVIGATION_SHEET_COLLAPSED_HEIGHT),
+  );
 
   const mapRef = useRef<InstanceType<typeof MapView> | null>(null);
   const lastCameraUpdateRef = useRef(0);
@@ -498,7 +507,66 @@ export default function RideNavigationScreen() {
     }));
   }, [presence, ride?.participants]);
 
+  const peerLocationMarkers = useMemo(() => {
+    if (!ride?.participants) {
+      return [];
+    }
+
+    const displayNameByRiderId = new Map<string, string>();
+    for (const participant of ride.participants) {
+      displayNameByRiderId.set(
+        participant.rider_id,
+        participant.display_name || "Rider",
+      );
+    }
+
+    return Object.values(locations)
+      .filter((location) => location.riderId !== currentRider?.id)
+      .filter((location) => presence[location.riderId]?.isOnline !== false)
+      .map((location) => ({
+        ...location,
+        displayName: displayNameByRiderId.get(location.riderId) || "Rider",
+      }));
+  }, [currentRider?.id, locations, presence, ride?.participants]);
+
   const isHost = ride?.captain_id === currentRider?.id;
+  const onlineParticipants = participants.filter((participant) => participant.isOnline).length;
+  const peerOnlineCount = peerLocationMarkers.length;
+  const statusBannerTop = topControlsHeight + instructionOverlayHeight + 14;
+
+  const recenterMap = () => {
+    if (!mapRef.current) {
+      return;
+    }
+
+    if (currentLocation) {
+      const center = calculateForwardOffset(currentLocation, currentHeading, 55);
+      mapRef.current.animateCamera(
+        {
+          center,
+          heading: currentHeading,
+          pitch: 50,
+          zoom: 17,
+        },
+        { duration: 650 },
+      );
+      return;
+    }
+
+    if (!rideStart) {
+      return;
+    }
+
+    mapRef.current.animateCamera(
+      {
+        center: rideStart,
+        heading: 0,
+        pitch: 0,
+        zoom: 14,
+      },
+      { duration: 650 },
+    );
+  };
 
   if (isLoading) {
     return (
@@ -543,6 +611,15 @@ export default function RideNavigationScreen() {
         <Marker coordinate={rideStart} title='Start' pinColor='#22c55e' />
         <Marker coordinate={rideEnd} title='Destination' pinColor='#ef4444' />
 
+        {waypointCoords.map((waypoint: LatLng, index: number) => (
+          <Marker
+            key={`${waypoint.latitude},${waypoint.longitude},${index}`}
+            coordinate={waypoint}
+            title={`Stop ${index + 1}`}
+            pinColor='#f59e0b'
+          />
+        ))}
+
         {navigationRoute?.polyline?.length ? (
           <Polyline
             coordinates={navigationRoute.polyline}
@@ -550,6 +627,23 @@ export default function RideNavigationScreen() {
             strokeWidth={5}
           />
         ) : null}
+
+        {peerLocationMarkers.map((marker) => (
+          <Marker
+            key={`${marker.riderId}:${marker.capturedAt}`}
+            coordinate={{
+              latitude: marker.lat,
+              longitude: marker.lon,
+            }}
+            title={marker.displayName}
+            description={
+              marker.speedKmh == null
+                ? "Live rider"
+                : `${marker.speedKmh.toFixed(1)} km/h`
+            }
+            pinColor='#f59e0b'
+          />
+        ))}
 
         {currentLocation ? (
           <Marker
@@ -565,16 +659,21 @@ export default function RideNavigationScreen() {
         edges={["top"]}
         style={{ zIndex: 70, elevation: 70 }}
         onLayout={(event) => {
-          setTopControlsHeight(Math.round(event.nativeEvent.layout.height));
+          const nextHeight = Math.round(event.nativeEvent.layout.height);
+          setTopControlsHeight((previous) =>
+            Math.abs(previous - nextHeight) > 2 ? nextHeight : previous,
+          );
         }}
       >
         <View className='flex-row items-center justify-between'>
           <TouchableOpacity
             onPress={() => router.replace(`/ride/${id}` as any)}
-            className='w-10 h-10 rounded-full items-center justify-center'
-            style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+            className='h-11 rounded-full flex-row items-center justify-center px-4'
+            style={{ backgroundColor: "rgba(15,23,42,0.74)", borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" }}
           >
             <ChevronLeft color='white' size={22} />
+            {/* TODO: Should we name this button "Exit" or "Back"? */}
+            <Text className='ml-1 text-sm font-semibold text-white'>Exit</Text>
           </TouchableOpacity>
 
           {isHost && navState === "NOT_STARTED" ? (
@@ -589,7 +688,47 @@ export default function RideNavigationScreen() {
               </Text>
             </TouchableOpacity>
           ) : (
-            <View />
+            <View
+              className='rounded-2xl px-3 py-2'
+              style={{ backgroundColor: "rgba(15,23,42,0.74)", borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" }}
+            >
+              <Text className='text-xs font-semibold text-white'>
+                {navState === "ACTIVE"
+                  ? `${onlineParticipants}/${participants.length} online`
+                  : navState === "COMPLETED"
+                    ? "Ride ended"
+                    : "Route preview"}
+              </Text>
+
+              {navState === "ACTIVE" ? (
+                <View className='mt-1 flex-row items-center'>
+                  <View
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: 4,
+                      backgroundColor: "#2563eb",
+                    }}
+                  />
+                  <Text className='ml-1 text-[10px]' style={{ color: "rgba(255,255,255,0.82)" }}>
+                    You
+                  </Text>
+
+                  <View
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: 4,
+                      backgroundColor: "#f59e0b",
+                      marginLeft: 8,
+                    }}
+                  />
+                  <Text className='ml-1 text-[10px]' style={{ color: "rgba(255,255,255,0.82)" }}>
+                    Peers {peerOnlineCount}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           )}
         </View>
       </SafeAreaView>
@@ -605,19 +744,53 @@ export default function RideNavigationScreen() {
         remainingLabel={formatDistance(remainingDistanceMeters)}
         statusLabel={navState}
         topOffset={topControlsHeight + 8}
+        onMeasuredHeight={(height) => {
+          setInstructionOverlayHeight((previous) =>
+            Math.abs(previous - height) > 2 ? height : previous,
+          );
+        }}
       />
 
-      {routeLoading ? (
-        <View className='absolute top-28 self-center px-3 py-2 rounded-full' style={{ backgroundColor: colors.surface }}>
-          <Text style={{ color: colors.textMuted }}>Loading route...</Text>
+      {routeLoading || (sessionEndedReason && navState === "COMPLETED") ? (
+        <View
+          className='absolute left-0 right-0 items-center px-4'
+          style={{ top: statusBannerTop, zIndex: 65, elevation: 65 }}
+        >
+          {routeLoading ? (
+            <View className='mb-2 rounded-full px-3 py-2' style={{ backgroundColor: colors.surface }}>
+              <Text style={{ color: colors.textMuted }}>Loading route...</Text>
+            </View>
+          ) : null}
+
+          {sessionEndedReason && navState === "COMPLETED" ? (
+            <View className='rounded-full px-4 py-2' style={{ backgroundColor: colors.danger }}>
+              <Text className='text-white text-xs'>Ended: {sessionEndedReason}</Text>
+            </View>
+          ) : null}
         </View>
       ) : null}
 
-      {sessionEndedReason && navState === "COMPLETED" ? (
-        <View className='absolute top-28 self-center px-4 py-2 rounded-full' style={{ backgroundColor: colors.danger }}>
-          <Text className='text-white text-xs'>Ended: {sessionEndedReason}</Text>
-        </View>
-      ) : null}
+      <Animated.View
+        style={{
+          position: "absolute",
+          right: 16,
+          bottom: Animated.add(bottomSheetHeightValue.current, 12),
+          zIndex: 65,
+          elevation: 65,
+        }}
+      >
+        <TouchableOpacity
+          onPress={recenterMap}
+          className='h-12 w-12 items-center justify-center rounded-full'
+          style={{
+            backgroundColor: colors.surface,
+            borderWidth: 1,
+            borderColor: colors.border,
+          }}
+        >
+          <Navigation color={colors.text} size={20} />
+        </TouchableOpacity>
+      </Animated.View>
 
       <NavigationBottomSheet
         rideName={ride.title}
@@ -626,6 +799,9 @@ export default function RideNavigationScreen() {
         canEndRide={navState === "ACTIVE"}
         onEndRide={() => endRideMutation.mutate()}
         ending={endRideMutation.isPending}
+        onSnapHeightChange={(height) => {
+          bottomSheetHeightValue.current.setValue(height);
+        }}
       />
     </View>
   );

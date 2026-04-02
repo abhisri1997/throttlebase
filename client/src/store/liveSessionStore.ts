@@ -134,7 +134,7 @@ const attachSocketListeners = () => {
         ? {
             ...state.session,
             status: "ended",
-            ended_at: new Date().toISOString(),
+            ended_at: event.endedAt ?? new Date().toISOString(),
           }
         : state.session,
       inRoom: false,
