@@ -61,15 +61,18 @@ This keeps permission checks and state transitions in service logic while contro
 
 - Feed posts, comments, likes, follows, groups
 - Async @mention detection on post/comment creation with in-app notification creation
+- Post and comment composers provide username suggestions while typing @mentions
+- Rendered @mentions in posts/comments navigate to rider profiles
 - Ride reviews linked to completed participation
 - Rewards and leaderboard views aligned to analytics aggregates
 
 ### Notifications and Support
 
 - In-app notifications with per-type in-app/push/email preferences
+- Mention notifications deep-link into the relevant post, including comment highlight context when available
 - Push/email delivery jobs are queued and preference-aware, but provider integration is still stubbed
 - Rider settings and privacy surfaces
-- Support ticket submission and self-history
+- Support ticket submission, self-history, rider follow-up replies, and rider-side closure controls
 - Admin support inbox with ticket filtering, status updates, and optional agent replies
 
 ### Live Session and Navigation
@@ -79,6 +82,9 @@ This keeps permission checks and state transitions in service logic while contro
 - Lightweight ride-room subscriptions over `/rides` for join and stop-request updates on ride detail
 - Ride-room subscription authorization enforces ride visibility/participation checks
 - Client store-driven live controls and participant map behavior
+- Ride detail screen automatically refreshes ride and live-session state while active so participants see session-start transitions without leaving the screen
+- Ride detail and full-screen navigation maps now share canonical route composition as current rider location -> start point -> approved stops -> destination, with origin fallback to start when device location is unavailable
+- Live socket disconnects when a session ends to prevent stale connected state on completed rides
 - Worker-backed presence sweep, incident escalation scheduling, and lifecycle notification fanout
 - Navigation Phase 1 full-screen route and map UX base
 

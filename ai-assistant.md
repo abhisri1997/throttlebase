@@ -47,6 +47,7 @@ Primary code locations:
 - API inventory (grouped endpoints): `docs/api-endpoints.md`
 - Technical decisions and implementation notes: `docs/technical-decisions.md`
 - Delivery status, gaps, and backlog: `docs/project-status.md`
+- UAT and stakeholder validation guide: `docs/uat-test-plan-feature-remaining-features.md`
 - Live session rollout details: `docs/live-session-rollout.md`
 - Live navigation implementation notes: `docs/live-navigation-phase1.md`
 
@@ -85,10 +86,20 @@ Primary code locations:
 - Ride-room subscriptions now enforce ride visibility/participation checks before joining `ride:<rideId>` rooms.
 - Mention push/email fanout now uses recipient-scoped notification identifiers to prevent dedupe collapse.
 - Security/profile flows now tolerate older schemas where `riders.is_admin` and `riders.totp_verified_at` are not present.
+- A stakeholder-facing UAT guide now exists with a local PDF generation workflow for validating the recently delivered feature set.
+- Rider support center now supports opening individual tickets with a dedicated detail view, including agent replies when present.
+- Riders can now send follow-up replies and close their own support tickets from ticket detail.
+- Support ticket detail now renders a chronological conversation thread from persisted ticket messages, with a legacy fallback for older tickets.
+- Mention UX now includes username suggestions in post/comment composers, clickable @mentions in rendered content, and notification deep links into the referenced post/comment context.
+- Ride detail now auto-refreshes ride/live-session state in-app so participants see session start transitions without backing out and reopening the screen.
+- Ride detail now hides Start Live after ride completion and limits Update Starting Location to scheduled rides only.
+- Live session socket now disconnects automatically when a session ends, and reconnects on the next Start Live flow.
+- Ride detail and full-screen navigation maps now use canonical rider-first routing order: current rider location -> start point -> approved stops -> destination, with location-unavailable fallback origin set to start.
 
 ## Assistant Operating Notes
 
 - Keep this file concise and avoid embedding large specs.
 - Put detailed design or planning content in `/docs` and link from here.
 - When major architecture or delivery status changes, update this file and the corresponding source doc in the same change.
+- Workspace skill `cost-effective-orchestrator` is available under `.github/skills` for cost-aware routing between single-agent, hybrid, multi-agent, and layered task execution.
 - Do not add historical noise; keep only currently useful context.

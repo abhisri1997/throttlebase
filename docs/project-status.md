@@ -6,6 +6,8 @@
 
 - Core backend modules: Auth, Riders, Rides, Routes, Community, Rewards, Notifications, Support, Live Session.
 - Core client experience: auth, tabs, ride/route/detail flows, groups, reviews, follower/following list, notifications center, security modal, and support entry points.
+- Rider support center now includes per-ticket detail opening with support-reply visibility.
+- Rider support tickets now allow follow-up replies and rider-initiated closure from ticket detail.
 - Background jobs foundation with queue + worker runtime.
 - Ride analytics pipeline writing to `ride_history_stats` with enqueue hooks.
 - 2FA setup/verify/disable, login activity capture, and session management APIs are implemented.
@@ -13,8 +15,10 @@
 - Session revocation now invalidates existing JWT access through session-bound token checks.
 - Support admin workflow is implemented with admin-only ticket list, status updates, and agent reply support.
 - Mention-triggered notification fanout is implemented for posts and comments.
+- Mention UX now includes composer suggestions, clickable @mention profile links, and mention-notification deep links into post/comment context.
 - Live session lifecycle APIs, realtime gateway, ride-room realtime updates, client room/session integration, and worker-backed notification fanout are implemented.
 - Navigation Phase 1 full-screen experience and stabilization updates.
+- Ride detail and full-screen navigation maps now render road-following routes in canonical order: current location -> start -> approved stops -> destination, with automatic origin fallback to start when device location is unavailable.
 
 ### In Progress
 

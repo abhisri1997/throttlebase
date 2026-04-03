@@ -25,6 +25,7 @@ For request/response schema details, use Swagger at `/api-docs`.
 - `GET /api/riders/me`
 - `PATCH /api/riders/me`
 - `DELETE /api/riders/me`
+- `GET /api/riders/search` (username-prefix search for mention suggestions)
 - `GET /api/riders/:id`
 
 ## Rides
@@ -58,6 +59,7 @@ For request/response schema details, use Swagger at `/api-docs`.
 - `DELETE /api/community/posts/:id`
 - `GET /api/community/posts/:id/comments`
 - `POST /api/community/posts/:id/comments`
+- `GET /api/community/comments/:id`
 - `POST /api/community/posts/:id/like`
 - `DELETE /api/community/posts/:id/like`
 - `POST /api/community/riders/:id/follow`
@@ -104,6 +106,7 @@ For request/response schema details, use Swagger at `/api-docs`.
 - `GET /api/support`
 - `POST /api/support`
 - `GET /api/support/:id`
+- `PATCH /api/support/:id` (rider can add `rider_reply` and/or `close_ticket=true` on own ticket)
 - `GET /api/support/admin/tickets`
 - `PATCH /api/support/:id/status`
 
