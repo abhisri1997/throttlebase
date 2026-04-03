@@ -5,6 +5,7 @@ import type {
   CreateGroupInput,
   CreateReviewInput,
 } from "../schemas/community.schemas.js";
+import { attachMentionedRiders } from "./mention.service.js";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // POSTS
@@ -34,7 +35,7 @@ export const getFeed = async (limit = 50, offset = 0) => {
      LIMIT $1 OFFSET $2`,
     [limit, offset],
   );
-  return result.rows;
+  return attachMentionedRiders(result.rows);
 };
 
 export const getPostById = async (postId: string) => {
@@ -44,7 +45,12 @@ export const getPostById = async (postId: string) => {
      WHERE p.id = $1`,
     [postId],
   );
-  return result.rows[0] || null;
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const [post] = await attachMentionedRiders(result.rows);
+  return post ?? null;
 };
 
 export const updatePost = async (
@@ -98,7 +104,24 @@ export const getComments = async (postId: string) => {
      ORDER BY c.created_at ASC`,
     [postId],
   );
-  return result.rows;
+  return attachMentionedRiders(result.rows);
+};
+
+export const getCommentById = async (commentId: string) => {
+  const result = await query(
+    `SELECT c.*, r.display_name AS author_name
+     FROM comments c
+     JOIN riders r ON c.rider_id = r.id
+     WHERE c.id = $1`,
+    [commentId],
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const [comment] = await attachMentionedRiders(result.rows);
+  return comment ?? null;
 };
 
 export const updateComment = async (

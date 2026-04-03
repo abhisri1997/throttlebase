@@ -81,6 +81,32 @@ export const getPublicProfile = async (
   }
 };
 
+export const searchMentionSuggestions = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const queryText = String(req.query.query ?? "").trim();
+    const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 10);
+
+    if (!queryText || !/^[a-zA-Z0-9_]+$/.test(queryText)) {
+      res.json([]);
+      return;
+    }
+
+    const suggestions = await RiderService.searchMentionSuggestions(
+      req.rider!.riderId,
+      queryText,
+      limit,
+    );
+
+    res.json(suggestions);
+  } catch (error: any) {
+    console.error("Search mention suggestions error:", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 /**
  * PATCH /api/riders/me
  * Update the authenticated rider's profile.

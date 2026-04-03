@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -14,10 +14,16 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Camera, X } from "lucide-react-native";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
 import { useAuthStore } from "../../src/store/authStore";
 import { useTheme } from "../../src/theme/ThemeContext";
+import { MentionSuggestions } from "../../src/components/MentionSuggestions";
+import {
+  applyMentionSuggestion,
+  findActiveMention,
+  type MentionSuggestion,
+} from "../../src/utils/mentions";
 const submitPost = async (content: string, editId?: string) => {
   if (editId) {
     const { data } = await apiClient.patch(`/api/community/posts/${editId}`, {
@@ -43,6 +49,40 @@ export default function CreatePostModal() {
     defaultContent?: string;
   }>();
   const [content, setContent] = useState(params.defaultContent || "");
+  const [selection, setSelection] = useState({
+    start: (params.defaultContent || "").length,
+    end: (params.defaultContent || "").length,
+  });
+  const [mentionQuery, setMentionQuery] = useState("");
+  const activeMention = useMemo(
+    () => findActiveMention(content, selection.start),
+    [content, selection.start],
+  );
+
+  useEffect(() => {
+    if (!activeMention || activeMention.query.length === 0) {
+      setMentionQuery("");
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setMentionQuery(activeMention.query);
+    }, 150);
+
+    return () => clearTimeout(timeout);
+  }, [activeMention]);
+
+  const mentionSuggestionsQuery = useQuery({
+    queryKey: ["mention-suggestions", mentionQuery],
+    queryFn: async () => {
+      const { data } = await apiClient.get("/api/riders/search", {
+        params: { query: mentionQuery, limit: 6 },
+      });
+      return data as MentionSuggestion[];
+    },
+    enabled: mentionQuery.length > 0,
+  });
+
   const closeModal = () => {
     if (router.canGoBack()) {
       router.back();
@@ -73,15 +113,38 @@ export default function CreatePostModal() {
     mutation.mutate();
   };
 
+  const handleSelectMention = (suggestion: MentionSuggestion) => {
+    if (!activeMention) {
+      return;
+    }
+
+    const nextValue = applyMentionSuggestion(
+      content,
+      activeMention,
+      suggestion.username,
+    );
+    setContent(nextValue.text);
+    setSelection({ start: nextValue.cursor, end: nextValue.cursor });
+    setMentionQuery("");
+  };
+
+  const showMentionSuggestions =
+    !!activeMention &&
+    mentionQuery.length > 0 &&
+    (mentionSuggestionsQuery.isLoading ||
+      (mentionSuggestionsQuery.data?.length ?? 0) > 0);
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 50 : 0}
       style={{ flex: 1, backgroundColor: colors.bg }}
     >
       <Pressable onPress={Keyboard.dismiss} style={{ flex: 1 }}>
         <SafeAreaView
           className='flex-1 px-4 pt-4'
           style={{ backgroundColor: colors.bg }}
+          edges={["top"]}
         >
           {/* Header */}
           <View className='flex-row justify-between items-center mb-6'>
@@ -115,8 +178,22 @@ export default function CreatePostModal() {
             autoFocus
             value={content}
             onChangeText={setContent}
+            selection={selection}
+            onSelectionChange={({ nativeEvent }) =>
+              setSelection(nativeEvent.selection)
+            }
             textAlignVertical='top'
           />
+          {showMentionSuggestions ? (
+            <View className='mb-4'>
+              <MentionSuggestions
+                visible={showMentionSuggestions}
+                suggestions={mentionSuggestionsQuery.data ?? []}
+                isLoading={mentionSuggestionsQuery.isLoading}
+                onSelect={handleSelectMention}
+              />
+            </View>
+          ) : null}
           {/* Toolbar */}
           <View className='border-t py-4 flex-row items-center' style={{ borderTopColor: colors.border }}>
             <TouchableOpacity

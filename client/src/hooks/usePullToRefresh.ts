@@ -1,9 +1,11 @@
 import { useState, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 
 export function usePullToRefresh(refetch: () => Promise<any>) {
   const [refreshing, setRefreshing] = useState(false);
+  const queryClient = useQueryClient();
   const player = useAudioPlayer(require('../../assets/button-press.wav'));
 
   const onRefresh = useCallback(async () => {
@@ -13,6 +15,8 @@ export function usePullToRefresh(refetch: () => Promise<any>) {
 
     try {
       await refetch();
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      await queryClient.refetchQueries({ queryKey: ['notifications'], type: 'active' });
       
       // On success, play the loaded tick sound and trigger success haptic
       player.play();
@@ -24,7 +28,7 @@ export function usePullToRefresh(refetch: () => Promise<any>) {
     } finally {
       setRefreshing(false);
     }
-  }, [refetch, player]);
+  }, [refetch, player, queryClient]);
 
   return { refreshing, onRefresh };
 }

@@ -42,6 +42,13 @@ export interface RiderProfile {
   };
 }
 
+export interface MentionSuggestion {
+  id: string;
+  username: string;
+  display_name: string;
+  is_following: boolean;
+}
+
 // Columns to SELECT for a full profile (never include password_hash)
 const PROFILE_COLUMNS = `
   id,
@@ -157,4 +164,40 @@ export const softDelete = async (id: string): Promise<boolean> => {
   );
 
   return (result.rowCount ?? 0) > 0;
+};
+
+export const searchMentionSuggestions = async (
+  viewerId: string,
+  prefix: string,
+  limit = 8,
+): Promise<MentionSuggestion[]> => {
+  const normalizedPrefix = prefix.trim().toLowerCase();
+  if (!normalizedPrefix || !/^[a-z0-9_]+$/.test(normalizedPrefix)) {
+    return [];
+  }
+
+  const result = await query(
+    `SELECT
+        r.id,
+        r.username,
+        r.display_name,
+        EXISTS(
+          SELECT 1
+          FROM follows f
+          WHERE f.follower_id = $1
+            AND f.following_id = r.id
+        ) AS is_following
+     FROM riders r
+     WHERE r.deleted_at IS NULL
+       AND r.id != $1
+       AND r.username IS NOT NULL
+       AND LOWER(r.username) LIKE $2
+     ORDER BY is_following DESC,
+              CASE WHEN LOWER(r.username) = $3 THEN 0 ELSE 1 END,
+              LOWER(r.username) ASC
+     LIMIT $4`,
+    [viewerId, `${normalizedPrefix}%`, normalizedPrefix, limit],
+  );
+
+  return result.rows as MentionSuggestion[];
 };

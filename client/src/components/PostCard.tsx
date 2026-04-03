@@ -16,6 +16,8 @@ import {
   MoreHorizontal,
 } from "lucide-react-native";
 import { useTheme } from "../theme/ThemeContext";
+import { MentionText } from "./MentionText";
+import type { MentionedRiderReference } from "../utils/mentions";
 
 interface PostCardProps {
   post: {
@@ -23,6 +25,7 @@ interface PostCardProps {
     rider_id: string;
     author_name: string;
     content: string;
+    mentioned_riders?: MentionedRiderReference[];
     media_urls?: string[];
     like_count: number;
     comment_count: number;
@@ -32,6 +35,7 @@ interface PostCardProps {
   onLike?: () => void;
   onComment?: () => void;
   onAuthorPress?: (riderId: string) => void;
+  onMentionPress?: (riderId: string) => void;
   isOwner?: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -42,6 +46,7 @@ export const PostCard = ({
   onLike,
   onComment,
   onAuthorPress,
+  onMentionPress,
   isOwner,
   onEdit,
   onDelete,
@@ -203,9 +208,13 @@ export const PostCard = ({
       </View>
 
       {/* Content */}
-      <Text className='mb-4' style={{ color: colors.text }}>
-        {post.content}
-      </Text>
+      <MentionText
+        content={post.content}
+        mentionedRiders={post.mentioned_riders}
+        textStyle={{ marginBottom: 16, color: colors.text }}
+        mentionStyle={{ color: colors.primary, fontWeight: "700" }}
+        onMentionPress={onMentionPress}
+      />
 
       {/* Media */}
       {post.media_urls && post.media_urls.length > 0 && (

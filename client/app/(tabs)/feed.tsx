@@ -86,6 +86,9 @@ export default function FeedScreen() {
             post={item}
             isOwner={item.rider_id === rider?.id}
             onAuthorPress={(riderId) => router.push(`/rider/${riderId}` as any)}
+            onMentionPress={(riderId) =>
+              router.push(`/rider/${riderId}` as any)
+            }
             onLike={() => likeMutation.mutate(item.id)}
             onComment={() => router.push(`/post/${item.id}` as any)}
             onEdit={() =>

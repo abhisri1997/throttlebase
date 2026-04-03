@@ -27,6 +27,13 @@ interface NotificationItem {
   body: string | null;
   is_read: boolean;
   created_at: string;
+  data?: {
+    actorRiderId?: string;
+    contentType?: "post" | "comment";
+    contentId?: string;
+    postId?: string | null;
+    commentId?: string | null;
+  } | null;
 }
 
 const formatNotificationTime = (value: string): string => {
@@ -86,6 +93,47 @@ export default function NotificationsModal() {
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
+
+  const openNotification = async (item: NotificationItem) => {
+    if (!item.is_read) {
+      await markAsRead.mutateAsync(item.id);
+    }
+
+    if (item.type !== "mention") {
+      return;
+    }
+
+    const payload = item.data;
+    if (!payload?.contentType || !payload.contentId) {
+      return;
+    }
+
+    if (payload.contentType === "post") {
+      router.push(`/post/${payload.contentId}` as any);
+      return;
+    }
+
+    let postId = payload.postId ?? null;
+    const commentId = payload.commentId ?? payload.contentId;
+
+    if (!postId) {
+      try {
+        const { data } = await apiClient.get(`/api/community/comments/${payload.contentId}`);
+        postId = data.post_id as string | null;
+      } catch {
+        postId = null;
+      }
+    }
+
+    if (!postId) {
+      return;
+    }
+
+    router.push({
+      pathname: "/post/[id]",
+      params: { id: postId, highlightCommentId: commentId },
+    } as any);
+  };
 
   const markAllAsRead = useMutation({
     mutationFn: async () => {
@@ -250,8 +298,8 @@ export default function NotificationsModal() {
               <TouchableOpacity
                 key={item.id}
                 className='px-4 py-4'
-                disabled={!isUnread || markAsRead.isPending}
-                onPress={() => markAsRead.mutate(item.id)}
+                disabled={markAsRead.isPending}
+                onPress={() => openNotification(item)}
                 style={{
                   backgroundColor: isUnread ? `${colors.primary}0D` : colors.bg,
                   borderBottomWidth: 1,
@@ -288,14 +336,14 @@ export default function NotificationsModal() {
                       className='text-xs font-bold'
                       style={{ color: colors.primary }}
                     >
-                      Tap to mark read
+                      Tap to open
                     </Text>
                   ) : (
                     <Text
                       className='text-xs'
                       style={{ color: colors.textMuted }}
                     >
-                      Read
+                      Tap to open
                     </Text>
                   )}
                 </View>

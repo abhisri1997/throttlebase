@@ -90,6 +90,31 @@ router.delete('/me', RiderController.deleteMyAccount);
 
 /**
  * @swagger
+ * /api/riders/search:
+ *   get:
+ *     summary: Search riders by username prefix for mention suggestions
+ *     tags: [Riders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 8
+ *     responses:
+ *       200:
+ *         description: Matching riders ordered by relevance
+ */
+router.get('/search', RiderController.searchMentionSuggestions);
+
+/**
+ * @swagger
  * /api/riders/{id}:
  *   get:
  *     summary: View another rider's public profile

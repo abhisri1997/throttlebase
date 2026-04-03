@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -19,6 +19,13 @@ import { apiClient } from "../../src/api/client";
 import { useAuthStore } from "../../src/store/authStore";
 import { PostCard } from "../../src/components/PostCard";
 import { useTheme } from "../../src/theme/ThemeContext";
+import { MentionSuggestions } from "../../src/components/MentionSuggestions";
+import { MentionText } from "../../src/components/MentionText";
+import {
+  applyMentionSuggestion,
+  findActiveMention,
+  type MentionSuggestion,
+} from "../../src/utils/mentions";
 
 const fetchPost = async (id: string) => {
   const { data } = await apiClient.get(`/api/community/posts/${id}`);
@@ -32,12 +39,49 @@ const fetchComments = async (id: string) => {
 
 export default function PostScreen() {
   const { colors } = useTheme();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, highlightCommentId } = useLocalSearchParams<{
+    id: string;
+    highlightCommentId?: string;
+  }>();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { rider, isAuthenticated } = useAuthStore();
   const [commentText, setCommentText] = useState("");
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [selection, setSelection] = useState({ start: 0, end: 0 });
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [activeHighlightCommentId, setActiveHighlightCommentId] = useState<
+    string | null
+  >(highlightCommentId ?? null);
+  const commentsListRef = useRef<FlatList<any>>(null);
+  const activeMention = useMemo(
+    () => findActiveMention(commentText, selection.start),
+    [commentText, selection.start],
+  );
+
+  useEffect(() => {
+    if (!activeMention || activeMention.query.length === 0) {
+      setMentionQuery("");
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setMentionQuery(activeMention.query);
+    }, 150);
+
+    return () => clearTimeout(timeout);
+  }, [activeMention]);
+
+  const mentionSuggestionsQuery = useQuery({
+    queryKey: ["mention-suggestions", mentionQuery],
+    queryFn: async () => {
+      const { data } = await apiClient.get("/api/riders/search", {
+        params: { query: mentionQuery, limit: 6 },
+      });
+      return data as MentionSuggestion[];
+    },
+    enabled: mentionQuery.length > 0,
+  });
 
   const handleExit = () => {
     const postPath = id ? `/post/${id}` : "/(tabs)/feed";
@@ -75,6 +119,37 @@ export default function PostScreen() {
     retry: false,
   });
 
+  useEffect(() => {
+    if (!highlightCommentId || !comments?.length) {
+      return;
+    }
+
+    const index = comments.findIndex((comment: any) => comment.id === highlightCommentId);
+    if (index < 0) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      commentsListRef.current?.scrollToIndex({
+        index,
+        animated: true,
+        viewPosition: 0.5,
+      });
+      setActiveHighlightCommentId(highlightCommentId);
+    }, 120);
+
+    const clearTimer = setTimeout(() => {
+      setActiveHighlightCommentId((current) =>
+        current === highlightCommentId ? null : current,
+      );
+    }, 4500);
+
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(clearTimer);
+    };
+  }, [comments, highlightCommentId]);
+
   const commentMutation = useMutation({
     mutationFn: async () => {
       if (editingCommentId) {
@@ -90,6 +165,8 @@ export default function PostScreen() {
     onSuccess: () => {
       setCommentText("");
       setEditingCommentId(null);
+      setSelection({ start: 0, end: 0 });
+      setMentionQuery("");
       Keyboard.dismiss();
       queryClient.invalidateQueries({ queryKey: ["comments", id] });
       queryClient.invalidateQueries({ queryKey: ["post", id] });
@@ -210,10 +287,16 @@ export default function PostScreen() {
       }
     };
 
+    const isHighlighted = item.id === activeHighlightCommentId;
+
     return (
       <TouchableOpacity
         className='px-4 py-3 flex-row'
-        style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
+        style={{
+          borderBottomWidth: 1,
+          borderBottomColor: colors.border,
+          backgroundColor: isHighlighted ? `${colors.primary}12` : colors.bg,
+        }}
         onLongPress={isOwner ? handleOptions : undefined}
         activeOpacity={0.9}
       >
@@ -249,11 +332,38 @@ export default function PostScreen() {
               </TouchableOpacity>
             )}
           </View>
-          <Text style={{ color: colors.text }}>{item.content}</Text>
+          <MentionText
+            content={item.content}
+            mentionedRiders={item.mentioned_riders}
+            textStyle={{ color: colors.text }}
+            mentionStyle={{ color: colors.primary, fontWeight: "700" }}
+            onMentionPress={(riderId) => router.push(`/rider/${riderId}` as any)}
+          />
         </View>
       </TouchableOpacity>
     );
   };
+
+  const handleSelectMention = (suggestion: MentionSuggestion) => {
+    if (!activeMention) {
+      return;
+    }
+
+    const nextValue = applyMentionSuggestion(
+      commentText,
+      activeMention,
+      suggestion.username,
+    );
+    setCommentText(nextValue.text);
+    setSelection({ start: nextValue.cursor, end: nextValue.cursor });
+    setMentionQuery("");
+  };
+
+  const showMentionSuggestions =
+    !!activeMention &&
+    mentionQuery.length > 0 &&
+    (mentionSuggestionsQuery.isLoading ||
+      (mentionSuggestionsQuery.data?.length ?? 0) > 0);
 
   return (
     <SafeAreaView
@@ -288,12 +398,22 @@ export default function PostScreen() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
         <FlatList
+          ref={commentsListRef}
           data={comments || []}
           keyExtractor={(item) => item.id}
           renderItem={renderComment}
+          onScrollToIndexFailed={({ index }) => {
+            setTimeout(() => {
+              commentsListRef.current?.scrollToIndex({
+                index,
+                animated: true,
+                viewPosition: 0.5,
+              });
+            }, 250);
+          }}
           ListHeaderComponent={
             <View
               className='pt-4 pb-2'
@@ -303,6 +423,9 @@ export default function PostScreen() {
                 post={post}
                 isOwner={post.rider_id === rider?.id}
                 onAuthorPress={(riderId) =>
+                  router.push(`/rider/${riderId}` as any)
+                }
+                onMentionPress={(riderId) =>
                   router.push(`/rider/${riderId}` as any)
                 }
                 onLike={() => likeMutation.mutate()}
@@ -333,6 +456,19 @@ export default function PostScreen() {
         />
 
         {/* Comment Input */}
+        {showMentionSuggestions ? (
+          <View
+            className='px-3 pt-3'
+            style={{ backgroundColor: colors.surface }}
+          >
+            <MentionSuggestions
+              visible={showMentionSuggestions}
+              suggestions={mentionSuggestionsQuery.data ?? []}
+              isLoading={mentionSuggestionsQuery.isLoading}
+              onSelect={handleSelectMention}
+            />
+          </View>
+        ) : null}
         <View
           className='flex-row items-center p-3'
           style={{
@@ -366,6 +502,10 @@ export default function PostScreen() {
             placeholderTextColor={colors.textMuted}
             value={commentText}
             onChangeText={setCommentText}
+            selection={selection}
+            onSelectionChange={({ nativeEvent }) =>
+              setSelection(nativeEvent.selection)
+            }
             multiline
             maxLength={500}
           />

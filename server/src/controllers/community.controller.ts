@@ -158,6 +158,7 @@ export const addComment = async (
           contentType: "comment",
           contentId: comment.id as string,
           contentSnippet: data.content,
+          postId,
         }),
       )
       .catch((err) =>
@@ -187,6 +188,23 @@ export const getComments = async (
     res.json(comments);
   } catch (error: any) {
     console.error("Error fetching comments:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const getComment = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const comment = await CommunityService.getCommentById(req.params.id as string);
+    if (!comment) {
+      res.status(404).json({ error: "Comment not found" });
+      return;
+    }
+    res.json(comment);
+  } catch (error: any) {
+    console.error("Error fetching comment:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };

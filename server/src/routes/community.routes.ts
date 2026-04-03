@@ -159,6 +159,7 @@ router.delete("/posts/:id", cc.deletePost);
  */
 router.get("/posts/:id/comments", cc.getComments);
 router.post("/posts/:id/comments", cc.addComment);
+router.get("/comments/:id", cc.getComment);
 router.patch("/comments/:id", cc.updateComment);
 router.delete("/comments/:id", cc.deleteComment);
 

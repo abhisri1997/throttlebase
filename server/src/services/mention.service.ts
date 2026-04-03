@@ -25,6 +25,12 @@ import {
 const MENTION_REGEX = /@([a-zA-Z0-9_]{1,50})/g;
 const MENTION_NOTIFICATION_TYPE = "mention";
 
+export interface MentionedRiderReference {
+  rider_id: string;
+  username: string;
+  display_name: string | null;
+}
+
 export const parseMentionHandles = (content: string): string[] => {
   const handles: string[] = [];
   let match: RegExpExecArray | null;
@@ -63,7 +69,54 @@ export interface MentionContext {
   contentType: "post" | "comment";
   contentId: string;
   contentSnippet: string;
+  postId?: string;
 }
+
+const resolveMentionHandleMap = async (
+  handles: string[],
+): Promise<Map<string, MentionedRiderReference>> => {
+  if (handles.length === 0) {
+    return new Map();
+  }
+
+  const result = await query(
+    `SELECT id AS rider_id, LOWER(username) AS username, display_name
+     FROM riders
+     WHERE LOWER(username) = ANY($1::text[])
+       AND deleted_at IS NULL`,
+    [handles],
+  );
+
+  return new Map(
+    result.rows.map((row) => [
+      row.username as string,
+      {
+        rider_id: row.rider_id as string,
+        username: row.username as string,
+        display_name: (row.display_name as string | null) ?? null,
+      },
+    ]),
+  );
+};
+
+export const attachMentionedRiders = async <T extends { content: string }>(
+  items: T[],
+): Promise<Array<T & { mentioned_riders: MentionedRiderReference[] }>> => {
+  if (items.length === 0) {
+    return [];
+  }
+
+  const handleSets = items.map((item) => parseMentionHandles(item.content || ""));
+  const uniqueHandles = Array.from(new Set(handleSets.flat()));
+  const handleMap = await resolveMentionHandleMap(uniqueHandles);
+
+  return items.map((item, index) => ({
+    ...item,
+    mentioned_riders: (handleSets[index] ?? [])
+      .map((handle) => handleMap.get(handle))
+      .filter((value): value is MentionedRiderReference => Boolean(value)),
+  }));
+};
 
 export const dispatchMentionNotifications = async (
   content: string,
@@ -93,6 +146,8 @@ export const dispatchMentionNotifications = async (
       actorRiderId: ctx.actorRiderId,
       contentType: ctx.contentType,
       contentId: ctx.contentId,
+      postId: ctx.contentType === "comment" ? ctx.postId ?? null : ctx.contentId,
+      commentId: ctx.contentType === "comment" ? ctx.contentId : null,
     },
     dedupeKey,
   });
@@ -115,6 +170,8 @@ export const dispatchMentionNotifications = async (
         actorRiderId: ctx.actorRiderId,
         contentType: ctx.contentType,
         contentId: ctx.contentId,
+        postId: ctx.contentType === "comment" ? ctx.postId ?? null : ctx.contentId,
+        commentId: ctx.contentType === "comment" ? ctx.contentId : null,
       },
     });
   }
