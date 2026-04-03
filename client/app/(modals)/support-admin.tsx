@@ -57,6 +57,7 @@ interface SupportTicket {
   description: string;
   status: TicketStatus;
   agent_reply: string | null;
+  rider_reply: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -204,6 +205,21 @@ export default function SupportAdminModal() {
                 </Text>
               </View>
               <Text style={{ color: colors.textMuted }}>{selectedTicket.agent_reply}</Text>
+            </View>
+          ) : null}
+
+          {selectedTicket.rider_reply ? (
+            <View
+              className='rounded-2xl p-4 mb-4'
+              style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
+            >
+              <View className='flex-row items-center mb-2'>
+                <MessageSquare color={colors.textMuted} size={16} />
+                <Text className='ml-2 font-bold text-sm' style={{ color: colors.text }}>
+                  Rider Follow-up
+                </Text>
+              </View>
+              <Text style={{ color: colors.textMuted }}>{selectedTicket.rider_reply}</Text>
             </View>
           ) : null}
 

@@ -4,6 +4,7 @@ import {
   ListSupportTicketsQuerySchema,
   UpdateTicketStatusSchema,
   AdminListTicketsQuerySchema,
+  RiderUpdateTicketSchema,
 } from "../schemas/support.schemas.js";
 import * as SupportService from "../services/support.service.js";
 
@@ -70,6 +71,35 @@ export const getSupportTicket = async (
     res.json(ticket);
   } catch (error: any) {
     console.error("Error fetching support ticket:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const updateOwnSupportTicket = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const data = RiderUpdateTicketSchema.parse(req.body);
+    const ticket = await SupportService.updateOwnSupportTicket(
+      rid(req),
+      req.params.id as string,
+      data,
+    );
+
+    if (!ticket) {
+      res.status(404).json({ error: "Support ticket not found" });
+      return;
+    }
+
+    res.json(ticket);
+  } catch (error: any) {
+    if (error.name === "ZodError") {
+      res.status(400).json({ errors: error.issues });
+      return;
+    }
+
+    console.error("Error updating support ticket:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };

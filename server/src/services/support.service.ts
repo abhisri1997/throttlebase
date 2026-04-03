@@ -4,7 +4,76 @@ import type {
   ListSupportTicketsQuery,
   UpdateTicketStatusInput,
   AdminListTicketsQuery,
+  RiderUpdateTicketInput,
 } from "../schemas/support.schemas.js";
+
+type SupportTicketMessage = {
+  id: string;
+  sender_role: "rider" | "support";
+  message: string;
+  created_at: string;
+};
+
+const getTicketMessages = async (
+  ticketId: string,
+): Promise<SupportTicketMessage[]> => {
+  const result = await query(
+    `SELECT id, sender_role, message, created_at
+     FROM support_ticket_messages
+     WHERE ticket_id = $1
+     ORDER BY created_at ASC, id ASC`,
+    [ticketId],
+  );
+
+  return result.rows;
+};
+
+const getLegacyTicketMessages = (ticket: any): SupportTicketMessage[] => {
+  const fallbackTime =
+    ticket.updated_at ?? ticket.created_at ?? new Date().toISOString();
+  const legacy: SupportTicketMessage[] = [];
+
+  if (ticket.description) {
+    legacy.push({
+      id: `${ticket.id}-legacy-description`,
+      sender_role: "rider",
+      message: String(ticket.description),
+      created_at: ticket.created_at ?? fallbackTime,
+    });
+  }
+
+  if (ticket.agent_reply) {
+    legacy.push({
+      id: `${ticket.id}-legacy-agent`,
+      sender_role: "support",
+      message: String(ticket.agent_reply),
+      created_at: fallbackTime,
+    });
+  }
+
+  if (ticket.rider_reply) {
+    legacy.push({
+      id: `${ticket.id}-legacy-rider`,
+      sender_role: "rider",
+      message: String(ticket.rider_reply),
+      created_at: fallbackTime,
+    });
+  }
+
+  return legacy;
+};
+
+const addTicketMessage = async (
+  ticketId: string,
+  senderRole: "rider" | "support",
+  message: string,
+) => {
+  await query(
+    `INSERT INTO support_ticket_messages (ticket_id, sender_role, message)
+     VALUES ($1, $2, $3)`,
+    [ticketId, senderRole, message],
+  );
+};
 
 export const createSupportTicket = async (
   riderId: string,
@@ -23,7 +92,13 @@ export const createSupportTicket = async (
     ],
   );
 
-  return result.rows[0];
+  const created = result.rows[0];
+  await addTicketMessage(created.id, "rider", created.description);
+
+  return {
+    ...created,
+    messages: await getTicketMessages(created.id),
+  };
 };
 
 export const listSupportTickets = async (
@@ -63,7 +138,58 @@ export const getSupportTicketById = async (
     [ticketId, riderId],
   );
 
-  return result.rows[0] ?? null;
+  const ticket = result.rows[0] ?? null;
+  if (!ticket) {
+    return null;
+  }
+
+  const messages = await getTicketMessages(ticket.id);
+
+  return {
+    ...ticket,
+    messages: messages.length > 0 ? messages : getLegacyTicketMessages(ticket),
+  };
+};
+
+export const updateOwnSupportTicket = async (
+  riderId: string,
+  ticketId: string,
+  data: RiderUpdateTicketInput,
+) => {
+  const updates: string[] = [];
+  const values: Array<string> = [ticketId, riderId];
+
+  if (data.rider_reply !== undefined) {
+    values.push(data.rider_reply);
+    updates.push(`rider_reply = $${values.length}`);
+  }
+
+  if (data.close_ticket === true) {
+    updates.push(`status = 'closed'`);
+  }
+
+  if (updates.length === 0) {
+    return getSupportTicketById(riderId, ticketId);
+  }
+
+  const result = await query(
+    `UPDATE support_tickets
+     SET ${updates.join(", ")}
+     WHERE id = $1 AND rider_id = $2
+     RETURNING *`,
+    values,
+  );
+
+  const updated = result.rows[0] ?? null;
+  if (!updated) {
+    return null;
+  }
+
+  if (data.rider_reply !== undefined) {
+    await addTicketMessage(updated.id, "rider", data.rider_reply);
+  }
+
+  return getSupportTicketById(riderId, updated.id);
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -124,5 +250,17 @@ export const adminUpdateTicketStatus = async (
     values,
   );
 
-  return result.rows[0] ?? null;
+  const updated = result.rows[0] ?? null;
+  if (!updated) {
+    return null;
+  }
+
+  if (data.agent_reply !== undefined) {
+    await addTicketMessage(updated.id, "support", data.agent_reply);
+  }
+
+  return {
+    ...updated,
+    messages: await getTicketMessages(updated.id),
+  };
 };

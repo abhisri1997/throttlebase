@@ -32,6 +32,16 @@ export const UpdateTicketStatusSchema = z.object({
   agent_reply: z.string().trim().max(5000).optional(),
 });
 
+export const RiderUpdateTicketSchema = z
+  .object({
+    rider_reply: z.string().trim().min(1).max(5000).optional(),
+    close_ticket: z.boolean().optional(),
+  })
+  .refine((value) => value.rider_reply !== undefined || value.close_ticket === true, {
+    message: "Provide rider_reply or set close_ticket=true",
+    path: ["rider_reply"],
+  });
+
 export const AdminListTicketsQuerySchema = z.object({
   status: SupportTicketStatusSchema.optional(),
   rider_id: z.string().uuid().optional(),
@@ -45,6 +55,7 @@ export type ListSupportTicketsQuery = z.infer<
   typeof ListSupportTicketsQuerySchema
 >;
 export type UpdateTicketStatusInput = z.infer<typeof UpdateTicketStatusSchema>;
+export type RiderUpdateTicketInput = z.infer<typeof RiderUpdateTicketSchema>;
 export type AdminListTicketsQuery = z.infer<typeof AdminListTicketsQuerySchema>;
 export type SupportTicketCategory = z.infer<typeof SupportTicketCategorySchema>;
 export type SupportTicketStatus = z.infer<typeof SupportTicketStatusSchema>;

@@ -30,10 +30,14 @@ This directory is organized by purpose so contributors and assistants can quickl
   - `live-session-rollout.md`
   - `live-navigation-phase1.md`
 
+- QA and validation assets
+  - `uat-test-plan-feature-remaining-features.md`
+
 ## Maintenance Rules
 
 - Keep each file focused on one concern.
 - Avoid duplicating large sections across files.
 - Prefer linking to the source document rather than copy/pasting details.
+- Keep editable test plans in Markdown and generate PDFs from those source files.
 - Update `ai-assistant.md` and the relevant docs file in the same change when architecture or status changes.
 - When security, support, notifications, or realtime behavior changes, review `technical-overview.md`, `api-endpoints.md`, `database-design.md`, and `project-status.md` together so they do not drift.

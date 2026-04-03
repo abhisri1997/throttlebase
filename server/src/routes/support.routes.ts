@@ -85,6 +85,42 @@ router.get("/:id", sc.getSupportTicket);
 
 /**
  * @swagger
+ * /api/support/{id}:
+ *   patch:
+ *     summary: Add a rider reply or close your own ticket
+ *     tags: [Support]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               rider_reply:
+ *                 type: string
+ *                 maxLength: 5000
+ *               close_ticket:
+ *                 type: boolean
+ *                 description: When true, ticket status is set to closed.
+ *     responses:
+ *       200:
+ *         description: Updated support ticket
+ *       404:
+ *         description: Support ticket not found
+ */
+router.patch("/:id", sc.updateOwnSupportTicket);
+
+/**
+ * @swagger
  * /api/support/admin/tickets:
  *   get:
  *     summary: Admin — list all support tickets (admin only)
