@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -45,6 +45,12 @@ import LocationPicker from "../../src/components/LocationPicker";
 import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
 import { getApiErrorMessage } from "../../src/utils/apiError";
 import { rideSocket } from "../../src/services/rideSocket";
+import {
+  buildCanonicalRideRouteInput,
+  fetchNavigationRoute,
+  haversineMeters,
+} from "../../src/features/navigation/services/navigationRouteService";
+import type { LatLng } from "../../src/features/navigation/types/navigation";
 
 const fetchRideDetails = async (id: string) => {
   const { data } = await apiClient.get(`/api/rides/${id}`);
@@ -206,12 +212,44 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
+const toCoordinate = (raw?: [number, number] | null): LatLng | null => {
+  if (!raw || raw.length < 2) {
+    return null;
+  }
+
+  return {
+    latitude: raw[1],
+    longitude: raw[0],
+  };
+};
+
 const NEXT_STATUS: Record<string, { label: string; status: string } | null> = {
   draft: { label: "Publish", status: "scheduled" },
   scheduled: { label: "Start Ride", status: "active" },
   active: { label: "Complete Ride", status: "completed" },
   completed: null,
   cancelled: null,
+};
+
+const getSessionEndedMessage = (reason?: string | null): string => {
+  if (!reason) {
+    return "The live session has ended.";
+  }
+
+  const normalized = reason.toLowerCase();
+  if (normalized === "ride_completed" || normalized === "completed") {
+    return "The live session ended because this ride was completed.";
+  }
+  if (
+    normalized === "leader_ended" ||
+    normalized === "captain_ended" ||
+    normalized === "manual_stop"
+  ) {
+    return "The live session was ended by the ride leader.";
+  }
+
+  const readableReason = reason.replace(/_/g, " ");
+  return `The live session has ended (${readableReason}).`;
 };
 
 export default function RideDetailScreen() {
@@ -222,6 +260,9 @@ export default function RideDetailScreen() {
   const currentRider = useAuthStore((state: any) => state.rider);
   const token = useAuthStore((state: any) => state.token);
   const liveEnabled = process.env.EXPO_PUBLIC_ENABLE_LIVE_SESSION !== "false";
+  const [appState, setAppState] = useState<AppStateStatus>(
+    AppState.currentState,
+  );
   const {
     connected: liveConnected,
     isJoining,
@@ -251,6 +292,9 @@ export default function RideDetailScreen() {
     queryKey: ["ride", id],
     queryFn: () => fetchRideDetails(id!),
     enabled: !!id,
+    refetchInterval:
+      appState === "active" && id ? 8000 : false,
+    refetchIntervalInBackground: false,
   });
 
   const {
@@ -276,16 +320,22 @@ export default function RideDetailScreen() {
     queryFn: () => fetchLiveSession(id!),
     enabled: Boolean(liveEnabled && id && isParticipantFromRide),
     retry: false,
+    refetchInterval:
+      appState === "active" && liveEnabled && id && isParticipantFromRide
+        ? 5000
+        : false,
+    refetchIntervalInBackground: false,
   });
 
   const [showJoinOverridePicker, setShowJoinOverridePicker] = useState(false);
   const [reviewRating, setReviewRating] = useState<number>(0);
   const [reviewText, setReviewText] = useState("");
   const [sosSubmitting, setSOSSubmitting] = useState(false);
-  const [appState, setAppState] = useState<AppStateStatus>(
-    AppState.currentState,
-  );
+  const [sampledLocation, setSampledLocation] = useState<LatLng | null>(null);
+  const [routePathCoordinates, setRoutePathCoordinates] = useState<LatLng[]>([]);
   const mapRef = useRef<InstanceType<typeof MapView>>(null);
+  const lastRouteRefreshAtRef = useRef(0);
+  const lastRouteOriginRef = useRef<LatLng | null>(null);
 
   const joinMutation = useMutation({
     mutationFn: (coords?: [number, number]) => joinRide(id!, coords),
@@ -383,6 +433,9 @@ export default function RideDetailScreen() {
         queryClient.invalidateQueries({ queryKey: ["ride", id] }),
         queryClient.invalidateQueries({ queryKey: ["live-session", id] }),
       ]);
+      if (token) {
+        connect(token);
+      }
       await refetchLiveSession();
       joinRoom(id!);
       router.replace(`/ride/${id}/navigation` as any);
@@ -623,15 +676,61 @@ export default function RideDetailScreen() {
     };
   }, [appState, inRoom, upsertLocation]);
 
+  useEffect(() => {
+    if (appState !== "active" || Platform.OS === "web") {
+      return;
+    }
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    const sampleLocation = async () => {
+      try {
+        const position = await ExpoLocation.getCurrentPositionAsync({
+          accuracy: ExpoLocation.Accuracy.Balanced,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        setSampledLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+      } catch {
+        // Keep existing fallback behavior when location is unavailable.
+      }
+    };
+
+    const startSampling = async () => {
+      const permission = await ExpoLocation.requestForegroundPermissionsAsync();
+      if (cancelled || permission.status !== "granted") {
+        return;
+      }
+
+      await sampleLocation();
+      timer = setInterval(() => {
+        void sampleLocation();
+      }, 12000);
+    };
+
+    void startSampling();
+
+    return () => {
+      cancelled = true;
+      if (timer) {
+        clearInterval(timer);
+      }
+    };
+  }, [appState]);
+
   // Alert when session is ended remotely via socket fanout
   const prevSessionEndedRef = useRef<string | null>(null);
   useEffect(() => {
     const currentStatus = liveSocketSession?.status;
     if (currentStatus === "ended" && prevSessionEndedRef.current !== "ended") {
-      const msg = sessionEndedReason
-        ? `The live session has ended. Reason: ${sessionEndedReason}`
-        : "The live session has ended.";
-      Alert.alert("Live Session Ended", msg);
+      Alert.alert("Live Session Ended", getSessionEndedMessage(sessionEndedReason));
     }
     prevSessionEndedRef.current = currentStatus ?? null;
   }, [liveSocketSession?.status, sessionEndedReason]);
@@ -693,8 +792,133 @@ export default function RideDetailScreen() {
     );
   }, [inRoom, locations, presence]);
 
+  const startPoint = useMemo(
+    () => toCoordinate(ride?.start_point_geojson?.coordinates || null),
+    [ride?.start_point_geojson?.coordinates],
+  );
+  const destinationPoint = useMemo(
+    () => toCoordinate(ride?.end_point_geojson?.coordinates || null),
+    [ride?.end_point_geojson?.coordinates],
+  );
+  const approvedStopCoords = useMemo(() => {
+    if (!ride?.stops) {
+      return [] as LatLng[];
+    }
+
+    return ride.stops
+      .filter((stop: any) => stop.status !== "rejected" && stop.location?.coordinates)
+      .map((stop: any) => ({
+        latitude: stop.location.coordinates[1],
+        longitude: stop.location.coordinates[0],
+      }));
+  }, [ride?.stops]);
+
+  const currentLocationOrigin = useMemo(() => {
+    const ownLiveLocation = Object.values(locations).find(
+      (location) => location.riderId === currentRider?.id,
+    );
+
+    if (
+      ownLiveLocation &&
+      Number.isFinite(ownLiveLocation.lat) &&
+      Number.isFinite(ownLiveLocation.lon)
+    ) {
+      return {
+        latitude: ownLiveLocation.lat,
+        longitude: ownLiveLocation.lon,
+      } as LatLng;
+    }
+
+    return sampledLocation;
+  }, [currentRider?.id, locations, sampledLocation]);
+
+  const canonicalRoute = useMemo(
+    () =>
+      buildCanonicalRideRouteInput({
+        origin: currentLocationOrigin,
+        start: startPoint,
+        stops: approvedStopCoords,
+        destination: destinationPoint,
+      }),
+    [approvedStopCoords, currentLocationOrigin, destinationPoint, startPoint],
+  );
+
+  const canonicalRouteKey = useMemo(() => {
+    if (!canonicalRoute) {
+      return "";
+    }
+
+    return canonicalRoute.orderedPoints
+      .map((point) => `${point.latitude},${point.longitude}`)
+      .join("|");
+  }, [canonicalRoute]);
+
+  useEffect(() => {
+    if (!canonicalRoute || appState !== "active") {
+      setRoutePathCoordinates(canonicalRoute?.orderedPoints || []);
+      return;
+    }
+
+    const now = Date.now();
+    const previousOrigin = lastRouteOriginRef.current;
+    const movedMeters =
+      previousOrigin && currentLocationOrigin
+        ? haversineMeters(previousOrigin, currentLocationOrigin)
+        : Infinity;
+    const elapsedMs = now - lastRouteRefreshAtRef.current;
+    const shouldRefresh =
+      routePathCoordinates.length === 0 || movedMeters >= 40 || elapsedMs >= 25000;
+
+    if (!shouldRefresh) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadRoute = async () => {
+      try {
+        const route = await fetchNavigationRoute({
+          origin: canonicalRoute.origin,
+          destination: canonicalRoute.destination,
+          waypoints: canonicalRoute.waypoints,
+          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        setRoutePathCoordinates(
+          route.polyline.length > 1 ? route.polyline : canonicalRoute.orderedPoints,
+        );
+        lastRouteOriginRef.current = canonicalRoute.origin;
+        lastRouteRefreshAtRef.current = Date.now();
+      } catch {
+        if (!cancelled) {
+          setRoutePathCoordinates(canonicalRoute.orderedPoints);
+        }
+      }
+    };
+
+    void loadRoute();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    appState,
+    canonicalRoute,
+    canonicalRouteKey,
+    currentLocationOrigin,
+    routePathCoordinates.length,
+  ]);
+
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
-    await Promise.all([refetch(), refetchReviews()]);
+    const tasks: Array<Promise<unknown>> = [refetch(), refetchReviews()];
+    if (liveEnabled && isParticipantFromRide) {
+      tasks.push(refetchLiveSession());
+    }
+    await Promise.all(tasks);
   });
 
   if (isLoading) {
@@ -765,6 +989,11 @@ export default function RideDetailScreen() {
         ? "Live room joined"
         : "Socket connected";
 
+  // Collect approved stop markers
+  const stopMarkers = (ride.stops || []).filter(
+    (s: any) => s.status !== "rejected",
+  );
+
   const liveLocationMarkers = Object.values(locations).filter((location) => {
     if (!Number.isFinite(location.lat) || !Number.isFinite(location.lon)) {
       return false;
@@ -772,6 +1001,10 @@ export default function RideDetailScreen() {
 
     return presence[location.riderId]?.isOnline ?? true;
   });
+
+  const currentRiderLiveLocation = liveLocationMarkers.find(
+    (location) => location.riderId === currentRider?.id,
+  );
 
   const handleGetDirections = () => {
     if (!startCoords) return;
@@ -878,11 +1111,6 @@ export default function RideDetailScreen() {
     return "📍";
   };
 
-  // Collect approved stop markers
-  const stopMarkers = (ride.stops || []).filter(
-    (s: any) => s.status !== "rejected",
-  );
-
   const averageRating = reviews?.length
     ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
     : 0;
@@ -923,16 +1151,7 @@ export default function RideDetailScreen() {
                   pinColor='#f43f5e'
                 />
                 <Polyline
-                  coordinates={[
-                    { latitude: startCoords[1], longitude: startCoords[0] },
-                    ...stopMarkers
-                      .filter((s: any) => s.location?.coordinates)
-                      .map((s: any) => ({
-                        latitude: s.location.coordinates[1],
-                        longitude: s.location.coordinates[0],
-                      })),
-                    { latitude: endCoords[1], longitude: endCoords[0] },
-                  ]}
+                  coordinates={routePathCoordinates}
                   strokeColor='#22c55e'
                   strokeWidth={4}
                   lineDashPattern={[10, 10]}
@@ -1203,25 +1422,11 @@ export default function RideDetailScreen() {
                   App is backgrounded. Heartbeat/location updates are paused.
                 </Text>
               ) : null}
-              {liveError ? (
+              {liveError && liveError !== "Live session not found" ? (
                 <Text className='mt-2' style={{ color: colors.danger }}>
                   {liveError}
                 </Text>
               ) : null}
-              {liveStatus === "ended" && (
-                <View
-                  className='mt-2 p-2 rounded-lg'
-                  style={{ backgroundColor: colors.danger + "22" }}
-                >
-                  <Text
-                    className='text-sm font-semibold'
-                    style={{ color: colors.danger }}
-                  >
-                    Session ended
-                    {sessionEndedReason ? `: ${sessionEndedReason}` : "."}
-                  </Text>
-                </View>
-              )}
             </View>
 
             {(liveStatus === "active" || liveStatus === "starting") && (
@@ -1314,7 +1519,7 @@ export default function RideDetailScreen() {
 
             <View className='flex-row flex-wrap'>
               {isLeader &&
-                ride.status !== "scheduled" &&
+                ride.status === "active" &&
                 (liveStatus === "not_started" || liveStatus === "ended") && (
                   <TouchableOpacity
                     onPress={() => liveStartMutation.mutate()}
@@ -1834,6 +2039,7 @@ export default function RideDetailScreen() {
               You are participating in this ride! 🎉
             </Text>
             {ride.start_point_auto &&
+              ride.status === "scheduled" &&
               new Date(ride.scheduled_at).getTime() - Date.now() >
                 12 * 60 * 60 * 1000 && (
                 <LocationPicker

@@ -8,6 +8,66 @@ const stripHtml = (value: string): string =>
 
 const toRad = (value: number): number => (value * Math.PI) / 180;
 
+const pointsEqual = (left: LatLng, right: LatLng): boolean => {
+  const tolerance = 0.00001;
+  return (
+    Math.abs(left.latitude - right.latitude) <= tolerance &&
+    Math.abs(left.longitude - right.longitude) <= tolerance
+  );
+};
+
+export const dedupeConsecutivePoints = (points: LatLng[]): LatLng[] => {
+  if (points.length <= 1) {
+    return points;
+  }
+
+  const deduped: LatLng[] = [points[0]];
+
+  for (let index = 1; index < points.length; index += 1) {
+    const point = points[index];
+    const previous = deduped[deduped.length - 1];
+    if (!pointsEqual(point, previous)) {
+      deduped.push(point);
+    }
+  }
+
+  return deduped;
+};
+
+export type CanonicalRideRouteInput = {
+  origin: LatLng;
+  destination: LatLng;
+  waypoints: LatLng[];
+  orderedPoints: LatLng[];
+};
+
+export const buildCanonicalRideRouteInput = (input: {
+  origin?: LatLng | null;
+  start?: LatLng | null;
+  stops?: LatLng[];
+  destination?: LatLng | null;
+}): CanonicalRideRouteInput | null => {
+  const effectiveOrigin = input.origin || input.start || null;
+  const chain = [
+    effectiveOrigin,
+    input.start || null,
+    ...(input.stops || []),
+    input.destination || null,
+  ].filter((point): point is LatLng => Boolean(point));
+
+  const orderedPoints = dedupeConsecutivePoints(chain);
+  if (orderedPoints.length < 2) {
+    return null;
+  }
+
+  return {
+    origin: orderedPoints[0],
+    destination: orderedPoints[orderedPoints.length - 1],
+    waypoints: orderedPoints.slice(1, -1),
+    orderedPoints,
+  };
+};
+
 export const haversineMeters = (from: LatLng, to: LatLng): number => {
   const earthRadiusMeters = 6371000;
   const dLat = toRad(to.latitude - from.latitude);
@@ -117,11 +177,11 @@ export const fetchNavigationRoute = async (input: {
   waypoints?: LatLng[];
   apiKey?: string;
 }): Promise<NavigationRoute> => {
-  const fallbackPoints = [
+  const fallbackPoints = dedupeConsecutivePoints([
     input.origin,
     ...(input.waypoints || []),
     input.destination,
-  ];
+  ]);
 
   if (!input.apiKey) {
     return buildFallbackRoute(fallbackPoints);

@@ -128,8 +128,11 @@ const attachSocketListeners = () => {
 
   liveSessionSocket.off("session:ended");
   liveSessionSocket.on("session:ended", (event: SessionEndedEvent) => {
+    liveSessionSocket.disconnect();
+
     useLiveSessionStore.setState((state) => ({
       ...state,
+      rideId: null,
       session: state.session
         ? {
             ...state.session,
@@ -137,6 +140,7 @@ const attachSocketListeners = () => {
             ended_at: event.endedAt ?? new Date().toISOString(),
           }
         : state.session,
+      connected: false,
       inRoom: false,
       isJoining: false,
       sessionEndedReason: event.reason ?? null,
@@ -176,15 +180,6 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
         connected: true,
         lastError: null,
       }));
-
-      const activeRideId = get().rideId;
-      if (activeRideId) {
-        set((state) => ({
-          ...state,
-          isJoining: true,
-        }));
-        liveSessionSocket.emit("session:join", { rideId: activeRideId });
-      }
     });
 
     socket.on("disconnect", () => {

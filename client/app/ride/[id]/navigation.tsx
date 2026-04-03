@@ -28,6 +28,7 @@ import {
 } from "../../../src/features/navigation/components/NavigationBottomSheet";
 import { NavigationInstructionOverlay } from "../../../src/features/navigation/components/NavigationInstructionOverlay";
 import {
+  buildCanonicalRideRouteInput,
   fetchNavigationRoute,
   haversineMeters,
 } from "../../../src/features/navigation/services/navigationRouteService";
@@ -174,6 +175,8 @@ export default function RideNavigationScreen() {
 
   const mapRef = useRef<InstanceType<typeof MapView> | null>(null);
   const lastCameraUpdateRef = useRef(0);
+  const lastRouteRefreshAtRef = useRef(0);
+  const lastRouteOriginRef = useRef<LatLng | null>(null);
 
   const { data: ride, isLoading, isError, refetch } = useQuery({
     queryKey: ["ride", id],
@@ -241,40 +244,57 @@ export default function RideNavigationScreen() {
   const rideStart = toCoordinate(ride?.start_point_geojson?.coordinates || null);
   const rideEnd = toCoordinate(ride?.end_point_geojson?.coordinates || null);
 
-  const startKey = rideStart
-    ? `${rideStart.latitude},${rideStart.longitude}`
-    : "";
-  const endKey = rideEnd ? `${rideEnd.latitude},${rideEnd.longitude}` : "";
-
-  const waypointKey = useMemo(() => {
+  const approvedStopCoords = useMemo(() => {
     if (!ride?.stops) {
-      return "";
+      return [] as LatLng[];
     }
 
     return ride.stops
       .filter((stop: any) => stop.status !== "rejected" && stop.location?.coordinates)
-      .map(
-        (stop: any) => `${stop.location.coordinates[1]},${stop.location.coordinates[0]}`,
-      )
-      .join("|");
+      .map((stop: any) => ({
+        latitude: stop.location.coordinates[1],
+        longitude: stop.location.coordinates[0],
+      }));
   }, [ride?.stops]);
 
-  const waypointCoords = useMemo(() => {
-    if (!waypointKey) {
-      return [];
+  const canonicalRoute = useMemo(
+    () =>
+      buildCanonicalRideRouteInput({
+        origin: currentLocation,
+        start: rideStart,
+        stops: approvedStopCoords,
+        destination: rideEnd,
+      }),
+    [approvedStopCoords, currentLocation, rideEnd, rideStart],
+  );
+
+  const canonicalRouteKey = useMemo(() => {
+    if (!canonicalRoute) {
+      return "";
     }
 
-    return waypointKey
-      .split("|")
-      .map((segment: string) => parseLatLng(segment))
-      .filter((value: LatLng | null): value is LatLng => Boolean(value));
-  }, [waypointKey]);
+    return canonicalRoute.orderedPoints
+      .map((point) => `${point.latitude},${point.longitude}`)
+      .join("|");
+  }, [canonicalRoute]);
 
   useEffect(() => {
-    const start = parseLatLng(startKey);
-    const end = parseLatLng(endKey);
+    if (!canonicalRoute) {
+      setNavigationRoute(null);
+      return;
+    }
 
-    if (!start || !end) {
+    const now = Date.now();
+    const lastOrigin = lastRouteOriginRef.current;
+    const movedMeters =
+      lastOrigin && currentLocation
+        ? haversineMeters(lastOrigin, canonicalRoute.origin)
+        : Infinity;
+    const elapsedMs = now - lastRouteRefreshAtRef.current;
+    const shouldRefresh =
+      !navigationRoute || movedMeters >= 40 || elapsedMs >= 25000;
+
+    if (!shouldRefresh) {
       return;
     }
 
@@ -284,15 +304,17 @@ export default function RideNavigationScreen() {
       setRouteLoading(true);
       try {
         const route = await fetchNavigationRoute({
-          origin: start,
-          destination: end,
-          waypoints: waypointCoords,
+          origin: canonicalRoute.origin,
+          destination: canonicalRoute.destination,
+          waypoints: canonicalRoute.waypoints,
           apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
         });
 
         if (!cancelled) {
           setNavigationRoute(route);
           setStepIndex(0);
+          lastRouteOriginRef.current = canonicalRoute.origin;
+          lastRouteRefreshAtRef.current = Date.now();
         }
       } finally {
         if (!cancelled) {
@@ -306,7 +328,7 @@ export default function RideNavigationScreen() {
     return () => {
       cancelled = true;
     };
-  }, [endKey, startKey, waypointKey]);
+  }, [appState, canonicalRoute, canonicalRouteKey, currentLocation, navigationRoute]);
 
   const liveStatus = liveSocketSession?.status || liveSession?.status || "not_started";
 
@@ -611,7 +633,7 @@ export default function RideNavigationScreen() {
         <Marker coordinate={rideStart} title='Start' pinColor='#22c55e' />
         <Marker coordinate={rideEnd} title='Destination' pinColor='#ef4444' />
 
-        {waypointCoords.map((waypoint: LatLng, index: number) => (
+        {approvedStopCoords.map((waypoint: LatLng, index: number) => (
           <Marker
             key={`${waypoint.latitude},${waypoint.longitude},${index}`}
             coordinate={waypoint}
