@@ -95,6 +95,10 @@ Primary code locations:
 - Ride detail now hides Start Live after ride completion and limits Update Starting Location to scheduled rides only.
 - Live session socket now disconnects automatically when a session ends, and reconnects on the next Start Live flow.
 - Ride detail and full-screen navigation maps now use canonical rider-first routing order: current rider location -> start point -> approved stops -> destination, with location-unavailable fallback origin set to start.
+- Navigation bottom sheet participant taps now focus that rider's live location on the full-screen map, with recenter returning camera follow to the current rider.
+- Create Ride form now calculates and displays route duration dynamically using the Google Directions API instead of manual user input.
+- Ride detail now keeps the live-session socket offline for completed/cancelled rides or ended sessions, preventing stale "Socket connected" state after completion.
+- Ride detail now treats `GET /live/session` 404 as "no active session" and only polls when a non-ended session exists, preventing continuous request loops while socket is offline.
 
 ## Assistant Operating Notes
 

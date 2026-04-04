@@ -20,6 +20,8 @@ type Props = {
   canEndRide: boolean;
   onEndRide: () => void;
   ending: boolean;
+  focusedParticipantId?: string | null;
+  onParticipantPress?: (participant: RideParticipantView) => void;
   onExpandedChange?: (expanded: boolean) => void;
   onSnapHeightChange?: (height: number) => void;
 };
@@ -36,6 +38,8 @@ export function NavigationBottomSheet({
   canEndRide,
   onEndRide,
   ending,
+  focusedParticipantId,
+  onParticipantPress,
   onExpandedChange,
   onSnapHeightChange,
 }: Props) {
@@ -222,9 +226,13 @@ export function NavigationBottomSheet({
           </Text>
         </View>
 
-        {participants.map((participant) => (
-          <View
+        {participants.map((participant) => {
+          const isFocused = focusedParticipantId === participant.riderId;
+
+          return (
+          <Pressable
             key={participant.riderId}
+            onPress={() => onParticipantPress?.(participant)}
             className='flex-row items-center justify-between p-3 rounded-xl mb-2'
             style={{ backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border }}
           >
@@ -238,17 +246,30 @@ export function NavigationBottomSheet({
                   marginRight: 10,
                 }}
               />
-              <Text style={{ color: colors.text }}>{participant.displayName}</Text>
+              <Text
+                style={{
+                  color: colors.text,
+                  fontWeight: isFocused ? "700" : "400",
+                }}
+              >
+                {participant.displayName}
+              </Text>
             </View>
-            <Text className='text-xs' style={{ color: colors.textMuted }}>
-              {participant.role === "captain"
-                ? "Captain"
-                : participant.role === "co_captain"
-                  ? "Co-Captain"
-                  : "Rider"}
+            <Text
+              className='text-xs'
+              style={{ color: isFocused ? colors.primary : colors.textMuted }}
+            >
+              {isFocused
+                ? "On map"
+                : participant.role === "captain"
+                  ? "Captain"
+                  : participant.role === "co_captain"
+                    ? "Co-Captain"
+                    : "Rider"}
             </Text>
-          </View>
-        ))}
+          </Pressable>
+          );
+        })}
 
         {participants.length === 0 ? (
           <View

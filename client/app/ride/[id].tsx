@@ -127,8 +127,16 @@ const submitRideReview = async (
 };
 
 const fetchLiveSession = async (rideId: string) => {
-  const { data } = await apiClient.get(`/api/rides/${rideId}/live/session`);
-  return data.session;
+  try {
+    const { data } = await apiClient.get(`/api/rides/${rideId}/live/session`);
+    return data.session ?? null;
+  } catch (error: any) {
+    if (error?.response?.status === 404) {
+      return null;
+    }
+
+    throw error;
+  }
 };
 
 const startLiveSessionReq = async (rideId: string) => {
@@ -292,8 +300,7 @@ export default function RideDetailScreen() {
     queryKey: ["ride", id],
     queryFn: () => fetchRideDetails(id!),
     enabled: !!id,
-    refetchInterval:
-      appState === "active" && id ? 8000 : false,
+    refetchInterval: false,
     refetchIntervalInBackground: false,
   });
 
@@ -318,14 +325,54 @@ export default function RideDetailScreen() {
   } = useQuery({
     queryKey: ["live-session", id],
     queryFn: () => fetchLiveSession(id!),
-    enabled: Boolean(liveEnabled && id && isParticipantFromRide),
+    enabled: Boolean(
+      liveEnabled &&
+        id &&
+        isParticipantFromRide &&
+        ride?.status !== "cancelled",
+    ),
     retry: false,
-    refetchInterval:
-      appState === "active" && liveEnabled && id && isParticipantFromRide
-        ? 5000
-        : false,
+    refetchInterval: (query) => {
+      if (
+        appState !== "active" ||
+        !liveEnabled ||
+        !id ||
+        !isParticipantFromRide ||
+        ride?.status === "completed" ||
+        ride?.status === "cancelled"
+      ) {
+        return false;
+      }
+
+      const session = query.state.data as
+        | { id?: string; status?: string }
+        | null
+        | undefined;
+
+      if (!session?.id || session.status === "ended") {
+        return false;
+      }
+
+      return 5000;
+    },
     refetchIntervalInBackground: false,
   });
+
+  const effectiveLiveSession = liveSocketSession || liveSession;
+  const liveStatus = effectiveLiveSession?.status || "not_started";
+  const isTerminalRideStatus =
+    ride?.status === "completed" || ride?.status === "cancelled";
+  const canJoinLiveRoom =
+    liveStatus === "active" ||
+    liveStatus === "starting" ||
+    liveStatus === "paused";
+  const shouldEnableLiveSocket =
+    liveEnabled &&
+    Boolean(token) &&
+    Boolean(id) &&
+    isParticipantFromRide &&
+    !isTerminalRideStatus &&
+    canJoinLiveRoom;
 
   const [showJoinOverridePicker, setShowJoinOverridePicker] = useState(false);
   const [reviewRating, setReviewRating] = useState<number>(0);
@@ -519,7 +566,8 @@ export default function RideDetailScreen() {
   };
 
   useEffect(() => {
-    if (!liveEnabled || !token) {
+    if (!shouldEnableLiveSocket || !token) {
+      reset();
       return;
     }
 
@@ -528,10 +576,10 @@ export default function RideDetailScreen() {
     return () => {
       reset();
     };
-  }, [connect, liveEnabled, reset, token]);
+  }, [connect, reset, shouldEnableLiveSocket, token]);
 
   useEffect(() => {
-    if (!liveEnabled || !id || !isParticipantFromRide) {
+    if (!shouldEnableLiveSocket || !id) {
       clearRideContext();
       return;
     }
@@ -544,8 +592,7 @@ export default function RideDetailScreen() {
   }, [
     clearRideContext,
     id,
-    isParticipantFromRide,
-    liveEnabled,
+    shouldEnableLiveSocket,
     setRideContext,
   ]);
 
@@ -560,18 +607,13 @@ export default function RideDetailScreen() {
   }, [liveEnabled]);
 
   useEffect(() => {
-    const currentLiveStatus = liveSocketSession?.status || liveSession?.status;
     const shouldAutoJoin =
-      liveEnabled &&
+      shouldEnableLiveSocket &&
       Boolean(id) &&
-      isParticipantFromRide &&
       appState === "active" &&
       liveConnected &&
       !inRoom &&
-      !isJoining &&
-      (currentLiveStatus === "active" ||
-        currentLiveStatus === "starting" ||
-        currentLiveStatus === "paused");
+      !isJoining;
 
     if (shouldAutoJoin) {
       joinRoom(id!);
@@ -581,12 +623,9 @@ export default function RideDetailScreen() {
     id,
     inRoom,
     isJoining,
-    isParticipantFromRide,
     joinRoom,
     liveConnected,
-    liveEnabled,
-    liveSession?.status,
-    liveSocketSession?.status,
+    shouldEnableLiveSocket,
   ]);
 
   useEffect(() => {
@@ -976,8 +1015,6 @@ export default function RideDetailScreen() {
     minute: "2-digit",
   });
   const nextAction = NEXT_STATUS[ride.status];
-  const effectiveLiveSession = liveSocketSession || liveSession;
-  const liveStatus = effectiveLiveSession?.status || "not_started";
   const onlineCount = Object.values(presence).filter(
     (member) => member.isOnline,
   ).length;
@@ -1338,7 +1375,12 @@ export default function RideDetailScreen() {
             <View className='w-1/2 flex-row items-center mb-4'>
               <Gauge color={colors.textMuted} size={18} />
               <Text className='ml-2' style={{ color: colors.textMuted }}>
-                {Math.round((ride.estimated_duration_min || 0) / 60)}h Duration
+                {ride.estimated_duration_min
+                  ? ride.estimated_duration_min >= 60
+                    ? `${Math.floor(ride.estimated_duration_min / 60)}h ${ride.estimated_duration_min % 60 ? `${ride.estimated_duration_min % 60}m` : ''}`.trim()
+                    : `${ride.estimated_duration_min}m`
+                  : 'TBD'}{' '}
+                Duration
               </Text>
             </View>
           </View>

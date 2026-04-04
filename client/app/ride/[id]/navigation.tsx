@@ -167,6 +167,7 @@ export default function RideNavigationScreen() {
   const [navigationRoute, setNavigationRoute] = useState<NavigationRoute | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
+  const [focusedParticipantId, setFocusedParticipantId] = useState<string | null>(null);
   const [topControlsHeight, setTopControlsHeight] = useState(0);
   const [instructionOverlayHeight, setInstructionOverlayHeight] = useState(0);
   const bottomSheetHeightValue = useRef(
@@ -372,7 +373,7 @@ export default function RideNavigationScreen() {
     let locationSubscription: ExpoLocation.LocationSubscription | null = null;
 
     const startTracking = async () => {
-      if (typeof window !== "undefined" && (global as any).document) {
+      if (typeof window !== "undefined" && (globalThis as any).document) {
         return;
       }
 
@@ -440,7 +441,7 @@ export default function RideNavigationScreen() {
   }, [appState, inRoom, liveStatus, upsertLocation]);
 
   useEffect(() => {
-    if (!mapRef.current || !currentLocation) {
+    if (!mapRef.current || !currentLocation || focusedParticipantId) {
       return;
     }
 
@@ -462,7 +463,7 @@ export default function RideNavigationScreen() {
     );
 
     lastCameraUpdateRef.current = now;
-  }, [currentHeading, currentLocation]);
+  }, [currentHeading, currentLocation, focusedParticipantId]);
 
   const navState: "NOT_STARTED" | "ACTIVE" | "COMPLETED" =
     ride?.status === "completed" || liveStatus === "ended"
@@ -556,10 +557,62 @@ export default function RideNavigationScreen() {
   const peerOnlineCount = peerLocationMarkers.length;
   const statusBannerTop = topControlsHeight + instructionOverlayHeight + 14;
 
+  const focusParticipantOnMap = (participant: RideParticipantView) => {
+    if (!mapRef.current) {
+      return;
+    }
+
+    if (participant.riderId === currentRider?.id) {
+      if (!currentLocation) {
+        Alert.alert("Location unavailable", "Your live location is not available yet.");
+        return;
+      }
+
+      setFocusedParticipantId(participant.riderId);
+      mapRef.current.animateCamera(
+        {
+          center: currentLocation,
+          heading: currentHeading,
+          pitch: 42,
+          zoom: 16,
+        },
+        { duration: 650 },
+      );
+      lastCameraUpdateRef.current = Date.now();
+      return;
+    }
+
+    const participantLocation = locations[participant.riderId];
+    if (!participantLocation) {
+      Alert.alert(
+        "Location unavailable",
+        `${participant.displayName}'s live location is not available yet.`,
+      );
+      return;
+    }
+
+    setFocusedParticipantId(participant.riderId);
+    mapRef.current.animateCamera(
+      {
+        center: {
+          latitude: participantLocation.lat,
+          longitude: participantLocation.lon,
+        },
+        heading: participantLocation.headingDeg ?? 0,
+        pitch: 42,
+        zoom: 16,
+      },
+      { duration: 650 },
+    );
+    lastCameraUpdateRef.current = Date.now();
+  };
+
   const recenterMap = () => {
     if (!mapRef.current) {
       return;
     }
+
+    setFocusedParticipantId(null);
 
     if (currentLocation) {
       const center = calculateForwardOffset(currentLocation, currentHeading, 55);
@@ -663,7 +716,7 @@ export default function RideNavigationScreen() {
                 ? "Live rider"
                 : `${marker.speedKmh.toFixed(1)} km/h`
             }
-            pinColor='#f59e0b'
+            pinColor={focusedParticipantId === marker.riderId ? colors.primary : '#f59e0b'}
           />
         ))}
 
@@ -821,6 +874,8 @@ export default function RideNavigationScreen() {
         canEndRide={navState === "ACTIVE"}
         onEndRide={() => endRideMutation.mutate()}
         ending={endRideMutation.isPending}
+        focusedParticipantId={focusedParticipantId}
+        onParticipantPress={focusParticipantOnMap}
         onSnapHeightChange={(height) => {
           bottomSheetHeightValue.current.setValue(height);
         }}

@@ -82,6 +82,7 @@ This keeps permission checks and state transitions in service logic while contro
 - Lightweight ride-room subscriptions over `/rides` for join and stop-request updates on ride detail
 - Ride-room subscription authorization enforces ride visibility/participation checks
 - Client store-driven live controls and participant map behavior
+- Full-screen navigation crew list can focus a selected rider's live location on the map, with recenter restoring self-follow
 - Ride detail screen automatically refreshes ride and live-session state while active so participants see session-start transitions without leaving the screen
 - Ride detail and full-screen navigation maps now share canonical route composition as current rider location -> start point -> approved stops -> destination, with origin fallback to start when device location is unavailable
 - Live socket disconnects when a session ends to prevent stale connected state on completed rides

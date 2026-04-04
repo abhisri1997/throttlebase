@@ -18,6 +18,7 @@ import { apiClient } from "../../src/api/client";
 import { getApiErrorMessage } from "../../src/utils/apiError";
 import { useTheme } from "../../src/theme/ThemeContext";
 import LocationPicker from "../../src/components/LocationPicker";
+import { fetchNavigationRoute } from "../../src/features/navigation/services/navigationRouteService";
 
 const createRide = async (payload: any) => {
   const { data } = await apiClient.post("/api/rides", payload);
@@ -70,9 +71,10 @@ export default function CreateRideModal() {
   const [capacity, setCapacity] = useState(
     existingRide?.max_capacity?.toString() || "10",
   );
-  const [duration, setDuration] = useState(
-    existingRide?.estimated_duration_min?.toString() || "180",
+  const [durationSecs, setDurationSecs] = useState<number | null>(
+    existingRide?.estimated_duration_min ? existingRide.estimated_duration_min * 60 : null
   );
+  const [isCalculatingDuration, setIsCalculatingDuration] = useState(false);
   const [isPrivate, setIsPrivate] = useState(
     existingRide?.visibility === "private",
   );
@@ -113,6 +115,64 @@ export default function CreateRideModal() {
   const [addingStopType, setAddingStopType] = useState<StopType>("fuel");
   const [showStopPicker, setShowStopPicker] = useState(false);
 
+  useEffect(() => {
+    const points: { latitude: number; longitude: number }[] = [];
+    
+    if (!autoStart && startCoords) {
+      points.push({ latitude: startCoords[1], longitude: startCoords[0] });
+    }
+    
+    stops.forEach((s) => {
+      if (s.location_coords) {
+        points.push({ latitude: s.location_coords[1], longitude: s.location_coords[0] });
+      }
+    });
+    
+    if (endCoords) {
+      points.push({ latitude: endCoords[1], longitude: endCoords[0] });
+    }
+
+    if (points.length < 2) {
+      if (!existingRide?.estimated_duration_min) setDurationSecs(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadRoute = async () => {
+      setIsCalculatingDuration(true);
+      try {
+        const origin = points[0];
+        const destination = points[points.length - 1];
+        const waypoints = points.slice(1, -1);
+
+        const route = await fetchNavigationRoute({
+          origin,
+          destination,
+          waypoints,
+          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
+        });
+        
+        if (!cancelled && route) {
+          setDurationSecs(route.totalDurationSeconds);
+        }
+      } catch (err) {
+        console.error("Failed to calculate duration", err);
+      } finally {
+        if (!cancelled) setIsCalculatingDuration(false);
+      }
+    };
+
+    const timerId = setTimeout(() => {
+      loadRoute();
+    }, 800);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timerId);
+    };
+  }, [startCoords, endCoords, stops, autoStart, existingRide?.estimated_duration_min]);
+
   // Requirements
   const [minExperience, setMinExperience] = useState<string>("beginner");
   const [selectedGear, setSelectedGear] = useState<string[]>([]);
@@ -129,7 +189,7 @@ export default function CreateRideModal() {
     status,
     visibility: isPrivate ? "private" : "public",
     scheduled_at: scheduledDate.toISOString(),
-    estimated_duration_min: parseInt(duration) || 180,
+    estimated_duration_min: durationSecs ? Math.max(1, Math.round(durationSecs / 60)) : undefined,
     max_capacity: parseInt(capacity) || 10,
     start_point_coords: autoStart ? undefined : startCoords,
     start_point_name: autoStart ? undefined : startName,
@@ -707,20 +767,25 @@ export default function CreateRideModal() {
               className='text-xs mb-1 ml-1'
               style={{ color: colors.textMuted }}
             >
-              Duration (mins)
+              Est. Duration
             </Text>
-            <TextInput
-              keyboardType='number-pad'
-              className='p-4 rounded-xl'
+            <View
+              className='p-4 rounded-xl flex-row items-center justify-center'
               style={{
                 backgroundColor: colors.inputBg,
                 borderWidth: 1,
                 borderColor: colors.border,
-                color: colors.text,
+                height: 52,
               }}
-              value={duration}
-              onChangeText={setDuration}
-            />
+            >
+              {isCalculatingDuration ? (
+                <ActivityIndicator size='small' color={colors.textMuted} />
+              ) : (
+                <Text style={{ color: colors.text, fontWeight: 'bold' }}>
+                  {durationSecs ? `${Math.round(durationSecs / 60)} mins` : "TBD"}
+                </Text>
+              )}
+            </View>
           </View>
         </View>
 

@@ -18,6 +18,7 @@
 - Mention UX now includes composer suggestions, clickable @mention profile links, and mention-notification deep links into post/comment context.
 - Live session lifecycle APIs, realtime gateway, ride-room realtime updates, client room/session integration, and worker-backed notification fanout are implemented.
 - Navigation Phase 1 full-screen experience and stabilization updates.
+- Live navigation now shows peer rider markers and supports tapping a crew member to focus their live location on the map.
 - Ride detail and full-screen navigation maps now render road-following routes in canonical order: current location -> start -> approved stops -> destination, with automatic origin fallback to start when device location is unavailable.
 
 ### In Progress

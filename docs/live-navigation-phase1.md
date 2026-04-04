@@ -2,9 +2,9 @@
 
 ## Summary
 
-Phase 1 delivers an immersive full-screen navigation route for active rides in `client/app/ride/[id]/navigation.tsx`. The screen focuses on single-rider route following with a clean riding UI: dark full-screen map, route polyline, current-location camera follow, top instruction card, and a bottom sheet for crew presence and host controls.
+Phase 1 delivers an immersive full-screen navigation route for active rides in `client/app/ride/[id]/navigation.tsx`. The screen focuses on current-rider route following with a clean riding UI: dark full-screen map, route polyline, current-location camera follow, top instruction card, and a bottom sheet for crew presence and host controls.
 
-This phase intentionally stops short of full multi-rider live map behavior. The goal is to make navigation feel solid before layering on richer realtime coordination.
+Phase 1 now includes lightweight multi-rider awareness by rendering peer live-location markers and allowing the rider to tap a crew member in the bottom sheet to focus that rider on the map. The goal is still to keep richer coordination overlays and captain-specific tools for later phases.
 
 ## What Phase 1 Includes
 
@@ -14,7 +14,8 @@ This phase intentionally stops short of full multi-rider live map behavior. The 
 - Turn-by-turn instruction card with ETA and remaining distance
 - Live-session integration for start/end flow, room join, heartbeat, and location emit
 - Ride-detail realtime subscription for join and stop-request updates before entering navigation
-- Bottom sheet for rider presence and captain-only end-ride control
+- Peer rider markers sourced from live-session location broadcasts
+- Bottom sheet for rider presence, tap-to-focus crew lookup, and captain-only end-ride control
 - Waypoint stop markers and recenter action for map recovery
 
 ## Files Involved
@@ -35,14 +36,14 @@ This phase intentionally stops short of full multi-rider live map behavior. The 
 - Expanded sheet height is content-measured and viewport-clamped, which removes the large empty area seen in earlier builds.
 - Collapsed sheet UX is intentionally lighter: ride title, online count, and a clear expand hint are visible without repeating turn/ETA data already shown in the top instruction card.
 - A dedicated recenter control was added above the sheet so the rider can quickly recover the camera without leaving navigation.
+- Selecting a rider from the bottom sheet now pauses automatic self-follow until the rider explicitly recenters, so crew lookup does not snap back immediately.
 
 ## Out of Scope for Phase 1
 
-- Peer rider markers on the navigation map
 - Captain/co-captain specific live coordination overlays
 - Deviation detection and reroute triggers
 - Incident visualization on the navigation map
-- Camera modes beyond the current rider-follow experience
+- Camera modes beyond current-rider follow plus temporary rider-focus lookup
 
 ## Phase 2 Requirement Map
 
@@ -79,7 +80,6 @@ This section maps the current codebase against the existing Phase 2 contract alr
 
 ## What Still Needs Implementation Before Phase 2 Is Truly Complete for Navigation UX
 
-- Render peer rider markers on the full-screen navigation map from `liveSessionStore.locations`.
 - Decide which riders should be emphasized in navigation mode: all riders, captain only, nearest riders, or incident-related riders.
 - Add server-side stale/out-of-order location rejection so the map does not regress on delayed packets.
 - Add reconnect behavior that survives token refresh instead of assuming the original socket auth payload remains valid.
@@ -89,6 +89,6 @@ This section maps the current codebase against the existing Phase 2 contract alr
 ## Recommended Phase 2 Start Point
 
 1. Add stale-location rejection on the server.
-2. Render peer rider markers in `client/app/ride/[id]/navigation.tsx` using existing store data.
+2. Decide whether rider focus should auto-expire or show richer rider detail when a crew member is selected.
 3. Normalize realtime payload contracts where the implementation has drifted from the earlier note.
 4. Add mobile reconnection testing around token refresh and background resume.
