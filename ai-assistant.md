@@ -2,32 +2,32 @@
 
 ## Purpose
 
-This file is the operational context brief for AI-assisted development in this repository.
-It should stay concise, current, and action-oriented.
+Operational context brief for AI-assisted development.
+Keep concise, current, action-oriented.
 
-Use this file to understand:
+Use to understand:
 
-- What the project is and where major systems live
-- Which docs are the source of truth for deeper details
-- Current implementation status and active priorities
-- Recent verified changes that affect ongoing work
+- Project structure, major system locations
+- Source-of-truth docs for deeper details
+- Implementation status, active priorities
+- Recent verified changes affecting ongoing work
 
 ## Project Snapshot
 
-ThrottleBase is a full-stack rider platform with:
+ThrottleBase: full-stack rider platform.
 
-- Ride lifecycle management (create, join, schedule, active, complete)
-- Route creation/bookmark/share and GPS trace ingestion
-- Community features (posts, comments, likes, follows, groups, reviews)
-- Rewards and leaderboard systems
-- Notifications, privacy/settings, and support ticketing
-- Live group ride sessions (REST + realtime + worker-backed notifications)
+- Ride lifecycle: create, join, schedule, active, complete
+- Route creation/bookmark/share, GPS trace ingestion
+- Community: posts, comments, likes, follows, groups, reviews
+- Rewards, leaderboard systems
+- Notifications, privacy/settings, support ticketing
+- Live group ride sessions: REST + realtime + worker-backed notifications
 
-Primary code locations:
+Code locations:
 
 - Server: `server/src`
 - Client: `client/app`, `client/src`
-- Database migrations: `server/src/db/migrations`
+- DB migrations: `server/src/db/migrations`
 
 ## Stack and Runtime
 
@@ -36,74 +36,77 @@ Primary code locations:
 - Server: Express 5 + PostgreSQL/PostGIS
 - Client: Expo + React Native + Expo Router + Zustand + TanStack Query
 - Realtime: Socket.IO namespace `/live`
-- Background processing: DB-backed jobs queue + worker processors
+- Background: DB-backed jobs queue + worker processors
 
 ## Documentation Map (Source of Truth)
 
 - Product scope: `docs/product-overview.md`
-- Functional + technical feature detail: `docs/technical-overview.md`
-- Architecture and system flows: `docs/architecture.md`
-- Database schema/design: `docs/database-design.md`
-- API inventory (grouped endpoints): `docs/api-endpoints.md`
-- Technical decisions and implementation notes: `docs/technical-decisions.md`
-- Delivery status, gaps, and backlog: `docs/project-status.md`
-- UAT and stakeholder validation guide: `docs/uat-test-plan-feature-remaining-features.md`
-- Live session rollout details: `docs/live-session-rollout.md`
-- Live navigation implementation notes: `docs/live-navigation-phase1.md`
+- Feature detail: `docs/technical-overview.md`
+- Architecture, system flows: `docs/architecture.md`
+- DB schema/design: `docs/database-design.md`
+- API inventory: `docs/api-endpoints.md`
+- Technical decisions: `docs/technical-decisions.md`
+- Delivery status, gaps, backlog: `docs/project-status.md`
+- UAT validation guide: `docs/uat-test-plan-feature-remaining-features.md`
+- Live session rollout: `docs/live-session-rollout.md`
+- Live navigation notes: `docs/live-navigation-phase1.md`
 
 ## Current Status (High Signal)
 
-- Core backend domains are implemented: auth, riders, rides, routes, community, rewards, notifications, support, live session.
-- Security module APIs are implemented for TOTP setup/verify/disable, login activity, and session management.
-- Support operations now include admin-only ticket triage and agent replies.
-- Mention-triggered notification fanout is implemented with in-app creation plus queued push/email delivery stubs.
-- Queue and worker foundations are in place and active for ride analytics, live-session operational jobs, and notification delivery jobs.
-- Core client domains are implemented with tabs + detail flows, including groups, reviews, followers/following, notifications center, security controls, support admin, and live session controls.
-- Live navigation Phase 1 is shipped with full-screen navigation and map UX foundations.
+- Core backend domains implemented: auth, riders, rides, routes, community, rewards, notifications, support, live session.
+- Security module: TOTP setup/verify/disable, login activity, session management.
+- Support: admin-only ticket triage, agent replies.
+- Mention notifications: in-app creation + queued push/email delivery stubs.
+- Queue/worker active: ride analytics, live-session ops, notification delivery.
+- Core client domains: tabs + detail flows, groups, reviews, followers/following, notifications center, security controls, support admin, live session controls.
+- Live navigation Phase 1 shipped: full-screen nav, map UX foundations.
 
 ## Active Priorities
 
-1. Complete notification delivery infrastructure for push/email channels and device registration.
-2. Continue live session reliability hardening (token refresh reconnect, broader soak testing, ops observability tuning).
-3. Maintain API/UI contract consistency as features mature.
-4. Expand integration coverage for security and realtime edge-cases.
+1. Complete notification delivery: push/email channels, device registration.
+2. Live session reliability: token refresh reconnect, soak testing, ops observability.
+3. Maintain API/UI contract consistency.
+4. Expand integration coverage: security, realtime edge-cases.
 
 ## Recent Verified Updates
 
-- Local DB/bootstrap hardening completed for fresh-machine setup and migration reliability.
-- Swagger generation moved to lazy init to avoid startup deprecation warnings.
-- Register flow now logs in post-signup before auth-store persistence; login supports email-or-username identifier.
-- Validation error handling on client is normalized via shared parser utility.
-- Groups UX and membership-context reliability are hardened across list/detail/join behavior.
-- Ride visibility controls now enforce participant-only access for active/private ride details.
-- Account security modal now exposes 2FA setup, login activity, and session revocation.
-- Admin support inbox and status update flow are available behind `is_admin` checks.
-- Community mention parsing now creates notifications and queues push/email delivery jobs.
-- Live session lifecycle, presence, incidents, worker fanout, and client map/presence states are integrated.
-- Ride detail screens subscribe to lightweight realtime ride-room updates for joins and stop-request changes.
-- Navigation screen stability and UX polish completed for overlays, bottom sheet behavior, recenter flow, and waypoint rendering.
-- Login now enforces TOTP when 2FA is enabled and requires a valid session record for API/socket auth.
-- Ride-room subscriptions now enforce ride visibility/participation checks before joining `ride:<rideId>` rooms.
-- Mention push/email fanout now uses recipient-scoped notification identifiers to prevent dedupe collapse.
-- Security/profile flows now tolerate older schemas where `riders.is_admin` and `riders.totp_verified_at` are not present.
-- A stakeholder-facing UAT guide now exists with a local PDF generation workflow for validating the recently delivered feature set.
-- Rider support center now supports opening individual tickets with a dedicated detail view, including agent replies when present.
-- Riders can now send follow-up replies and close their own support tickets from ticket detail.
-- Support ticket detail now renders a chronological conversation thread from persisted ticket messages, with a legacy fallback for older tickets.
-- Mention UX now includes username suggestions in post/comment composers, clickable @mentions in rendered content, and notification deep links into the referenced post/comment context.
-- Ride detail now auto-refreshes ride/live-session state in-app so participants see session start transitions without backing out and reopening the screen.
-- Ride detail now hides Start Live after ride completion and limits Update Starting Location to scheduled rides only.
-- Live session socket now disconnects automatically when a session ends, and reconnects on the next Start Live flow.
-- Ride detail and full-screen navigation maps now use canonical rider-first routing order: current rider location -> start point -> approved stops -> destination, with location-unavailable fallback origin set to start.
-- Navigation bottom sheet participant taps now focus that rider's live location on the full-screen map, with recenter returning camera follow to the current rider.
-- Create Ride form now calculates and displays route duration dynamically using the Google Directions API instead of manual user input.
-- Ride detail now keeps the live-session socket offline for completed/cancelled rides or ended sessions, preventing stale "Socket connected" state after completion.
-- Ride detail now treats `GET /live/session` 404 as "no active session" and only polls when a non-ended session exists, preventing continuous request loops while socket is offline.
+- Local DB/bootstrap hardened: fresh-machine setup, migration reliability.
+- Swagger generation: lazy init, avoids startup deprecation warnings.
+- Register flow: logs in post-signup before auth-store persist. Login supports email-or-username.
+- Client validation errors: normalized via shared parser utility.
+- Groups UX: membership-context reliability hardened across list/detail/join.
+- Ride visibility: participant-only access enforced for active/private rides.
+- Account security modal: 2FA setup, login activity, session revocation.
+- Admin support inbox: status update flow behind `is_admin` checks.
+- Mention parsing: creates notifications, queues push/email delivery jobs.
+- Live session: lifecycle, presence, incidents, worker fanout, client map/presence integrated.
+- Ride detail: subscribes realtime ride-room updates for joins, stop-request changes.
+- Navigation screen: stability polish — overlays, bottom sheet, recenter, waypoint rendering.
+- Login: enforces TOTP when 2FA enabled. Requires valid session for API/socket auth.
+- Ride-room subscriptions: enforce visibility/participation checks before join `ride:<rideId>`.
+- Mention fanout: recipient-scoped notification identifiers prevent dedupe collapse.
+- Security/profile flows: tolerate older schemas missing `riders.is_admin`, `riders.totp_verified_at`.
+- UAT guide: stakeholder-facing, local PDF generation workflow.
+- Support center: individual ticket detail view, agent replies.
+- Ticket detail: rider follow-up replies, rider-initiated close.
+- Ticket thread: chronological conversation from persisted messages, legacy fallback.
+- Mention UX: username suggestions in composers, clickable @mentions, notification deep links.
+- Ride detail: auto-refresh ride/live-session state. Session start transitions visible without back-out.
+- Ride detail: hides Start Live after completion. Update Starting Location limited to scheduled rides.
+- Live session socket: auto-disconnect on session end. Reconnect on next Start Live.
+- Maps routing order: rider location → start → approved stops → destination. Fallback origin: start point.
+- Navigation bottom sheet: participant tap focuses rider live location. Recenter returns camera follow.
+- Create Ride: dynamic route duration via Google Directions API. No manual input.
+- Ride detail: live-session socket offline for completed/cancelled/ended. Prevents stale state.
+- Ride detail: `GET /live/session` 404 treated as no active session. Polls only non-ended sessions.
+- Caveman compression NLP tool installed: `tools/caveman-compression/`. Wrapper: `./tools/caveman-compress.sh`. Free, offline, ~15-30% token reduction.
+- AI context files (`ai-assistant.md`, skills, docs/) now use caveman compression format. Rule: `.gemini/rules/caveman-context.md`.
 
 ## Assistant Operating Notes
 
-- Keep this file concise and avoid embedding large specs.
-- Put detailed design or planning content in `/docs` and link from here.
-- When major architecture or delivery status changes, update this file and the corresponding source doc in the same change.
-- Workspace skill `cost-effective-orchestrator` is available under `.github/skills` for cost-aware routing between single-agent, hybrid, multi-agent, and layered task execution.
-- Do not add historical noise; keep only currently useful context.
+- Keep file concise. No large specs.
+- Detailed design/planning → `/docs`, link from here.
+- Architecture/status changes → update this file + corresponding source doc together.
+- Skill `cost-effective-orchestrator` available: `.agent/skills` for cost-aware routing.
+- No historical noise. Only currently useful context.
+- Use caveman compression for all AI-consumed context files. See `.gemini/rules/caveman-context.md`.
