@@ -90,6 +90,11 @@ export type LiveSocketClientEvents = {
 type LiveSocket = Socket<LiveSocketServerEvents, LiveSocketClientEvents>;
 
 const getBaseUrl = (): string => {
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (envUrl) {
+    return envUrl;
+  }
+
   const debuggerHost = Constants.expoConfig?.hostUri;
   const localIp = debuggerHost?.split(":")[0];
 

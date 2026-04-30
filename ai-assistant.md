@@ -101,6 +101,7 @@ Code locations:
 - Ride detail: `GET /live/session` 404 treated as no active session. Polls only non-ended sessions.
 - Caveman compression NLP tool installed: `tools/caveman-compression/`. Wrapper: `./tools/caveman-compress.sh`. Free, offline, ~15-30% token reduction.
 - AI context files (`ai-assistant.md`, skills, docs/) now use caveman compression format. Rule: `.gemini/rules/caveman-context.md`.
+- Background location tracking: `expo-task-manager` + `expo-location` background task tracks rider location globally when participating in active ride — even off ride screens or app backgrounded. Wired in root `_layout.tsx`.
 
 ## Assistant Operating Notes
 

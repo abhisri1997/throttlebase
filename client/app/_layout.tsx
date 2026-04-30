@@ -8,6 +8,7 @@ import { X } from "lucide-react-native";
 import { StyleSheet as NativeWindStyleSheet } from "nativewind";
 import { ThemeProvider, useTheme } from "../src/theme/ThemeContext";
 import { useAuthStore } from "../src/store/authStore";
+import { useBackgroundLocationTracker } from "../src/hooks/useBackgroundLocationTracker";
 import "../global.css";
 
 function AppInner() {
@@ -27,6 +28,9 @@ function AppInner() {
   useEffect(() => {
     checkAuth().finally(() => setAuthChecked(true));
   }, [checkAuth]);
+
+  // Global background location tracking for active rides
+  useBackgroundLocationTracker();
 
   useEffect(() => {
     if (!authNotice) {

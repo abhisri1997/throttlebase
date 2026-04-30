@@ -1,0 +1,101 @@
+/**
+ * useBackgroundLocationTracker
+ *
+ * App-level hook. Mount once in root _layout.tsx.
+ * Polls for rider's active rides and starts/stops background location
+ * tracking automatically.
+ */
+
+import { useEffect, useRef } from "react";
+import { AppState, type AppStateStatus, Platform } from "react-native";
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "../api/client";
+import { useAuthStore } from "../store/authStore";
+import {
+  startTracking,
+  stopTracking,
+  getActiveTrackingRideId,
+} from "../services/backgroundLocationService";
+
+type RideSummary = {
+  id: string;
+  status: string;
+  captain_id: string;
+};
+
+/**
+ * Fetch active rides where current rider is a participant.
+ * GET /api/rides?status=active already filters to rides where the
+ * authenticated rider is captain or confirmed participant.
+ */
+const fetchMyActiveRides = async (): Promise<RideSummary[]> => {
+  try {
+    const { data } = await apiClient.get("/api/rides", {
+      params: { status: "active" },
+    });
+    const rides = data.rides ?? data;
+    return Array.isArray(rides) ? rides : [];
+  } catch {
+    return [];
+  }
+};
+
+export function useBackgroundLocationTracker() {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const token = useAuthStore((state) => state.token);
+  const rider = useAuthStore((state) => state.rider);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+
+  // Poll for active rides every 30s (lightweight query)
+  const { data: activeRides } = useQuery({
+    queryKey: ["my-active-rides-bg"],
+    queryFn: fetchMyActiveRides,
+    enabled: isAuthenticated && Platform.OS !== "web",
+    refetchInterval: 30000,
+    refetchIntervalInBackground: false,
+    staleTime: 15000,
+  });
+
+  useEffect(() => {
+    if (Platform.OS === "web" || !isAuthenticated || !token || !rider?.id) {
+      // Not authenticated or web — stop any active tracking
+      stopTracking();
+      return;
+    }
+
+    // Any ride returned from GET /api/rides?status=active means
+    // current rider is captain or confirmed participant
+    const activeRide = activeRides?.[0] ?? null;
+
+    const currentlyTracking = getActiveTrackingRideId();
+
+    if (activeRide && activeRide.id !== currentlyTracking) {
+      // New active ride found — start tracking
+      startTracking(activeRide.id, token);
+    } else if (!activeRide && currentlyTracking) {
+      // No active ride anymore — stop tracking
+      stopTracking();
+    }
+  }, [activeRides, isAuthenticated, token, rider?.id]);
+
+  // Handle app state changes — resume foreground tracking when app comes back
+  useEffect(() => {
+    const subscription = AppState.addEventListener(
+      "change",
+      (nextState: AppStateStatus) => {
+        appStateRef.current = nextState;
+      },
+    );
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  // Cleanup on unmount (logout / app shutdown)
+  useEffect(() => {
+    return () => {
+      stopTracking();
+    };
+  }, []);
+}
