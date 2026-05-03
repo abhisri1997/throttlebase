@@ -54,6 +54,15 @@ cd client
 npm start
 ```
 
+For an installed iOS/Android development build on a physical device, use the Expo dev client flow instead of opening the native app without Metro:
+
+```bash
+cd client
+npx expo start --dev-client --tunnel
+```
+
+If the native app is rebuilt with `npx expo run:ios --device` or `npx expo run:android`, keep the dev server running before launching the app. Otherwise the app can fail with "No script URL provided" because the JavaScript bundle is not embedded in debug builds.
+
 ## Documentation
 
 - Documentation index: `docs/README.md`
