@@ -36,7 +36,7 @@ import type {
   NavigationRoute,
   RideParticipantView,
 } from "../../../src/features/navigation/types/navigation";
-import { ChevronLeft, Navigation } from "lucide-react-native";
+import { Motorbike, ChevronLeft, Navigation } from "lucide-react-native";
 
 const DARK_MAP_STYLE = [
   { elementType: "geometry", stylers: [{ color: "#0b1220" }] },
@@ -53,6 +53,8 @@ const DARK_MAP_STYLE = [
     stylers: [{ color: "#111827" }],
   },
 ];
+
+const USER_FOLLOW_ZOOM = 19;
 
 const fetchRideDetails = async (id: string) => {
   const { data } = await apiClient.get(`/api/rides/${id}`);
@@ -553,7 +555,7 @@ export default function RideNavigationScreen() {
         center,
         heading: currentHeading,
         pitch: 50,
-        zoom: 17,
+        zoom: USER_FOLLOW_ZOOM,
       },
       { duration: 900 },
     );
@@ -736,7 +738,7 @@ export default function RideNavigationScreen() {
           center,
           heading: currentHeading,
           pitch: 50,
-          zoom: 17,
+          zoom: USER_FOLLOW_ZOOM,
         },
         { duration: 650 },
       );
@@ -831,16 +833,31 @@ export default function RideNavigationScreen() {
                 ? "Live rider"
                 : `${marker.speedKmh.toFixed(1)} km/h`
             }
-            pinColor={focusedParticipantId === marker.riderId ? colors.primary : '#f59e0b'}
-          />
+          >
+            <View
+              style={{
+                backgroundColor: focusedParticipantId === marker.riderId ? colors.primary : '#f59e0b',
+                borderRadius: 20,
+                padding: 6,
+              }}
+            >
+              <Motorbike color='white' size={16} />
+            </View>
+          </Marker>
         ))}
 
         {currentLocation ? (
-          <Marker
-            coordinate={currentLocation}
-            title='You'
-            pinColor='#2563eb'
-          />
+          <Marker coordinate={currentLocation} title='You'>
+            <View
+              style={{
+                backgroundColor: '#2563eb',
+                borderRadius: 20,
+                padding: 6,
+              }}
+            >
+              <Motorbike color='white' size={16} />
+            </View>
+          </Marker>
         ) : null}
       </MapView>
 

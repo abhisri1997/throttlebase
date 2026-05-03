@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "client",
-    "slug": "client",
+    "name": "ThrottleBase",
+    "slug": "throttlebase",
     "version": "1.0.0",
     "scheme": "throttlebase",
     "orientation": "portrait",
@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.client",
+      "bundleIdentifier": "com.throttlebase.client",
       "config": {
         "googleMapsApiKey": "AIzaSyCdVBc12MmeJf-qnP98hjFbtascMg9XQdk"
       },
@@ -39,7 +39,7 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
-      "package": "com.anonymous.client"
+      "package": "com.throttlebase.client"
     },
     "web": {
       "bundler": "metro",

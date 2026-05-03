@@ -36,6 +36,7 @@ Phase 1 now includes lightweight multi-rider awareness by rendering peer live-lo
 - Expanded sheet height is content-measured and viewport-clamped, which removes the large empty area seen in earlier builds.
 - Collapsed sheet UX is intentionally lighter: ride title, online count, and a clear expand hint are visible without repeating turn/ETA data already shown in the top instruction card.
 - A dedicated recenter control was added above the sheet so the rider can quickly recover the camera without leaving navigation.
+- Self-follow and recenter-to-self now use a tighter zoom, so riders land closer to their live position both on initial navigation load and when tapping recenter.
 - Selecting a rider from the bottom sheet now pauses automatic self-follow until the rider explicitly recenters, so crew lookup does not snap back immediately.
 
 ## Out of Scope for Phase 1
