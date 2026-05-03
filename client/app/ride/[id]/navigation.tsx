@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Animated,
   Alert,
   AppState,
   type AppStateStatus,
@@ -170,14 +169,20 @@ export default function RideNavigationScreen() {
   const [focusedParticipantId, setFocusedParticipantId] = useState<string | null>(null);
   const [topControlsHeight, setTopControlsHeight] = useState(0);
   const [instructionOverlayHeight, setInstructionOverlayHeight] = useState(0);
-  const bottomSheetHeightValue = useRef(
-    new Animated.Value(NAVIGATION_SHEET_COLLAPSED_HEIGHT),
+  const [bottomSheetHeight, setBottomSheetHeight] = useState(
+    NAVIGATION_SHEET_COLLAPSED_HEIGHT,
   );
 
   const mapRef = useRef<InstanceType<typeof MapView> | null>(null);
   const lastCameraUpdateRef = useRef(0);
   const lastRouteRefreshAtRef = useRef(0);
   const lastRouteOriginRef = useRef<LatLng | null>(null);
+  const lastRouteUsedDeviceOriginRef = useRef(false);
+  const currentLocationRef = useRef<LatLng | null>(currentLocation);
+  currentLocationRef.current = currentLocation;
+  const fetchRouteNowRef = useRef<(() => Promise<void>) | null>(null);
+  const appStateRef = useRef<AppStateStatus>(appState);
+  appStateRef.current = appState;
 
   const { data: ride, isLoading, isError, refetch } = useQuery({
     queryKey: ["ride", id],
@@ -258,6 +263,7 @@ export default function RideNavigationScreen() {
       }));
   }, [ride?.stops]);
 
+  // Includes currentLocation as origin for accurate routing — used by aheadPolyline.
   const canonicalRoute = useMemo(
     () =>
       buildCanonicalRideRouteInput({
@@ -269,67 +275,132 @@ export default function RideNavigationScreen() {
     [approvedStopCoords, currentLocation, rideEnd, rideStart],
   );
 
-  const canonicalRouteKey = useMemo(() => {
-    if (!canonicalRoute) {
+  // Ref so effects can read latest canonical route without adding it to deps.
+  const canonicalRouteRef = useRef(canonicalRoute);
+  canonicalRouteRef.current = canonicalRoute;
+
+  // Key based only on static waypoints — GPS updates do NOT change this.
+  // Only changes when the ride's start/stops/destination change.
+  const destinationKey = useMemo(() => {
+    if (!rideStart || !rideEnd) {
       return "";
     }
-
-    return canonicalRoute.orderedPoints
-      .map((point) => `${point.latitude},${point.longitude}`)
+    return [rideStart, ...approvedStopCoords, rideEnd]
+      .map((p) => `${p.latitude.toFixed(5)},${p.longitude.toFixed(5)}`)
       .join("|");
-  }, [canonicalRoute]);
+  }, [approvedStopCoords, rideEnd, rideStart]);
 
+  // Fetch route on mount (destinationKey change) and re-fetch when
+  // 25s elapsed OR user moved 40m — both checked via interval reading refs.
+  // currentLocation is NEVER a dep — reads via canonicalRouteRef to avoid
+  // the cancelled-fetch loop caused by cleanup on every location update.
   useEffect(() => {
-    if (!canonicalRoute) {
+    if (!destinationKey) {
       setNavigationRoute(null);
       return;
     }
 
-    const now = Date.now();
-    const lastOrigin = lastRouteOriginRef.current;
-    const movedMeters =
-      lastOrigin && currentLocation
-        ? haversineMeters(lastOrigin, canonicalRoute.origin)
-        : Infinity;
-    const elapsedMs = now - lastRouteRefreshAtRef.current;
-    const shouldRefresh =
-      !navigationRoute || movedMeters >= 40 || elapsedMs >= 25000;
-
-    if (!shouldRefresh) {
-      return;
-    }
-
     let cancelled = false;
+    let isFetching = false;
 
-    const loadRoute = async () => {
+    const doFetch = async () => {
+      if (isFetching || cancelled) {
+        return;
+      }
+      if (appStateRef.current !== "active") {
+        return;
+      }
+      const cr = canonicalRouteRef.current;
+      if (!cr) {
+        return;
+      }
+      isFetching = true;
       setRouteLoading(true);
       try {
         const route = await fetchNavigationRoute({
-          origin: canonicalRoute.origin,
-          destination: canonicalRoute.destination,
-          waypoints: canonicalRoute.waypoints,
+          origin: cr.origin,
+          destination: cr.destination,
+          waypoints: cr.waypoints,
           apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
         });
-
         if (!cancelled) {
+          if (__DEV__) {
+            console.log(
+              "[navigation] route source:",
+              route.source,
+              "polyline pts:",
+              route.polyline.length,
+            );
+          }
           setNavigationRoute(route);
           setStepIndex(0);
-          lastRouteOriginRef.current = canonicalRoute.origin;
+          lastRouteOriginRef.current = cr.origin;
+          lastRouteUsedDeviceOriginRef.current = Boolean(currentLocationRef.current);
           lastRouteRefreshAtRef.current = Date.now();
         }
       } finally {
+        isFetching = false;
         if (!cancelled) {
           setRouteLoading(false);
         }
       }
     };
 
-    void loadRoute();
+    fetchRouteNowRef.current = doFetch;
+
+    // Initial fetch: prefer live GPS-origin route when available.
+    // If GPS isn't ready yet, wait a short grace window before falling back
+    // to start-point-origin fetch to avoid immediate wrong-route + delayed reroute.
+    let initialFetchTimer: ReturnType<typeof setTimeout> | null = null;
+    if (currentLocationRef.current) {
+      void doFetch();
+    } else {
+      initialFetchTimer = setTimeout(() => {
+        void doFetch();
+      }, 1200);
+    }
+
+    // Poll every 5s: re-fetch if 25s elapsed OR moved 40m from last origin
+    const timer = setInterval(() => {
+      if (appStateRef.current !== "active") {
+        return;
+      }
+
+      const lastOrigin = lastRouteOriginRef.current;
+      const currentOrigin = canonicalRouteRef.current?.origin ?? null;
+      const movedMeters =
+        lastOrigin && currentOrigin ? haversineMeters(lastOrigin, currentOrigin) : 0;
+      const elapsed = Date.now() - lastRouteRefreshAtRef.current;
+      const movedEnough = movedMeters >= 40;
+      const movementCooldownElapsed = elapsed >= 12000;
+      const periodicRefreshDue = elapsed >= 25000;
+
+      if (periodicRefreshDue || (movedEnough && movementCooldownElapsed)) {
+        void doFetch();
+      }
+    }, 5000);
 
     return () => {
       cancelled = true;
+      clearInterval(timer);
+      if (initialFetchTimer) {
+        clearTimeout(initialFetchTimer);
+      }
+      fetchRouteNowRef.current = null;
     };
-  }, [appState, canonicalRoute, canonicalRouteKey, currentLocation, navigationRoute]);
+  }, [destinationKey]);
+
+  // As soon as we get first device GPS fix, fetch route immediately from live origin.
+  // Without this, we may wait for movement cooldown and show route only after several seconds.
+  useEffect(() => {
+    if (!currentLocation) {
+      return;
+    }
+    if (lastRouteUsedDeviceOriginRef.current) {
+      return;
+    }
+    void fetchRouteNowRef.current?.();
+  }, [currentLocation]);
 
   const liveStatus = liveSocketSession?.status || liveSession?.status || "not_started";
 
@@ -372,6 +443,48 @@ export default function RideNavigationScreen() {
     let closed = false;
     let locationSubscription: ExpoLocation.LocationSubscription | null = null;
 
+    const applyPosition = (position: ExpoLocation.LocationObject) => {
+      const nextLocation = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      };
+
+      setCurrentLocation(nextLocation);
+
+      if (
+        typeof position.coords.heading === "number" &&
+        Number.isFinite(position.coords.heading) &&
+        position.coords.heading >= 0
+      ) {
+        setCurrentHeading(position.coords.heading);
+      }
+
+      if (inRoom) {
+        upsertLocation({
+          lon: position.coords.longitude,
+          lat: position.coords.latitude,
+          speed_kmh:
+            typeof position.coords.speed === "number" &&
+            Number.isFinite(position.coords.speed) &&
+            position.coords.speed >= 0
+              ? position.coords.speed * 3.6
+              : undefined,
+          heading_deg:
+            typeof position.coords.heading === "number" &&
+            Number.isFinite(position.coords.heading) &&
+            position.coords.heading >= 0
+              ? position.coords.heading
+              : undefined,
+          accuracy_m:
+            typeof position.coords.accuracy === "number" &&
+            Number.isFinite(position.coords.accuracy)
+              ? position.coords.accuracy
+              : undefined,
+          captured_at: new Date(position.timestamp).toISOString(),
+        });
+      }
+    };
+
     const startTracking = async () => {
       if (typeof window !== "undefined" && (globalThis as any).document) {
         return;
@@ -382,6 +495,27 @@ export default function RideNavigationScreen() {
         return;
       }
 
+      // Seed location immediately when possible to avoid delayed first reroute.
+      try {
+        const lastKnown = await ExpoLocation.getLastKnownPositionAsync();
+        if (!closed && lastKnown?.coords) {
+          applyPosition(lastKnown as ExpoLocation.LocationObject);
+        }
+      } catch {
+        // noop: watchPositionAsync below will still stream updates.
+      }
+
+      try {
+        const current = await ExpoLocation.getCurrentPositionAsync({
+          accuracy: ExpoLocation.Accuracy.Balanced,
+        });
+        if (!closed && current?.coords) {
+          applyPosition(current);
+        }
+      } catch {
+        // noop: watchPositionAsync below will still stream updates.
+      }
+
       locationSubscription = await ExpoLocation.watchPositionAsync(
         {
           accuracy: ExpoLocation.Accuracy.Balanced,
@@ -389,45 +523,7 @@ export default function RideNavigationScreen() {
           distanceInterval: 8,
         },
         (position) => {
-          const nextLocation = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          };
-
-          setCurrentLocation(nextLocation);
-
-          if (
-            typeof position.coords.heading === "number" &&
-            Number.isFinite(position.coords.heading) &&
-            position.coords.heading >= 0
-          ) {
-            setCurrentHeading(position.coords.heading);
-          }
-
-          if (inRoom) {
-            upsertLocation({
-              lon: position.coords.longitude,
-              lat: position.coords.latitude,
-              speed_kmh:
-                typeof position.coords.speed === "number" &&
-                Number.isFinite(position.coords.speed) &&
-                position.coords.speed >= 0
-                  ? position.coords.speed * 3.6
-                  : undefined,
-              heading_deg:
-                typeof position.coords.heading === "number" &&
-                Number.isFinite(position.coords.heading) &&
-                position.coords.heading >= 0
-                  ? position.coords.heading
-                  : undefined,
-              accuracy_m:
-                typeof position.coords.accuracy === "number" &&
-                Number.isFinite(position.coords.accuracy)
-                  ? position.coords.accuracy
-                  : undefined,
-              captured_at: new Date(position.timestamp).toISOString(),
-            });
-          }
+          applyPosition(position);
         },
       );
     };
@@ -551,6 +647,25 @@ export default function RideNavigationScreen() {
         displayName: displayNameByRiderId.get(location.riderId) || "Rider",
       }));
   }, [currentRider?.id, locations, presence, ride?.participants]);
+
+  const aheadPolyline = useMemo(() => {
+    const fullPolyline = navigationRoute?.polyline;
+    if (!fullPolyline?.length || !currentLocation) {
+      return fullPolyline ?? [];
+    }
+
+    let nearestIndex = 0;
+    let nearestDist = Infinity;
+    for (let i = 0; i < fullPolyline.length; i++) {
+      const dist = haversineMeters(currentLocation, fullPolyline[i]);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestIndex = i;
+      }
+    }
+
+    return fullPolyline.slice(nearestIndex);
+  }, [currentLocation, navigationRoute?.polyline]);
 
   const isHost = ride?.captain_id === currentRider?.id;
   const onlineParticipants = participants.filter((participant) => participant.isOnline).length;
@@ -695,9 +810,9 @@ export default function RideNavigationScreen() {
           />
         ))}
 
-        {navigationRoute?.polyline?.length ? (
+        {aheadPolyline.length > 1 ? (
           <Polyline
-            coordinates={navigationRoute.polyline}
+            coordinates={aheadPolyline}
             strokeColor={colors.primary}
             strokeWidth={5}
           />
@@ -742,12 +857,17 @@ export default function RideNavigationScreen() {
       >
         <View className='flex-row items-center justify-between'>
           <TouchableOpacity
-            onPress={() => router.replace(`/ride/${id}` as any)}
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace(`/ride/${id}` as any);
+              }
+            }}
             className='h-11 rounded-full flex-row items-center justify-center px-4'
             style={{ backgroundColor: "rgba(15,23,42,0.74)", borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" }}
           >
             <ChevronLeft color='white' size={22} />
-            {/* TODO: Should we name this button "Exit" or "Back"? */}
             <Text className='ml-1 text-sm font-semibold text-white'>Exit</Text>
           </TouchableOpacity>
 
@@ -845,11 +965,11 @@ export default function RideNavigationScreen() {
         </View>
       ) : null}
 
-      <Animated.View
+      <View
         style={{
           position: "absolute",
           right: 16,
-          bottom: Animated.add(bottomSheetHeightValue.current, 12),
+          bottom: bottomSheetHeight + 12,
           zIndex: 65,
           elevation: 65,
         }}
@@ -865,7 +985,7 @@ export default function RideNavigationScreen() {
         >
           <Navigation color={colors.text} size={20} />
         </TouchableOpacity>
-      </Animated.View>
+      </View>
 
       <NavigationBottomSheet
         rideName={ride.title}
@@ -877,7 +997,7 @@ export default function RideNavigationScreen() {
         focusedParticipantId={focusedParticipantId}
         onParticipantPress={focusParticipantOnMap}
         onSnapHeightChange={(height) => {
-          bottomSheetHeightValue.current.setValue(height);
+          setBottomSheetHeight(height);
         }}
       />
     </View>

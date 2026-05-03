@@ -99,6 +99,18 @@ Code locations:
 - Create Ride: dynamic route duration via Google Directions API. No manual input.
 - Ride detail: live-session socket offline for completed/cancelled/ended. Prevents stale state.
 - Ride detail: `GET /live/session` 404 treated as no active session. Polls only non-ended sessions.
+- Navigation reroute cadence hardened: road-following route refresh now uses interval+ref checks with movement cooldown (40m + >=12s) and 25s periodic refresh to prevent rapid re-fetch loops while riding.
+- Navigation polyline simplification upgraded to adaptive shape-preserving reduction with point cap, preventing multi-thousand-point renders from delaying route draw.
+- Ride detail route preview fetch is now focus-gated so hidden screens do not continue Directions API calls while full-screen navigation is active.
+- Navigation screen now forces an immediate route refetch on first GPS fix so the map does not wait for movement cooldown before drawing the live-origin route.
+- Full-screen navigation Exit now prefers `router.back()` when possible to avoid stacking duplicate ride-detail screens.
+- Ride detail live map auto-fit is now limited to one initial fit per live-room session, avoiding repeated camera animations during pinch/pan interactions.
+- Navigation floating recenter control now uses numeric bottom-offset state (no `Animated.Value` listener churn), removing repeated `onAnimatedValueUpdate` warnings.
+- Ride detail route-preview map now uses solid (non-dashed) simplified polyline with stricter preview cap and disabled rotate/pitch to reduce zoom/pan crash risk.
+- Full-screen navigation now seeds current location immediately via last-known/current-position fetch (before watch callbacks), and startup route fetch waits briefly for GPS to reduce delayed live-origin route drawing.
+- Polyline simplification now uses turn-aware distance thinning (road-safe point reduction) instead of chord-cutting geometric approximation, preventing routes from visibly crossing buildings.
+- Ride-detail map now preserves last fetched road-following polyline when screen blurs (e.g., opening full-screen navigation), preventing temporary fallback to straight canonical route lines on return.
+- Ride-detail header map now freezes preview origin on first resolved rider location and does not auto-fit camera to live-marker updates, preventing 2-3s post-load map jump/glitch.
 - Caveman compression NLP tool installed: `tools/caveman-compression/`. Wrapper: `./tools/caveman-compress.sh`. Free, offline, ~15-30% token reduction.
 - AI context files (`ai-assistant.md`, skills, docs/) now use caveman compression format. Rule: `.gemini/rules/caveman-context.md`.
 - Background location tracking: `expo-task-manager` + `expo-location` background task tracks rider location globally when participating in active ride — even off ride screens or app backgrounded. Wired in root `_layout.tsx`.

@@ -8,6 +8,39 @@ import {
   Users,
 } from "lucide-react-native";
 import { useTheme } from "../../src/theme/ThemeContext";
+import { size } from "zod";
+
+const TABS_DETAILS = [
+  { name: "feed",
+    title: "Feed",
+    tabBarIcon: ({ color }: { color: string }) => <Activity size={24} color={color} />
+  },
+  {
+    name: "rides",
+    title: "Discover",
+    tabBarIcon: ({ color }: { color: string }) => <Compass size={24} color={color} />
+  },
+  {
+    name: "routes",
+    title: "Routes",
+    tabBarIcon: ({ color }: { color: string }) => <Map size={24} color={color} />
+  },
+  {
+    name: "groups",
+    title: "Groups",
+    tabBarIcon: ({ color }: { color: string }) => <Users size={24} color={color} />
+  },
+  {
+    name: "rewards",
+    title: "Rank",
+    tabBarIcon: ({ color }: { color: string }) => <Trophy size={24} color={color} />
+  },
+  {
+    name: "profile",
+    title: "Profile",
+    tabBarIcon: ({ color }: { color: string }) => <User size={24} color={color} />
+  },
+]
 
 export default function TabLayout() {
   const { colors } = useTheme();
@@ -27,48 +60,16 @@ export default function TabLayout() {
         tabBarInactiveTintColor: colors.tabBarInactive,
       }}
     >
-      <Tabs.Screen
-        name='feed'
-        options={{
-          title: "Feed",
-          tabBarIcon: ({ color }) => <Activity size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name='rides'
-        options={{
-          title: "Discover",
-          tabBarIcon: ({ color }) => <Compass size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name='routes'
-        options={{
-          title: "Routes",
-          tabBarIcon: ({ color }) => <Map size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name='groups'
-        options={{
-          title: "Groups",
-          tabBarIcon: ({ color }) => <Users size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name='rewards'
-        options={{
-          title: "Rank",
-          tabBarIcon: ({ color }) => <Trophy size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name='profile'
-        options={{
-          title: "Profile",
-          tabBarIcon: ({ color }) => <User size={24} color={color} />,
-        }}
-      />
+      {TABS_DETAILS.map((tab) => (
+        <Tabs.Screen
+          key={tab.name}
+          name={tab.name}
+          options={{
+            title: tab.title,
+            tabBarIcon: tab.tabBarIcon,
+          }}
+        />
+      ))}
     </Tabs>
   );
 }

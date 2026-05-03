@@ -16,6 +16,105 @@ const pointsEqual = (left: LatLng, right: LatLng): boolean => {
   );
 };
 
+const bearingDegrees = (from: LatLng, to: LatLng): number => {
+  const lat1 = toRad(from.latitude);
+  const lat2 = toRad(to.latitude);
+  const dLon = toRad(to.longitude - from.longitude);
+
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+
+  const bearing = (Math.atan2(y, x) * 180) / Math.PI;
+  return (bearing + 360) % 360;
+};
+
+const angleDeltaDegrees = (left: number, right: number): number => {
+  let delta = Math.abs(left - right);
+  if (delta > 180) {
+    delta = 360 - delta;
+  }
+  return delta;
+};
+
+const thinByDistanceAndTurns = (
+  points: LatLng[],
+  minDistMeters: number,
+  turnThresholdDeg: number,
+): LatLng[] => {
+  if (points.length <= 2) {
+    return points;
+  }
+
+  const result: LatLng[] = [points[0]];
+  let lastBearing: number | null = null;
+
+  for (let i = 1; i < points.length - 1; i++) {
+    const current = points[i];
+    const lastKept = result[result.length - 1];
+    const toCurrent = haversineMeters(lastKept, current);
+    const next = points[i + 1];
+
+    const incomingBearing = bearingDegrees(lastKept, current);
+    const outgoingBearing = bearingDegrees(current, next);
+    const turningNow =
+      Number.isFinite(incomingBearing) &&
+      Number.isFinite(outgoingBearing) &&
+      angleDeltaDegrees(incomingBearing, outgoingBearing) >= turnThresholdDeg;
+
+    if (toCurrent >= minDistMeters || turningNow) {
+      result.push(current);
+      lastBearing = outgoingBearing;
+      continue;
+    }
+
+    if (lastBearing != null && Number.isFinite(incomingBearing)) {
+      const drift = angleDeltaDegrees(lastBearing, incomingBearing);
+      if (drift >= turnThresholdDeg) {
+        result.push(current);
+        lastBearing = outgoingBearing;
+      }
+    }
+  }
+
+  result.push(points[points.length - 1]);
+  return result;
+};
+
+// Road-safe simplification:
+// 1) keep points by minimum distance
+// 2) always preserve turns above threshold
+// 3) iteratively raise distance threshold until point budget is met
+export const simplifyPolyline = (
+  points: LatLng[],
+  minDistMeters = 12,
+  maxPoints = 1400,
+): LatLng[] => {
+  if (points.length <= 2) {
+    return points;
+  }
+
+  const dynamicStartDist =
+    points.length > 10000
+      ? Math.max(minDistMeters, 16)
+      : points.length > 7000
+        ? Math.max(minDistMeters, 14)
+        : minDistMeters;
+
+  let workingDist = dynamicStartDist;
+  let turnThreshold = 16;
+  let simplified = thinByDistanceAndTurns(points, workingDist, turnThreshold);
+
+  while (simplified.length > maxPoints && workingDist <= 80) {
+    workingDist *= 1.2;
+    turnThreshold = Math.max(12, turnThreshold - 1);
+    simplified = thinByDistanceAndTurns(points, workingDist, turnThreshold);
+  }
+
+  return simplified;
+};
+
 export const dedupeConsecutivePoints = (points: LatLng[]): LatLng[] => {
   if (points.length <= 1) {
     return points;
@@ -159,6 +258,7 @@ type DirectionsLeg = {
     duration?: { value: number };
     start_location?: { lat: number; lng: number };
     end_location?: { lat: number; lng: number };
+    polyline?: { points: string };
     maneuver?: string;
   }>;
 };
@@ -196,7 +296,7 @@ export const fetchNavigationRoute = async (input: {
   const params = new URLSearchParams({
     origin,
     destination,
-    mode: "bicycling",
+    mode: "driving",
     departure_time: "now",
     key: input.apiKey,
   });
@@ -216,9 +316,33 @@ export const fetchNavigationRoute = async (input: {
   }
 
   const route = payload.routes[0];
-  const decoded = route.overview_polyline?.points
-    ? decodePolyline(route.overview_polyline.points)
-    : fallbackPoints;
+
+  // Build high-res polyline from per-step encoded segments (road-exact, matches Google Maps nav quality).
+  // Falls back to overview_polyline if steps yield no usable points.
+  const stepPolylinePoints: LatLng[] = [];
+  for (const leg of route.legs || []) {
+    for (const step of leg.steps || []) {
+      if (step.polyline?.points) {
+        stepPolylinePoints.push(...decodePolyline(step.polyline.points));
+      }
+    }
+  }
+  const rawDecoded =
+    stepPolylinePoints.length >= 2
+      ? stepPolylinePoints
+      : route.overview_polyline?.points
+        ? decodePolyline(route.overview_polyline.points)
+        : fallbackPoints;
+  const decoded = simplifyPolyline(rawDecoded);
+
+  if (__DEV__) {
+    console.log(
+      "[navigation-route] raw pts:",
+      rawDecoded.length,
+      "simplified pts:",
+      decoded.length,
+    );
+  }
 
   const steps: NavigationStep[] = [];
   for (const leg of route.legs || []) {

@@ -20,6 +20,8 @@
 - Navigation Phase 1 full-screen experience and stabilization updates.
 - Live navigation now shows peer rider markers and supports tapping a crew member to focus their live location on the map.
 - Ride detail and full-screen navigation maps now render road-following routes in canonical order: current location -> start -> approved stops -> destination, with automatic origin fallback to start when device location is unavailable.
+- Navigation reroute cadence is now throttled to avoid rapid route refetch loops while riding, while preserving movement- and time-based refresh behavior.
+- Navigation polyline rendering is now optimized with adaptive simplification and point-capping to reduce delayed route draw on long rides.
 
 ### In Progress
 

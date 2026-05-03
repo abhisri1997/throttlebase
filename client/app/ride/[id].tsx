@@ -16,6 +16,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useIsFocused } from "@react-navigation/native";
 import { apiClient } from "../../src/api/client";
 import { useAuthStore } from "../../src/store/authStore";
 import { useLiveSessionStore } from "../../src/store/liveSessionStore";
@@ -49,6 +50,7 @@ import {
   buildCanonicalRideRouteInput,
   fetchNavigationRoute,
   haversineMeters,
+  simplifyPolyline,
 } from "../../src/features/navigation/services/navigationRouteService";
 import type { LatLng } from "../../src/features/navigation/types/navigation";
 
@@ -261,6 +263,7 @@ const getSessionEndedMessage = (reason?: string | null): string => {
 };
 
 export default function RideDetailScreen() {
+  const isFocused = useIsFocused();
   const { colors } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -383,6 +386,8 @@ export default function RideDetailScreen() {
   const mapRef = useRef<InstanceType<typeof MapView>>(null);
   const lastRouteRefreshAtRef = useRef(0);
   const lastRouteOriginRef = useRef<LatLng | null>(null);
+  const [frozenPreviewOrigin, setFrozenPreviewOrigin] = useState<LatLng | null>(null);
+  const hasAutoFitLiveMarkersRef = useRef(false);
 
   const joinMutation = useMutation({
     mutationFn: (coords?: [number, number]) => joinRide(id!, coords),
@@ -808,28 +813,10 @@ export default function RideDetailScreen() {
     };
   }, [id, token, queryClient]);
 
-  // Auto-fit map to live participant locations when riding
+  // Keep ride-detail map camera stable. No auto-fit on live marker updates.
   useEffect(() => {
-    if (!inRoom || !mapRef.current) {
-      return;
-    }
-    const markers = Object.values(locations).filter(
-      (loc) =>
-        Number.isFinite(loc.lat) &&
-        Number.isFinite(loc.lon) &&
-        (presence[loc.riderId]?.isOnline ?? true),
-    );
-    if (markers.length < 2) {
-      return;
-    }
-    mapRef.current.fitToCoordinates(
-      markers.map((m) => ({ latitude: m.lat, longitude: m.lon })),
-      {
-        edgePadding: { top: 60, right: 60, bottom: 60, left: 60 },
-        animated: true,
-      },
-    );
-  }, [inRoom, locations, presence]);
+    hasAutoFitLiveMarkersRef.current = false;
+  }, [inRoom]);
 
   const startPoint = useMemo(
     () => toCoordinate(ride?.start_point_geojson?.coordinates || null),
@@ -871,15 +858,28 @@ export default function RideDetailScreen() {
     return sampledLocation;
   }, [currentRider?.id, locations, sampledLocation]);
 
+  // Freeze preview origin on first available location to avoid map/route jitter.
+  useEffect(() => {
+    if (!frozenPreviewOrigin && currentLocationOrigin) {
+      setFrozenPreviewOrigin(currentLocationOrigin);
+    }
+  }, [currentLocationOrigin, frozenPreviewOrigin]);
+
+  useEffect(() => {
+    setFrozenPreviewOrigin(null);
+  }, [id]);
+
+  const previewOrigin = frozenPreviewOrigin || currentLocationOrigin;
+
   const canonicalRoute = useMemo(
     () =>
       buildCanonicalRideRouteInput({
-        origin: currentLocationOrigin,
+        origin: previewOrigin,
         start: startPoint,
         stops: approvedStopCoords,
         destination: destinationPoint,
       }),
-    [approvedStopCoords, currentLocationOrigin, destinationPoint, startPoint],
+    [approvedStopCoords, destinationPoint, previewOrigin, startPoint],
   );
 
   const canonicalRouteKey = useMemo(() => {
@@ -893,8 +893,15 @@ export default function RideDetailScreen() {
   }, [canonicalRoute]);
 
   useEffect(() => {
-    if (!canonicalRoute || appState !== "active") {
-      setRoutePathCoordinates(canonicalRoute?.orderedPoints || []);
+    if (!canonicalRoute) {
+      setRoutePathCoordinates([]);
+      return;
+    }
+
+    // Keep last good rendered route when this screen is blurred/backgrounded.
+    // Avoid temporary straight-line fallback when navigating to full-screen nav
+    // and coming back before async route refresh completes.
+    if (!isFocused || appState !== "active") {
       return;
     }
 
@@ -927,8 +934,13 @@ export default function RideDetailScreen() {
           return;
         }
 
+        const previewPolyline =
+          route.polyline.length > 1
+            ? simplifyPolyline(route.polyline, 30, 320)
+            : canonicalRoute.orderedPoints;
+
         setRoutePathCoordinates(
-          route.polyline.length > 1 ? route.polyline : canonicalRoute.orderedPoints,
+          previewPolyline,
         );
         lastRouteOriginRef.current = canonicalRoute.origin;
         lastRouteRefreshAtRef.current = Date.now();
@@ -945,10 +957,10 @@ export default function RideDetailScreen() {
       cancelled = true;
     };
   }, [
+    isFocused,
     appState,
     canonicalRoute,
     canonicalRouteKey,
-    currentLocationOrigin,
     routePathCoordinates.length,
   ]);
 
@@ -1162,6 +1174,8 @@ export default function RideDetailScreen() {
             style={{ flex: 1 }}
             provider={PROVIDER_GOOGLE}
             userInterfaceStyle='dark'
+            rotateEnabled={false}
+            pitchEnabled={false}
             initialRegion={{
               latitude: startCoords[1],
               longitude: startCoords[0],
@@ -1191,7 +1205,6 @@ export default function RideDetailScreen() {
                   coordinates={routePathCoordinates}
                   strokeColor='#22c55e'
                   strokeWidth={4}
-                  lineDashPattern={[10, 10]}
                 />
               </>
             )}

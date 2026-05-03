@@ -85,6 +85,12 @@ This keeps permission checks and state transitions in service logic while contro
 - Full-screen navigation crew list can focus a selected rider's live location on the map, with recenter restoring self-follow
 - Ride detail screen automatically refreshes ride and live-session state while active so participants see session-start transitions without leaving the screen
 - Ride detail and full-screen navigation maps now share canonical route composition as current rider location -> start point -> approved stops -> destination, with origin fallback to start when device location is unavailable
+- Full-screen navigation reroute refresh now uses interval/ref-based checks with movement cooldown (40m plus minimum elapsed window) and periodic refresh, preventing rapid re-fetch loops during active tracking
+- Navigation route geometry now applies adaptive, shape-preserving simplification with a point cap before map render, reducing route-draw latency on long directions responses
+- Full-screen navigation exit now follows stack-aware back navigation to prevent duplicate ride-detail screen instances
+- Ride detail live map auto-fit now performs a single initial fit per live-room session instead of repeated animated refits on every location update, improving interaction stability
+- Ride detail preview map render path is hardened for interaction stability via stricter preview-polyline simplification/cap, non-dashed polyline rendering, and reduced camera-computation options (no rotate/pitch)
+- Full-screen navigation first-draw latency is reduced by early GPS seeding (last-known/current-position bootstrap), and route rendering fidelity is maintained with turn-aware road-safe polyline simplification
 - Live socket disconnects when a session ends to prevent stale connected state on completed rides
 - Worker-backed presence sweep, incident escalation scheduling, and lifecycle notification fanout
 - Navigation Phase 1 full-screen route and map UX base
