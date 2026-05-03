@@ -118,6 +118,8 @@ For request/response schema details, use Swagger at `/api-docs`.
 - `GET /api/rides/:id/live/session`
 - `POST /api/rides/:id/live/incident`
 - `POST /api/rides/:id/live/incident/:incidentId/ack`
+- `GET /api/rides/:id/live/timeline`
+- `GET /api/rides/:id/live/replay`
 
 ## Realtime Socket Events
 

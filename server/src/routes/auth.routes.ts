@@ -24,7 +24,7 @@ const router = Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required: [email, password, display_name]
+ *             required: [email, password, display_name, username]
  *             properties:
  *               email:
  *                 type: string
@@ -32,18 +32,50 @@ const router = Router();
  *                 example: rider@example.com
  *               password:
  *                 type: string
- *                 minLength: 6
+ *                 minLength: 8
  *                 example: mypassword123
  *               display_name:
  *                 type: string
+ *                 maxLength: 100
  *                 example: SpeedDemon
+ *               username:
+ *                 type: string
+ *                 minLength: 3
+ *                 maxLength: 50
+ *                 pattern: '^[a-zA-Z0-9_]+$'
+ *                 example: speed_demon
  *     responses:
  *       201:
- *         description: Registration successful, returns JWT token
+ *         description: Rider registered successfully — returns `{ message, rider }`
  *       400:
- *         description: Validation error or email already exists
+ *         description: Validation error
+ *       409:
+ *         description: Email already registered or username already taken
  */
 router.post("/register", AuthController.handleRegister);
+
+/**
+ * @swagger
+ * /auth/check-username:
+ *   get:
+ *     summary: Check if a username is available
+ *     tags: [Auth]
+ *     parameters:
+ *       - in: query
+ *         name: username
+ *         required: true
+ *         schema:
+ *           type: string
+ *           minLength: 3
+ *           maxLength: 50
+ *           pattern: '^[a-zA-Z0-9_]+$'
+ *         description: Username to check (letters, numbers, underscores only)
+ *     responses:
+ *       200:
+ *         description: Returns `{ available: boolean }`
+ *       400:
+ *         description: Invalid username format
+ */
 router.get("/check-username", AuthController.handleCheckUsername);
 
 /**
@@ -62,15 +94,23 @@ router.get("/check-username", AuthController.handleCheckUsername);
  *             properties:
  *               identifier:
  *                 type: string
- *                 example: rider@example.com or roadwarrior
+ *                 description: Email address or username
+ *                 example: rider@example.com
  *               password:
  *                 type: string
  *                 example: mypassword123
+ *               totp_token:
+ *                 type: string
+ *                 description: 6-digit TOTP code (required only when 2FA is enabled)
+ *                 example: "123456"
  *     responses:
  *       200:
- *         description: Login successful, returns JWT token
+ *         description: Login successful — returns `{ message, token, rider }`
  *       401:
- *         description: Invalid email or password
+ *         description: |
+ *           Invalid credentials, invalid 2FA token, or 2FA required.
+ *           When 2FA is enabled and `totp_token` is omitted, returns
+ *           `{ error: "Two-factor authentication code is required", code: "TWO_FACTOR_REQUIRED" }`
  */
 router.post("/login", AuthController.handleLogin);
 

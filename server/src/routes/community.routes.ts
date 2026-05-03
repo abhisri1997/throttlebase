@@ -100,6 +100,41 @@ router.post("/posts", cc.createPost);
  *         description: Post not found or not yours
  */
 router.get("/posts/:id", cc.getPost);
+
+/**
+ * @swagger
+ * /api/community/posts/{id}:
+ *   patch:
+ *     summary: Edit your own post
+ *     tags: [Community]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [content]
+ *             properties:
+ *               content:
+ *                 type: string
+ *                 example: Updated post content
+ *     responses:
+ *       200:
+ *         description: Updated post
+ *       400:
+ *         description: Content is required
+ *       404:
+ *         description: Post not found or not yours
+ */
 router.patch("/posts/:id", cc.updatePost);
 router.delete("/posts/:id", cc.deletePost);
 
@@ -159,6 +194,75 @@ router.delete("/posts/:id", cc.deletePost);
  */
 router.get("/posts/:id/comments", cc.getComments);
 router.post("/posts/:id/comments", cc.addComment);
+
+/**
+ * @swagger
+ * /api/community/comments/{id}:
+ *   get:
+ *     summary: Get a single comment by ID
+ *     tags: [Community]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Comment details
+ *       404:
+ *         description: Comment not found
+ *   patch:
+ *     summary: Edit your own comment
+ *     tags: [Community]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [content]
+ *             properties:
+ *               content:
+ *                 type: string
+ *                 example: Updated comment text
+ *     responses:
+ *       200:
+ *         description: Updated comment
+ *       400:
+ *         description: Content is required
+ *       404:
+ *         description: Comment not found or unauthorized
+ *   delete:
+ *     summary: Delete your own comment
+ *     tags: [Community]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Comment deleted successfully
+ *       404:
+ *         description: Comment not found or unauthorized
+ */
 router.get("/comments/:id", cc.getComment);
 router.patch("/comments/:id", cc.updateComment);
 router.delete("/comments/:id", cc.deleteComment);

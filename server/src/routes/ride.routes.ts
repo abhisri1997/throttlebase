@@ -104,6 +104,19 @@ const router = Router();
  *         description: Validation error
  */
 router.get("/", authenticate, rideController.getAllRides);
+
+/**
+ * @swagger
+ * /api/rides/history:
+ *   get:
+ *     summary: Get rides you have participated in (completed history)
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of past rides the authenticated rider participated in
+ */
 router.get("/history", authenticate, rideController.getHistory);
 router.post("/", authenticate, rideController.createRide);
 
@@ -167,6 +180,30 @@ router.post("/", authenticate, rideController.createRide);
  */
 router.get("/:id", authenticate, rideController.getRide);
 router.patch("/:id", authenticate, rideController.updateRide);
+
+/**
+ * @swagger
+ * /api/rides/{id}:
+ *   delete:
+ *     summary: Delete a ride (captain only, cannot delete active or completed rides)
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Ride deleted successfully
+ *       400:
+ *         description: Not the captain, or ride is active/completed
+ *       404:
+ *         description: Ride not found
+ */
 router.delete("/:id", authenticate, rideController.deleteRide);
 
 /**
