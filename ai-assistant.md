@@ -112,6 +112,7 @@ Code locations:
 - Ride-detail map now preserves last fetched road-following polyline when screen blurs (e.g., opening full-screen navigation), preventing temporary fallback to straight canonical route lines on return.
 - Ride-detail header map now freezes preview origin on first resolved rider location and does not auto-fit camera to live-marker updates, preventing 2-3s post-load map jump/glitch.
 - Full-screen navigation self-follow camera and recenter-to-self action now use a tighter zoom level for improved first-load rider focus and faster location recovery.
+- Full-screen navigation heading-follow now combines GPS course with compass heading fallback and best-for-navigation location accuracy, improving map rotation consistency in driving mode.
 - Caveman compression NLP tool installed: `tools/caveman-compression/`. Wrapper: `./tools/caveman-compress.sh`. Free, offline, ~15-30% token reduction.
 - AI context files (`ai-assistant.md`, skills, docs/) now use caveman compression format. Rule: `.gemini/rules/caveman-context.md`.
 - Background location tracking: `expo-task-manager` + `expo-location` background task tracks rider location globally when participating in active ride — even off ride screens or app backgrounded. Wired in root `_layout.tsx`.

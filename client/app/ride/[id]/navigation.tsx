@@ -444,6 +444,7 @@ export default function RideNavigationScreen() {
 
     let closed = false;
     let locationSubscription: ExpoLocation.LocationSubscription | null = null;
+    let headingSubscription: ExpoLocation.LocationSubscription | null = null;
 
     const applyPosition = (position: ExpoLocation.LocationObject) => {
       const nextLocation = {
@@ -487,6 +488,13 @@ export default function RideNavigationScreen() {
       }
     };
 
+    const applyHeading = (heading: number) => {
+      if (!Number.isFinite(heading) || heading < 0) {
+        return;
+      }
+      setCurrentHeading(heading);
+    };
+
     const startTracking = async () => {
       if (typeof window !== "undefined" && (globalThis as any).document) {
         return;
@@ -518,9 +526,21 @@ export default function RideNavigationScreen() {
         // noop: watchPositionAsync below will still stream updates.
       }
 
+      try {
+        headingSubscription = await ExpoLocation.watchHeadingAsync((headingData) => {
+          const nextHeading =
+            typeof headingData.trueHeading === "number" && headingData.trueHeading >= 0
+              ? headingData.trueHeading
+              : headingData.magHeading;
+          applyHeading(nextHeading);
+        });
+      } catch {
+        // noop: heading from watchPositionAsync still used when available.
+      }
+
       locationSubscription = await ExpoLocation.watchPositionAsync(
         {
-          accuracy: ExpoLocation.Accuracy.Balanced,
+          accuracy: ExpoLocation.Accuracy.BestForNavigation,
           timeInterval: 4000,
           distanceInterval: 8,
         },
@@ -535,6 +555,7 @@ export default function RideNavigationScreen() {
     return () => {
       closed = true;
       locationSubscription?.remove();
+      headingSubscription?.remove();
     };
   }, [appState, inRoom, liveStatus, upsertLocation]);
 
@@ -792,6 +813,8 @@ export default function RideNavigationScreen() {
         style={{ flex: 1 }}
         provider={PROVIDER_GOOGLE}
         userInterfaceStyle='dark'
+        rotateEnabled
+        pitchEnabled
         customMapStyle={DARK_MAP_STYLE}
         initialRegion={{
           latitude: rideStart.latitude,
