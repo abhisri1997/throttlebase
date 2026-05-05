@@ -62,7 +62,8 @@ export const PostCard = ({
     const postPath = `/post/${post.id}`;
     const appLink = Linking.createURL(postPath, { scheme: "throttlebase" });
 
-    const configuredWebBase = process.env.EXPO_PUBLIC_SHARE_BASE_URL?.trim();
+    const configuredWebBase =
+      process.env.EXPO_PUBLIC_SHARE_BASE_URL?.trim() || "https://throttlebase.in";
     const normalizedWebBase = configuredWebBase
       ? configuredWebBase.replace(/\/+$/, "")
       : "";

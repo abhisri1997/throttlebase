@@ -22,6 +22,7 @@
 - Ride detail and full-screen navigation maps now render road-following routes in canonical order: current location -> start -> approved stops -> destination, with automatic origin fallback to start when device location is unavailable.
 - Navigation reroute cadence is now throttled to avoid rapid route refetch loops while riding, while preserving movement- and time-based refresh behavior.
 - Navigation polyline rendering is now optimized with adaptive simplification and point-capping to reduce delayed route draw on long rides.
+- Client production domain wiring is aligned to `https://throttlebase.in` (share links) and `https://api.throttlebase.in` (API/socket base URL), with local-development fallbacks preserved.
 
 ### In Progress
 

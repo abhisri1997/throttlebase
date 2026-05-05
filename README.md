@@ -27,6 +27,11 @@ ThrottleBase is a mobile-first rider platform where users can create and join ri
 - `docs/` project documentation
 - `ai-assistant.md` concise operational context for AI-assisted development
 
+## Production Endpoints
+
+- App/web domain: `https://throttlebase.in`
+- API domain: `https://api.throttlebase.in`
+
 ## Local Setup
 
 1. Install dependencies:
