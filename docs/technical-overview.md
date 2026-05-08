@@ -18,6 +18,7 @@ For deeper detail:
 - Data: PostgreSQL + PostGIS
 - Realtime: Socket.IO namespace `/live`
 - Async processing: DB-backed queue + worker poll/lease model
+- Android native prebuild: Expo config plugin `client/plugins/with-android-jdk17.js` rehydrates `org.gradle.java.home` so generated Gradle projects consistently run on JDK 17 even when the host default JDK is newer
 
 ## Backend Module Boundaries
 

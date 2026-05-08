@@ -29,6 +29,7 @@
 - Navigation route fetching is now deduplicated for identical in-flight/recent requests, reducing repeated Directions API work and preview-map rerender churn on Android.
 - Client production domain wiring is aligned to `https://throttlebase.in` (share links) and `https://api.throttlebase.in` (API/socket base URL), with local-development fallbacks preserved.
 - Android ride-detail flicker/crash root cause is resolved: mount-time foreground location permission requests no longer reopen `GrantPermissionsActivity` in a remount loop; ride detail now checks permission passively and keeps socket listener attachment idempotent.
+- Android release/prebuild stability is now persistent: Expo config plugin `client/plugins/with-android-jdk17.js` restores `org.gradle.java.home` to Temurin JDK 17 during every Android prebuild, preventing `com.facebook.react.settings` plugin resolution failures when the machine default JDK is Java 26.
 
 ### In Progress
 
