@@ -101,8 +101,6 @@ const deleteRideReq = async (id: string) => {
   return data;
 };
 
-console.log('Rendering RideDetailScreen');
-
 type RideReview = {
   id: string;
   rider_id: string;
@@ -208,6 +206,19 @@ const getSOSCoords = async (): Promise<
   }
 };
 
+const hasGrantedForegroundLocation = async (): Promise<boolean> => {
+  if (Platform.OS === "web") {
+    return false;
+  }
+
+  try {
+    const permission = await ExpoLocation.getForegroundPermissionsAsync();
+    return permission.status === "granted";
+  } catch {
+    return false;
+  }
+};
+
 const STATUS_COLORS: Record<string, string> = {
   draft: "#64748b",
   scheduled: "#3b82f6",
@@ -243,6 +254,10 @@ type RidePreviewLiveMarker = {
   title: string;
   description: string;
 };
+
+// Stable empty array passed to RideDetailMapHeader on Android where live markers
+// are intentionally hidden — prevents new-ref prop churn on every location broadcast.
+const EMPTY_LIVE_MARKERS: RidePreviewLiveMarker[] = [];
 
 type RideDetailMapHeaderProps = {
   startCoords: [number, number];
@@ -361,7 +376,7 @@ const RideDetailMapHeader = React.memo(
 
           {stopMarkerCoords.map((coordinate, index) => (
             <Marker
-              key={`stop-${coordinate.latitude}-${coordinate.longitude}-${index}`}
+              key={`stop-${index}`}
               coordinate={coordinate}
               pinColor='#f59e0b'
               title={`Stop ${index + 1}`}
@@ -426,7 +441,10 @@ const RideDetailMapHeader = React.memo(
       prev.showLiveMarkers === next.showLiveMarkers &&
       coordArrayEqual(prev.routePathCoordinates, next.routePathCoordinates) &&
       coordArrayEqual(prev.stopMarkerCoords, next.stopMarkerCoords) &&
-      ridePreviewLiveMarkersEqual(prev.liveMarkers, next.liveMarkers)
+      // Skip live-marker deep comparison when markers aren't rendered (Android).
+      // Without this guard every location:broadcast breaks the memo and forces a
+      // Lite-Mode map repaint even though showLiveMarkers=false.
+      (!prev.showLiveMarkers || ridePreviewLiveMarkersEqual(prev.liveMarkers, next.liveMarkers))
     );
   },
 );
@@ -572,13 +590,17 @@ export default function RideDetailScreen() {
     liveStatus === "active" ||
     liveStatus === "starting" ||
     liveStatus === "paused";
+  // Socket connection is independent of whether a live session is currently active.
+  // Including canJoinLiveRoom here caused reset()+connect() cycles every time the
+  // live session status changed (e.g. on first socket session:state event), producing
+  // repeated attachSocketListeners calls and a render-pressure cascade.
+  // Room joining is gated on canJoinLiveRoom separately in the auto-join effect below.
   const shouldEnableLiveSocket =
     liveEnabled &&
     Boolean(token) &&
     Boolean(id) &&
     isParticipantFromRide &&
-    !isTerminalRideStatus &&
-    canJoinLiveRoom;
+    !isTerminalRideStatus;
 
   const [showJoinOverridePicker, setShowJoinOverridePicker] = useState(false);
   const [reviewRating, setReviewRating] = useState<number>(0);
@@ -776,6 +798,21 @@ export default function RideDetailScreen() {
   };
 
   useEffect(() => {
+  if (isFocused) {
+    console.log(`[RideDetail] ENTER id=${id} ts=${Date.now()}`);
+  } else {
+    console.log(`[RideDetail] LEAVE id=${id} ts=${Date.now()}`);
+  }
+}, [isFocused, id]);
+
+useEffect(() => {
+  console.log(`[RideDetail] MOUNT id=${id}`);
+  return () => {
+    console.log(`[RideDetail] UNMOUNT id=${id}`);
+  };
+}, [id]);
+
+  useEffect(() => {
     if (!shouldEnableLiveSocket || !token) {
       reset();
       return;
@@ -819,6 +856,7 @@ export default function RideDetailScreen() {
   useEffect(() => {
     const shouldAutoJoin =
       shouldEnableLiveSocket &&
+      canJoinLiveRoom &&
       Boolean(id) &&
       appState === "active" &&
       liveConnected &&
@@ -830,6 +868,7 @@ export default function RideDetailScreen() {
     }
   }, [
     appState,
+    canJoinLiveRoom,
     id,
     inRoom,
     isJoining,
@@ -904,8 +943,8 @@ export default function RideDetailScreen() {
     };
 
     const start = async () => {
-      const permission = await ExpoLocation.requestForegroundPermissionsAsync();
-      if (cancelled || permission.status !== "granted") {
+      const hasPermission = await hasGrantedForegroundLocation();
+      if (cancelled || !hasPermission) {
         return;
       }
 
@@ -961,8 +1000,8 @@ export default function RideDetailScreen() {
     };
 
     const startSampling = async () => {
-      const permission = await ExpoLocation.requestForegroundPermissionsAsync();
-      if (cancelled || permission.status !== "granted") {
+      const hasPermission = await hasGrantedForegroundLocation();
+      if (cancelled || !hasPermission) {
         return;
       }
 
@@ -1351,6 +1390,12 @@ export default function RideDetailScreen() {
   const onlineCount = Object.values(presence).filter(
     (member) => member.isOnline,
   ).length;
+  // Extracted so it can gate both the prop and the liveMarkers passed to the header map.
+  // On Android live markers are intentionally hidden to reduce native map invalidation.
+  const showLiveMarkersOnMap =
+    Platform.OS !== "android" &&
+    liveEnabled &&
+    (liveStatus === "active" || liveStatus === "starting" || liveStatus === "paused");
   const liveConnectionLabel = !liveConnected
     ? "Socket offline"
     : isJoining
@@ -1480,14 +1525,8 @@ export default function RideDetailScreen() {
           endCoords={endCoords}
           routePathCoordinates={routePathCoordinates}
           stopMarkerCoords={previewStopMarkerCoords}
-          showLiveMarkers={
-            Platform.OS !== "android" &&
-            liveEnabled &&
-            (liveStatus === "active" ||
-              liveStatus === "starting" ||
-              liveStatus === "paused")
-          }
-          liveMarkers={previewLiveMarkers}
+          showLiveMarkers={showLiveMarkersOnMap}
+          liveMarkers={showLiveMarkersOnMap ? previewLiveMarkers : EMPTY_LIVE_MARKERS}
           rideStatus={ride.status}
           onBack={handleBackPress}
         />

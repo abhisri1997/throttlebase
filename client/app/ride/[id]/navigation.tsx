@@ -217,6 +217,7 @@ export default function RideNavigationScreen() {
   const appStateRef = useRef<AppStateStatus>(appState);
   const lastCameraCenterRef = useRef<LatLng | null>(null);
   const lastCameraHeadingRef = useRef(0);
+  const keepAwakeActiveRef = useRef(false);
   appStateRef.current = appState;
 
   useEffect(() => {
@@ -228,20 +229,38 @@ export default function RideNavigationScreen() {
     const shouldKeepAwake = isFocused && appState === "active";
 
     if (!shouldKeepAwake) {
-      void deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {
-        // noop: lock may already be released
-      });
+      // Only deactivate if we previously activated
+      if (keepAwakeActiveRef.current) {
+        keepAwakeActiveRef.current = false;
+        Promise.resolve()
+          .then(() => deactivateKeepAwake(KEEP_AWAKE_TAG))
+          .catch(() => undefined);
+      }
       return;
     }
 
-    void activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {
-      // Avoid unhandled promise rejection noise when Android activity isn't ready.
-    });
+    // Only activate if not already active
+    if (keepAwakeActiveRef.current) {
+      return;
+    }
+
+    keepAwakeActiveRef.current = true;
+    // Use Promise chaining with explicit error suppression to prevent unhandled rejections
+    Promise.resolve()
+      .then(() => activateKeepAwakeAsync(KEEP_AWAKE_TAG))
+      .catch(() => {
+        // If activation fails, mark as not active so we can retry
+        keepAwakeActiveRef.current = false;
+      });
 
     return () => {
-      void deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {
-        // noop: lock may already be released
-      });
+      // Suppress cleanup deactivation errors with Promise chaining
+      if (keepAwakeActiveRef.current) {
+        keepAwakeActiveRef.current = false;
+        Promise.resolve()
+          .then(() => deactivateKeepAwake(KEEP_AWAKE_TAG))
+          .catch(() => undefined);
+      }
     };
   }, [appState, isFocused]);
 
@@ -917,7 +936,7 @@ export default function RideNavigationScreen() {
 
         {approvedStopCoords.map((waypoint: LatLng, index: number) => (
           <Marker
-            key={`${waypoint.latitude},${waypoint.longitude},${index}`}
+            key={`stop-${index}`}
             coordinate={waypoint}
             title={`Stop ${index + 1}`}
             pinColor='#f59e0b'

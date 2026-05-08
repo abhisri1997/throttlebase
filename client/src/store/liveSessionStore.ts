@@ -22,6 +22,8 @@ type LivePresence = {
 type PresenceMap = Record<string, LivePresence>;
 type LocationMap = Record<string, LiveLocation>;
 
+let socketListenersAttached = false;
+
 type LiveSessionState = {
   rideId: string | null;
   session: LiveSessionStateEvent | null;
@@ -69,6 +71,10 @@ const mergePresenceFromSession = (
 };
 
 const attachSocketListeners = () => {
+  if (socketListenersAttached) {
+    return;
+  }
+
   liveSessionSocket.off("session:state");
   liveSessionSocket.off("presence:update");
   liveSessionSocket.off("location:broadcast");
@@ -128,6 +134,7 @@ const attachSocketListeners = () => {
 
   liveSessionSocket.off("session:ended");
   liveSessionSocket.on("session:ended", (event: SessionEndedEvent) => {
+    socketListenersAttached = false;
     liveSessionSocket.disconnect();
 
     useLiveSessionStore.setState((state) => ({
@@ -152,6 +159,8 @@ const attachSocketListeners = () => {
       ),
     }));
   });
+
+  socketListenersAttached = true;
 };
 
 export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
@@ -318,6 +327,7 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
   },
 
   reset: () => {
+    socketListenersAttached = false;
     liveSessionSocket.disconnect();
 
     set((state) => ({

@@ -124,6 +124,8 @@ Code locations:
 - Background location tracking: `expo-task-manager` + `expo-location` background task tracks rider location globally when participating in active ride — even off ride screens or app backgrounded. Wired in root `_layout.tsx`.
 - Client dev-build runtime: installed device builds require `expo-dev-client` plus Metro launched via `npx expo start --dev-client --tunnel`; otherwise debug iOS builds can open with `No script URL provided` because no JS bundle is embedded.
 - Production domain config: client sharing and API defaults now target `https://throttlebase.in` and `https://api.throttlebase.in` when explicit env overrides are not provided.
+- Android local build stability: pinned Gradle runtime via `client/android/gradle.properties` (`org.gradle.java.home`) to Temurin JDK 17 to avoid React Native/Gradle plugin failures under unsupported bleeding-edge JDKs (e.g., Java 26).
+- Navigation keep-awake errors fully suppressed: full-screen navigation uses state tracking (`keepAwakeActiveRef`) to prevent duplicate activation/deactivation attempts, Promise chaining with explicit error handlers, and recoverable error handling that resets state on failure — preventing unhandled promise rejections from leaking to ride details or other screens.
 
 ## Assistant Operating Notes
 
