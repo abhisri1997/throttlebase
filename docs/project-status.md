@@ -28,6 +28,7 @@
 - Keep-awake behavior is now scoped to full-screen navigation only, with guarded activation/deactivation tied to screen focus and active app state to avoid startup keep-awake promise errors.
 - Navigation route fetching is now deduplicated for identical in-flight/recent requests, reducing repeated Directions API work and preview-map rerender churn on Android.
 - Client production domain wiring is aligned to `https://throttlebase.in` (share links) and `https://api.throttlebase.in` (API/socket base URL), with local-development fallbacks preserved.
+- Android ride-detail flicker/crash root cause is resolved: mount-time foreground location permission requests no longer reopen `GrantPermissionsActivity` in a remount loop; ride detail now checks permission passively and keeps socket listener attachment idempotent.
 
 ### In Progress
 

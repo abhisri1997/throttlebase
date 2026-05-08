@@ -33,6 +33,9 @@ This directory is organized by purpose so contributors and assistants can quickl
 - QA and validation assets
   - `uat-test-plan-feature-remaining-features.md`
 
+- Postmortems and debugging history
+  - `postmortems/android-ride-detail-flicker-crash.md`
+
 ## Maintenance Rules
 
 - Keep each file focused on one concern.

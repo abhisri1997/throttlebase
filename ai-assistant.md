@@ -126,6 +126,7 @@ Code locations:
 - Production domain config: client sharing and API defaults now target `https://throttlebase.in` and `https://api.throttlebase.in` when explicit env overrides are not provided.
 - Android local build stability: pinned Gradle runtime via `client/android/gradle.properties` (`org.gradle.java.home`) to Temurin JDK 17 to avoid React Native/Gradle plugin failures under unsupported bleeding-edge JDKs (e.g., Java 26).
 - Navigation keep-awake errors fully suppressed: full-screen navigation uses state tracking (`keepAwakeActiveRef`) to prevent duplicate activation/deactivation attempts, Promise chaining with explicit error handlers, and recoverable error handling that resets state on failure — preventing unhandled promise rejections from leaking to ride details or other screens.
+- Android ride-detail flicker/crash fix verified: the main root cause was mount-time `requestForegroundPermissionsAsync()` calls on `client/app/ride/[id].tsx`, which repeatedly launched Android `GrantPermissionsActivity`, flipped app state to background, and remounted the screen; fixed by switching ride-detail auto effects to passive permission checks and making live-session socket listener attachment idempotent in `client/src/store/liveSessionStore.ts`.
 
 ## Assistant Operating Notes
 
