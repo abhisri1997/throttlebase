@@ -22,6 +22,11 @@
 - Ride detail and full-screen navigation maps now render road-following routes in canonical order: current location -> start -> approved stops -> destination, with automatic origin fallback to start when device location is unavailable.
 - Navigation reroute cadence is now throttled to avoid rapid route refetch loops while riding, while preserving movement- and time-based refresh behavior.
 - Navigation polyline rendering is now optimized with adaptive simplification and point-capping to reduce delayed route draw on long rides.
+- Android ride maps are hardened against flicker/crash regressions: ride-detail preview uses lightweight cached rendering, memoized marker data, and reduced rerender pressure, while full-screen navigation keeps stable peer-marker identity with `tracksViewChanges` disabled.
+- Ride-detail Android flicker mitigation now also includes stronger header-map memoization (stable callback + deep prop equality) and paused preview-location sampling after initial origin lock, reducing repeated map repaints on realtime screen updates.
+- Android full-screen navigation now further reduces flicker by throttling camera follow updates with movement/heading thresholds and preferring native pin markers over custom marker views during live location streaming.
+- Keep-awake behavior is now scoped to full-screen navigation only, with guarded activation/deactivation tied to screen focus and active app state to avoid startup keep-awake promise errors.
+- Navigation route fetching is now deduplicated for identical in-flight/recent requests, reducing repeated Directions API work and preview-map rerender churn on Android.
 - Client production domain wiring is aligned to `https://throttlebase.in` (share links) and `https://api.throttlebase.in` (API/socket base URL), with local-development fallbacks preserved.
 
 ### In Progress

@@ -19,10 +19,18 @@
         "googleMapsApiKey": "AIzaSyCdVBc12MmeJf-qnP98hjFbtascMg9XQdk"
       },
       "infoPlist": {
-        "UIBackgroundModes": ["location", "fetch"]
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
       }
     },
     "android": {
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCdVBc12MmeJf-qnP98hjFbtascMg9XQdk"
+        }
+      },
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

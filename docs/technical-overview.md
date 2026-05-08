@@ -90,7 +90,13 @@ This keeps permission checks and state transitions in service logic while contro
 - Full-screen navigation exit now follows stack-aware back navigation to prevent duplicate ride-detail screen instances
 - Ride detail live map auto-fit now performs a single initial fit per live-room session instead of repeated animated refits on every location update, improving interaction stability
 - Ride detail preview map render path is hardened for interaction stability via stricter preview-polyline simplification/cap, non-dashed polyline rendering, and reduced camera-computation options (no rotate/pitch)
+- Android ride-detail preview map additionally uses lightweight cached preview rendering plus memoized marker/polyline inputs to reduce repeated map-surface invalidation during live updates
+- Ride-detail map header now uses stable callback props and deep memo-equality for preview route/marker props, while preview GPS sampling pauses after origin freeze to avoid unnecessary parent rerenders on Android
+- Shared navigation route fetching now deduplicates identical in-flight requests and reuses very recent identical results, reducing redundant Directions work during screen rerenders and transient activity churn
 - Full-screen navigation first-draw latency is reduced by early GPS seeding (last-known/current-position bootstrap), and route rendering fidelity is maintained with turn-aware road-safe polyline simplification
+- Android full-screen navigation markers keep stable rider-based identity and disable `tracksViewChanges` for custom marker views, reducing marker flicker under live location churn
+- Android full-screen navigation camera follow now applies movement/heading deadbands with a longer refresh cadence, and Android live markers render with native pin markers to reduce flicker/jank from rapid custom-marker re-renders
+- Screen wake lock is scoped to full-screen navigation only: keep-awake activates while `ride/[id]/navigation` is focused and app state is active, and is released on blur/background/unmount with guarded calls
 - Live socket disconnects when a session ends to prevent stale connected state on completed rides
 - Worker-backed presence sweep, incident escalation scheduling, and lifecycle notification fanout
 - Navigation Phase 1 full-screen route and map UX base

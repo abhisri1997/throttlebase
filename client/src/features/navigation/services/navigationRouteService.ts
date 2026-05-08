@@ -1,5 +1,14 @@
 import type { LatLng, NavigationRoute, NavigationStep } from "../types/navigation";
 
+const ROUTE_CACHE_TTL_MS = 15000;
+
+const routeCache = new Map<
+  string,
+  { route: NavigationRoute; cachedAt: number }
+>();
+
+const inFlightRouteRequests = new Map<string, Promise<NavigationRoute>>();
+
 const stripHtml = (value: string): string =>
   value
     .replace(/<[^>]*>/g, " ")
@@ -14,6 +23,41 @@ const pointsEqual = (left: LatLng, right: LatLng): boolean => {
     Math.abs(left.latitude - right.latitude) <= tolerance &&
     Math.abs(left.longitude - right.longitude) <= tolerance
   );
+};
+
+const serializePoint = (point: LatLng): string =>
+  `${point.latitude.toFixed(5)},${point.longitude.toFixed(5)}`;
+
+const buildRouteRequestKey = (input: {
+  origin: LatLng;
+  destination: LatLng;
+  waypoints?: LatLng[];
+  apiKey?: string;
+}): string =>
+  [
+    serializePoint(input.origin),
+    ...(input.waypoints || []).map(serializePoint),
+    serializePoint(input.destination),
+    input.apiKey ? "directions" : "fallback",
+  ].join("|");
+
+const getCachedRoute = (key: string): NavigationRoute | null => {
+  const cached = routeCache.get(key);
+  if (!cached) {
+    return null;
+  }
+
+  if (Date.now() - cached.cachedAt > ROUTE_CACHE_TTL_MS) {
+    routeCache.delete(key);
+    return null;
+  }
+
+  return cached.route;
+};
+
+const setCachedRoute = (key: string, route: NavigationRoute): NavigationRoute => {
+  routeCache.set(key, { route, cachedAt: Date.now() });
+  return route;
 };
 
 const bearingDegrees = (from: LatLng, to: LatLng): number => {
@@ -277,6 +321,18 @@ export const fetchNavigationRoute = async (input: {
   waypoints?: LatLng[];
   apiKey?: string;
 }): Promise<NavigationRoute> => {
+  const requestKey = buildRouteRequestKey(input);
+  const cachedRoute = getCachedRoute(requestKey);
+  if (cachedRoute) {
+    return cachedRoute;
+  }
+
+  const existingRequest = inFlightRouteRequests.get(requestKey);
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const requestPromise = (async (): Promise<NavigationRoute> => {
   const fallbackPoints = dedupeConsecutivePoints([
     input.origin,
     ...(input.waypoints || []),
@@ -284,7 +340,7 @@ export const fetchNavigationRoute = async (input: {
   ]);
 
   if (!input.apiKey) {
-    return buildFallbackRoute(fallbackPoints);
+      return setCachedRoute(requestKey, buildFallbackRoute(fallbackPoints));
   }
 
   const origin = `${input.origin.latitude},${input.origin.longitude}`;
@@ -312,7 +368,7 @@ export const fetchNavigationRoute = async (input: {
   const payload = (await response.json()) as DirectionsResponse;
 
   if (!response.ok || payload.status !== "OK" || !payload.routes?.[0]) {
-    return buildFallbackRoute(fallbackPoints);
+      return setCachedRoute(requestKey, buildFallbackRoute(fallbackPoints));
   }
 
   const route = payload.routes[0];
@@ -376,7 +432,10 @@ export const fetchNavigationRoute = async (input: {
   }
 
   if (steps.length === 0) {
-    return buildFallbackRoute(decoded.length > 1 ? decoded : fallbackPoints);
+      return setCachedRoute(
+        requestKey,
+        buildFallbackRoute(decoded.length > 1 ? decoded : fallbackPoints),
+      );
   }
 
   const totalDistanceMeters = (route.legs || []).reduce(
@@ -388,11 +447,20 @@ export const fetchNavigationRoute = async (input: {
     0,
   );
 
-  return {
-    source: "directions",
-    polyline: decoded,
-    steps,
-    totalDistanceMeters,
-    totalDurationSeconds,
-  };
+    return setCachedRoute(requestKey, {
+      source: "directions",
+      polyline: decoded,
+      steps,
+      totalDistanceMeters,
+      totalDurationSeconds,
+    });
+  })();
+
+  inFlightRouteRequests.set(requestKey, requestPromise);
+
+  try {
+    return await requestPromise;
+  } finally {
+    inFlightRouteRequests.delete(requestKey);
+  }
 };

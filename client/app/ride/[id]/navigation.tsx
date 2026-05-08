@@ -4,6 +4,7 @@ import {
   Alert,
   AppState,
   type AppStateStatus,
+  Platform,
   Text,
   TouchableOpacity,
   View,
@@ -11,7 +12,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsFocused } from "@react-navigation/native";
 import * as ExpoLocation from "expo-location";
+import {
+  activateKeepAwakeAsync,
+  deactivateKeepAwake,
+} from "expo-keep-awake";
 import MapView, {
   Marker,
   Polyline,
@@ -55,6 +61,22 @@ const DARK_MAP_STYLE = [
 ];
 
 const USER_FOLLOW_ZOOM = 19;
+const MIN_CAMERA_REFRESH_MS = 1800;
+const MIN_CAMERA_MOVE_METERS = 7;
+const MIN_CAMERA_HEADING_DELTA = 10;
+const MIN_LOCATION_STATE_MOVE_METERS = 4;
+
+const normalizeHeading = (heading: number): number => {
+  const normalized = heading % 360;
+  return normalized >= 0 ? normalized : normalized + 360;
+};
+
+const headingDelta = (from: number, to: number): number => {
+  const a = normalizeHeading(from);
+  const b = normalizeHeading(to);
+  const diff = Math.abs(a - b);
+  return Math.min(diff, 360 - diff);
+};
 
 const fetchRideDetails = async (id: string) => {
   const { data } = await apiClient.get(`/api/rides/${id}`);
@@ -62,8 +84,16 @@ const fetchRideDetails = async (id: string) => {
 };
 
 const fetchLiveSession = async (rideId: string) => {
-  const { data } = await apiClient.get(`/api/rides/${rideId}/live/session`);
-  return data.session;
+  try {
+    const { data } = await apiClient.get(`/api/rides/${rideId}/live/session`);
+    return data.session ?? null;
+  } catch (error: any) {
+    if (error?.response?.status === 404) {
+      return null;
+    }
+
+    throw error;
+  }
 };
 
 const startLiveSessionReq = async (rideId: string) => {
@@ -141,6 +171,7 @@ const parseLatLng = (value: string): LatLng | null => {
 export default function RideNavigationScreen() {
   const { colors } = useTheme();
   const router = useRouter();
+  const isFocused = useIsFocused();
   const queryClient = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
   const token = useAuthStore((state: any) => state.token);
@@ -184,7 +215,35 @@ export default function RideNavigationScreen() {
   currentLocationRef.current = currentLocation;
   const fetchRouteNowRef = useRef<(() => Promise<void>) | null>(null);
   const appStateRef = useRef<AppStateStatus>(appState);
+  const lastCameraCenterRef = useRef<LatLng | null>(null);
+  const lastCameraHeadingRef = useRef(0);
   appStateRef.current = appState;
+
+  useEffect(() => {
+    if (Platform.OS === "web") {
+      return;
+    }
+
+    const KEEP_AWAKE_TAG = "ride-navigation-fullscreen";
+    const shouldKeepAwake = isFocused && appState === "active";
+
+    if (!shouldKeepAwake) {
+      void deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {
+        // noop: lock may already be released
+      });
+      return;
+    }
+
+    void activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {
+      // Avoid unhandled promise rejection noise when Android activity isn't ready.
+    });
+
+    return () => {
+      void deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {
+        // noop: lock may already be released
+      });
+    };
+  }, [appState, isFocused]);
 
   const { data: ride, isLoading, isError, refetch } = useQuery({
     queryKey: ["ride", id],
@@ -228,6 +287,8 @@ export default function RideNavigationScreen() {
       Alert.alert("Error", "Failed to end ride.");
     },
   });
+
+  console.log("RideNavigationScreen render");
 
   useEffect(() => {
     if (!token || !id) {
@@ -452,14 +513,26 @@ export default function RideNavigationScreen() {
         longitude: position.coords.longitude,
       };
 
-      setCurrentLocation(nextLocation);
+      setCurrentLocation((previous) => {
+        if (
+          previous &&
+          haversineMeters(previous, nextLocation) < MIN_LOCATION_STATE_MOVE_METERS
+        ) {
+          return previous;
+        }
+
+        return nextLocation;
+      });
 
       if (
         typeof position.coords.heading === "number" &&
         Number.isFinite(position.coords.heading) &&
         position.coords.heading >= 0
       ) {
-        setCurrentHeading(position.coords.heading);
+        setCurrentHeading((previous) => {
+          const nextHeading = normalizeHeading(position.coords.heading as number);
+          return headingDelta(previous, nextHeading) >= 4 ? nextHeading : previous;
+        });
       }
 
       if (inRoom) {
@@ -492,7 +565,11 @@ export default function RideNavigationScreen() {
       if (!Number.isFinite(heading) || heading < 0) {
         return;
       }
-      setCurrentHeading(heading);
+
+      setCurrentHeading((previous) => {
+        const nextHeading = normalizeHeading(heading);
+        return headingDelta(previous, nextHeading) >= 4 ? nextHeading : previous;
+      });
     };
 
     const startTracking = async () => {
@@ -565,11 +642,21 @@ export default function RideNavigationScreen() {
     }
 
     const now = Date.now();
-    if (now - lastCameraUpdateRef.current < 1200) {
+    if (now - lastCameraUpdateRef.current < MIN_CAMERA_REFRESH_MS) {
       return;
     }
 
     const center = calculateForwardOffset(currentLocation, currentHeading, 55);
+    const lastCenter = lastCameraCenterRef.current;
+    const movedMeters = lastCenter ? haversineMeters(lastCenter, center) : Infinity;
+    const turnedDegrees = headingDelta(lastCameraHeadingRef.current, currentHeading);
+
+    if (
+      movedMeters < MIN_CAMERA_MOVE_METERS &&
+      turnedDegrees < MIN_CAMERA_HEADING_DELTA
+    ) {
+      return;
+    }
 
     mapRef.current.animateCamera(
       {
@@ -581,6 +668,8 @@ export default function RideNavigationScreen() {
       { duration: 900 },
     );
 
+    lastCameraCenterRef.current = center;
+    lastCameraHeadingRef.current = normalizeHeading(currentHeading);
     lastCameraUpdateRef.current = now;
   }, [currentHeading, currentLocation, focusedParticipantId]);
 
@@ -845,7 +934,7 @@ export default function RideNavigationScreen() {
 
         {peerLocationMarkers.map((marker) => (
           <Marker
-            key={`${marker.riderId}:${marker.capturedAt}`}
+            key={marker.riderId}
             coordinate={{
               latitude: marker.lat,
               longitude: marker.lon,
@@ -856,30 +945,44 @@ export default function RideNavigationScreen() {
                 ? "Live rider"
                 : `${marker.speedKmh.toFixed(1)} km/h`
             }
+            tracksViewChanges={false}
+            pinColor={Platform.OS === "android" ? "#f59e0b" : undefined}
           >
-            <View
-              style={{
-                backgroundColor: focusedParticipantId === marker.riderId ? colors.primary : '#f59e0b',
-                borderRadius: 20,
-                padding: 6,
-              }}
-            >
-              <Motorbike color='white' size={16} />
-            </View>
+            {Platform.OS !== "android" ? (
+              <View
+                style={{
+                  backgroundColor:
+                    focusedParticipantId === marker.riderId
+                      ? colors.primary
+                      : "#f59e0b",
+                  borderRadius: 20,
+                  padding: 6,
+                }}
+              >
+                <Motorbike color='white' size={16} />
+              </View>
+            ) : null}
           </Marker>
         ))}
 
         {currentLocation ? (
-          <Marker coordinate={currentLocation} title='You'>
-            <View
-              style={{
-                backgroundColor: '#2563eb',
-                borderRadius: 20,
-                padding: 6,
-              }}
-            >
-              <Motorbike color='white' size={16} />
-            </View>
+          <Marker
+            coordinate={currentLocation}
+            title='You'
+            tracksViewChanges={false}
+            pinColor={Platform.OS === "android" ? "#2563eb" : undefined}
+          >
+            {Platform.OS !== "android" ? (
+              <View
+                style={{
+                  backgroundColor: '#2563eb',
+                  borderRadius: 20,
+                  padding: 6,
+                }}
+              >
+                <Motorbike color='white' size={16} />
+              </View>
+            ) : null}
           </Marker>
         ) : null}
       </MapView>

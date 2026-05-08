@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -100,6 +100,8 @@ const deleteRideReq = async (id: string) => {
   const { data } = await apiClient.delete(`/api/rides/${id}`);
   return data;
 };
+
+console.log('Rendering RideDetailScreen');
 
 type RideReview = {
   id: string;
@@ -232,6 +234,207 @@ const toCoordinate = (raw?: [number, number] | null): LatLng | null => {
     longitude: raw[0],
   };
 };
+
+type RidePreviewLiveMarker = {
+  riderId: string;
+  latitude: number;
+  longitude: number;
+  pinColor: string;
+  title: string;
+  description: string;
+};
+
+type RideDetailMapHeaderProps = {
+  startCoords: [number, number];
+  endCoords?: [number, number] | null;
+  routePathCoordinates: LatLng[];
+  stopMarkerCoords: LatLng[];
+  showLiveMarkers: boolean;
+  liveMarkers: RidePreviewLiveMarker[];
+  rideStatus: string;
+  onBack: () => void;
+};
+
+const coordsEqual = (a: LatLng, b: LatLng): boolean =>
+  a.latitude === b.latitude && a.longitude === b.longitude;
+
+const coordArrayEqual = (a: LatLng[], b: LatLng[]): boolean => {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  for (let i = 0; i < a.length; i += 1) {
+    if (!coordsEqual(a[i], b[i])) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const ridePreviewLiveMarkersEqual = (
+  a: RidePreviewLiveMarker[],
+  b: RidePreviewLiveMarker[],
+): boolean => {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  for (let i = 0; i < a.length; i += 1) {
+    const left = a[i];
+    const right = b[i];
+
+    if (
+      left.riderId !== right.riderId ||
+      left.latitude !== right.latitude ||
+      left.longitude !== right.longitude ||
+      left.pinColor !== right.pinColor ||
+      left.title !== right.title ||
+      left.description !== right.description
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const RideDetailMapHeader = React.memo(
+  function RideDetailMapHeader({
+    startCoords,
+    endCoords,
+    routePathCoordinates,
+    stopMarkerCoords,
+    showLiveMarkers,
+    liveMarkers,
+    rideStatus,
+    onBack,
+  }: RideDetailMapHeaderProps) {
+    return (
+      <View className='h-72 w-full relative'>
+        <MapView
+          style={{ flex: 1 }}
+          provider={PROVIDER_GOOGLE}
+          userInterfaceStyle='dark'
+          rotateEnabled={false}
+          pitchEnabled={false}
+          scrollEnabled={Platform.OS !== "android"}
+          zoomEnabled={Platform.OS !== "android"}
+          toolbarEnabled={false}
+          liteMode={Platform.OS === "android"}
+          cacheEnabled={Platform.OS === "android"}
+          moveOnMarkerPress={false}
+          initialRegion={{
+            latitude: startCoords[1],
+            longitude: startCoords[0],
+            latitudeDelta: 0.2,
+            longitudeDelta: 0.2,
+          }}
+        >
+          <Marker
+            coordinate={{
+              latitude: startCoords[1],
+              longitude: startCoords[0],
+            }}
+            title='Start'
+            pinColor='#22c55e'
+          />
+          {endCoords ? (
+            <>
+              <Marker
+                coordinate={{
+                  latitude: endCoords[1],
+                  longitude: endCoords[0],
+                }}
+                title='End'
+                pinColor='#f43f5e'
+              />
+              {routePathCoordinates.length > 1 ? (
+                <Polyline
+                  coordinates={routePathCoordinates}
+                  strokeColor='#22c55e'
+                  strokeWidth={4}
+                />
+              ) : null}
+            </>
+          ) : null}
+
+          {stopMarkerCoords.map((coordinate, index) => (
+            <Marker
+              key={`stop-${coordinate.latitude}-${coordinate.longitude}-${index}`}
+              coordinate={coordinate}
+              pinColor='#f59e0b'
+              title={`Stop ${index + 1}`}
+            />
+          ))}
+
+          {showLiveMarkers
+            ? liveMarkers.map((marker) => (
+                <Marker
+                  key={`live-marker-${marker.riderId}`}
+                  coordinate={{
+                    latitude: marker.latitude,
+                    longitude: marker.longitude,
+                  }}
+                  pinColor={marker.pinColor}
+                  title={marker.title}
+                  description={marker.description}
+                />
+              ))
+            : null}
+        </MapView>
+
+        <SafeAreaView className='absolute top-0 left-0 right-0 px-4 pt-2 flex-row justify-between items-center'>
+          <TouchableOpacity
+            onPress={onBack}
+            className='w-10 h-10 rounded-full items-center justify-center'
+            style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+          >
+            <ChevronLeft color='white' size={24} />
+          </TouchableOpacity>
+
+          <View
+            className='px-3 py-1 rounded-full'
+            style={{
+              backgroundColor: STATUS_COLORS[rideStatus] || "#334155",
+            }}
+          >
+            <Text className='text-xs font-bold' style={{ color: '#ffffff' }}>
+              {STATUS_LABELS[rideStatus] || rideStatus}
+            </Text>
+          </View>
+        </SafeAreaView>
+      </View>
+    );
+  },
+  (prev, next) => {
+    const prevEnd = prev.endCoords || null;
+    const nextEnd = next.endCoords || null;
+
+    const endEqual =
+      (!prevEnd && !nextEnd) ||
+      (Boolean(prevEnd) &&
+        Boolean(nextEnd) &&
+        prevEnd![0] === nextEnd![0] &&
+        prevEnd![1] === nextEnd![1]);
+
+    return (
+      prev.startCoords[0] === next.startCoords[0] &&
+      prev.startCoords[1] === next.startCoords[1] &&
+      endEqual &&
+      prev.rideStatus === next.rideStatus &&
+      prev.showLiveMarkers === next.showLiveMarkers &&
+      coordArrayEqual(prev.routePathCoordinates, next.routePathCoordinates) &&
+      coordArrayEqual(prev.stopMarkerCoords, next.stopMarkerCoords) &&
+      ridePreviewLiveMarkersEqual(prev.liveMarkers, next.liveMarkers)
+    );
+  },
+);
+
+const polylineSignature = (points: LatLng[]): string =>
+  points
+    .map((point) => `${point.latitude.toFixed(5)},${point.longitude.toFixed(5)}`)
+    .join("|");
 
 const NEXT_STATUS: Record<string, { label: string; status: string } | null> = {
   draft: { label: "Publish", status: "scheduled" },
@@ -383,10 +586,12 @@ export default function RideDetailScreen() {
   const [sosSubmitting, setSOSSubmitting] = useState(false);
   const [sampledLocation, setSampledLocation] = useState<LatLng | null>(null);
   const [routePathCoordinates, setRoutePathCoordinates] = useState<LatLng[]>([]);
-  const mapRef = useRef<InstanceType<typeof MapView>>(null);
   const lastRouteRefreshAtRef = useRef(0);
   const lastRouteOriginRef = useRef<LatLng | null>(null);
   const [frozenPreviewOrigin, setFrozenPreviewOrigin] = useState<LatLng | null>(null);
+  const routePreviewLoadedRef = useRef(false);
+  const routePreviewFetchInFlightRef = useRef(false);
+  const lastRoutePolylineSignatureRef = useRef("");
   const hasAutoFitLiveMarkersRef = useRef(false);
 
   const joinMutation = useMutation({
@@ -721,7 +926,7 @@ export default function RideDetailScreen() {
   }, [appState, inRoom, upsertLocation]);
 
   useEffect(() => {
-    if (appState !== "active" || Platform.OS === "web") {
+    if (appState !== "active" || Platform.OS === "web" || frozenPreviewOrigin) {
       return;
     }
 
@@ -738,9 +943,17 @@ export default function RideDetailScreen() {
           return;
         }
 
-        setSampledLocation({
+        const nextLocation = {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
+        };
+
+        setSampledLocation((previous) => {
+          if (previous && haversineMeters(previous, nextLocation) < 10) {
+            return previous;
+          }
+
+          return nextLocation;
         });
       } catch {
         // Keep existing fallback behavior when location is unavailable.
@@ -767,7 +980,7 @@ export default function RideDetailScreen() {
         clearInterval(timer);
       }
     };
-  }, [appState]);
+  }, [appState, frozenPreviewOrigin]);
 
   // Alert when session is ended remotely via socket fanout
   const prevSessionEndedRef = useRef<string | null>(null);
@@ -867,6 +1080,9 @@ export default function RideDetailScreen() {
 
   useEffect(() => {
     setFrozenPreviewOrigin(null);
+    routePreviewLoadedRef.current = false;
+    routePreviewFetchInFlightRef.current = false;
+    lastRoutePolylineSignatureRef.current = "";
   }, [id]);
 
   const previewOrigin = frozenPreviewOrigin || currentLocationOrigin;
@@ -894,6 +1110,7 @@ export default function RideDetailScreen() {
 
   useEffect(() => {
     if (!canonicalRoute) {
+      routePreviewLoadedRef.current = false;
       setRoutePathCoordinates([]);
       return;
     }
@@ -913,13 +1130,24 @@ export default function RideDetailScreen() {
         : Infinity;
     const elapsedMs = now - lastRouteRefreshAtRef.current;
     const shouldRefresh =
-      routePathCoordinates.length === 0 || movedMeters >= 40 || elapsedMs >= 25000;
+      !routePreviewLoadedRef.current || movedMeters >= 40 || elapsedMs >= 25000;
 
-    if (!shouldRefresh) {
+    if (!shouldRefresh || routePreviewFetchInFlightRef.current) {
       return;
     }
 
     let cancelled = false;
+    routePreviewFetchInFlightRef.current = true;
+
+    const commitPreviewPolyline = (nextPoints: LatLng[]) => {
+      const nextSignature = polylineSignature(nextPoints);
+      if (nextSignature === lastRoutePolylineSignatureRef.current) {
+        return;
+      }
+
+      lastRoutePolylineSignatureRef.current = nextSignature;
+      setRoutePathCoordinates(nextPoints);
+    };
 
     const loadRoute = async () => {
       try {
@@ -939,14 +1167,18 @@ export default function RideDetailScreen() {
             ? simplifyPolyline(route.polyline, 30, 320)
             : canonicalRoute.orderedPoints;
 
-        setRoutePathCoordinates(
-          previewPolyline,
-        );
+        commitPreviewPolyline(previewPolyline);
+        routePreviewLoadedRef.current = true;
         lastRouteOriginRef.current = canonicalRoute.origin;
         lastRouteRefreshAtRef.current = Date.now();
       } catch {
         if (!cancelled) {
-          setRoutePathCoordinates(canonicalRoute.orderedPoints);
+          commitPreviewPolyline(canonicalRoute.orderedPoints);
+          routePreviewLoadedRef.current = true;
+        }
+      } finally {
+        if (!cancelled) {
+          routePreviewFetchInFlightRef.current = false;
         }
       }
     };
@@ -955,13 +1187,13 @@ export default function RideDetailScreen() {
 
     return () => {
       cancelled = true;
+      routePreviewFetchInFlightRef.current = false;
     };
   }, [
     isFocused,
     appState,
     canonicalRoute,
     canonicalRouteKey,
-    routePathCoordinates.length,
   ]);
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
@@ -971,6 +1203,95 @@ export default function RideDetailScreen() {
     }
     await Promise.all(tasks);
   });
+
+  const stopMarkers = useMemo(
+    () =>
+      (ride?.stops || []).filter(
+        (s: any) => s.status !== "rejected",
+      ),
+    [ride?.stops],
+  );
+
+  const previewStopMarkerCoords = useMemo(
+    () =>
+      stopMarkers
+        .filter((s: any) => s.location?.coordinates)
+        .map((s: any) => ({
+          latitude: s.location.coordinates[1],
+          longitude: s.location.coordinates[0],
+        })),
+    [stopMarkers],
+  );
+
+  const liveLocationMarkers = useMemo(
+    () =>
+      Object.values(locations).filter((location) => {
+        if (!Number.isFinite(location.lat) || !Number.isFinite(location.lon)) {
+          return false;
+        }
+
+        return presence[location.riderId]?.isOnline ?? true;
+      }),
+    [locations, presence],
+  );
+
+  const previewLiveMarkers = useMemo<RidePreviewLiveMarker[]>(() => {
+    if (
+      !liveEnabled ||
+      !(
+        liveStatus === "active" ||
+        liveStatus === "starting" ||
+        liveStatus === "paused"
+      )
+    ) {
+      return [];
+    }
+
+    return liveLocationMarkers.map((marker) => {
+      const participant = ride?.participants?.find(
+        (p: any) => p.rider_id === marker.riderId,
+      );
+
+      const isCurrentRider = marker.riderId === currentRider?.id;
+      const role = participant?.role || "rider";
+      const roleLabel =
+        role === "captain"
+          ? "Captain"
+          : role === "co_captain"
+            ? "Co-Captain"
+            : "Rider";
+
+      const speedLabel =
+        marker.speedKmh != null
+          ? ` · ${Math.round(marker.speedKmh)} km/h`
+          : "";
+      const headingLabel =
+        marker.headingDeg != null
+          ? ` · ${Math.round(marker.headingDeg)}°`
+          : "";
+
+      return {
+        riderId: marker.riderId,
+        latitude: marker.lat,
+        longitude: marker.lon,
+        pinColor: isCurrentRider
+          ? "#2563eb"
+          : role === "captain"
+            ? "#22c55e"
+            : role === "co_captain"
+              ? "#f59e0b"
+              : "#0ea5e9",
+        title: isCurrentRider
+          ? "You"
+          : participant?.display_name || marker.riderId.slice(0, 8),
+        description: `${roleLabel}${speedLabel}${headingLabel}`,
+      };
+    });
+  }, [currentRider?.id, liveEnabled, liveLocationMarkers, liveStatus, ride?.participants]);
+
+  const handleBackPress = useCallback(() => {
+    router.back();
+  }, [router]);
 
   if (isLoading) {
     return (
@@ -1037,19 +1358,6 @@ export default function RideDetailScreen() {
       : inRoom
         ? "Live room joined"
         : "Socket connected";
-
-  // Collect approved stop markers
-  const stopMarkers = (ride.stops || []).filter(
-    (s: any) => s.status !== "rejected",
-  );
-
-  const liveLocationMarkers = Object.values(locations).filter((location) => {
-    if (!Number.isFinite(location.lat) || !Number.isFinite(location.lon)) {
-      return false;
-    }
-
-    return presence[location.riderId]?.isOnline ?? true;
-  });
 
   const currentRiderLiveLocation = liveLocationMarkers.find(
     (location) => location.riderId === currentRider?.id,
@@ -1166,138 +1474,24 @@ export default function RideDetailScreen() {
 
   return (
     <View className='flex-1' style={{ backgroundColor: colors.bg }}>
-      {/* Map Header */}
-      <View className='h-72 w-full relative'>
-        {startCoords && (
-          <MapView
-            ref={mapRef}
-            style={{ flex: 1 }}
-            provider={PROVIDER_GOOGLE}
-            userInterfaceStyle='dark'
-            rotateEnabled={false}
-            pitchEnabled={false}
-            initialRegion={{
-              latitude: startCoords[1],
-              longitude: startCoords[0],
-              latitudeDelta: 0.2,
-              longitudeDelta: 0.2,
-            }}
-          >
-            <Marker
-              coordinate={{
-                latitude: startCoords[1],
-                longitude: startCoords[0],
-              }}
-              title='Start'
-              pinColor='#22c55e'
-            />
-            {endCoords && (
-              <>
-                <Marker
-                  coordinate={{
-                    latitude: endCoords[1],
-                    longitude: endCoords[0],
-                  }}
-                  title='End'
-                  pinColor='#f43f5e'
-                />
-                <Polyline
-                  coordinates={routePathCoordinates}
-                  strokeColor='#22c55e'
-                  strokeWidth={4}
-                />
-              </>
-            )}
-            {stopMarkers
-              .filter((s: any) => s.location?.coordinates)
-              .map((s: any, i: number) => (
-                <Marker
-                  key={`stop-${i}`}
-                  coordinate={{
-                    latitude: s.location.coordinates[1],
-                    longitude: s.location.coordinates[0],
-                  }}
-                  pinColor='#f59e0b'
-                  title={`${s.type} stop`}
-                />
-              ))}
-
-            {liveEnabled &&
-              (liveStatus === "active" ||
-                liveStatus === "starting" ||
-                liveStatus === "paused") &&
-              liveLocationMarkers.map((marker) => {
-                const participant = ride.participants?.find(
-                  (p: any) => p.rider_id === marker.riderId,
-                );
-
-                const isCurrentRider = marker.riderId === currentRider?.id;
-                const role = participant?.role || "rider";
-                const roleLabel =
-                  role === "captain"
-                    ? "Captain"
-                    : role === "co_captain"
-                      ? "Co-Captain"
-                      : "Rider";
-
-                const speedLabel =
-                  marker.speedKmh != null
-                    ? ` · ${Math.round(marker.speedKmh)} km/h`
-                    : "";
-                const headingLabel =
-                  marker.headingDeg != null
-                    ? ` · ${Math.round(marker.headingDeg)}°`
-                    : "";
-
-                return (
-                  <Marker
-                    key={`live-marker-${marker.riderId}`}
-                    coordinate={{
-                      latitude: marker.lat,
-                      longitude: marker.lon,
-                    }}
-                    pinColor={
-                      isCurrentRider
-                        ? "#2563eb"
-                        : role === "captain"
-                          ? "#22c55e"
-                          : role === "co_captain"
-                            ? "#f59e0b"
-                            : "#0ea5e9"
-                    }
-                    title={
-                      isCurrentRider
-                        ? "You"
-                        : participant?.display_name ||
-                          marker.riderId.slice(0, 8)
-                    }
-                    description={`${roleLabel}${speedLabel}${headingLabel}`}
-                  />
-                );
-              })}
-          </MapView>
-        )}
-        <SafeAreaView className='absolute top-0 left-0 right-0 px-4 pt-2 flex-row justify-between items-center'>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            className='w-10 h-10 rounded-full items-center justify-center'
-            style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
-          >
-            <ChevronLeft color='white' size={24} />
-          </TouchableOpacity>
-          {/* Status Badge */}
-          <View
-            className='px-3 py-1 rounded-full'
-            style={{
-              backgroundColor: STATUS_COLORS[ride.status] || colors.border,
-            }}
-          >
-            <Text className='text-xs font-bold' style={{ color: "#ffffff" }}>
-              {STATUS_LABELS[ride.status] || ride.status}
-            </Text>
-          </View>
-        </SafeAreaView>
-      </View>
+      {startCoords ? (
+        <RideDetailMapHeader
+          startCoords={startCoords}
+          endCoords={endCoords}
+          routePathCoordinates={routePathCoordinates}
+          stopMarkerCoords={previewStopMarkerCoords}
+          showLiveMarkers={
+            Platform.OS !== "android" &&
+            liveEnabled &&
+            (liveStatus === "active" ||
+              liveStatus === "starting" ||
+              liveStatus === "paused")
+          }
+          liveMarkers={previewLiveMarkers}
+          rideStatus={ride.status}
+          onBack={handleBackPress}
+        />
+      ) : null}
 
       <ScrollView
         className='flex-1'
