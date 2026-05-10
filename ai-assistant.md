@@ -128,6 +128,7 @@ Code locations:
 - Navigation keep-awake errors fully suppressed: full-screen navigation uses state tracking (`keepAwakeActiveRef`) to prevent duplicate activation/deactivation attempts, Promise chaining with explicit error handlers, and recoverable error handling that resets state on failure — preventing unhandled promise rejections from leaking to ride details or other screens.
 - Android ride-detail flicker/crash fix verified: the main root cause was mount-time `requestForegroundPermissionsAsync()` calls on `client/app/ride/[id].tsx`, which repeatedly launched Android `GrantPermissionsActivity`, flipped app state to background, and remounted the screen; fixed by switching ride-detail auto effects to passive permission checks and making live-session socket listener attachment idempotent in `client/src/store/liveSessionStore.ts`.
 - Full-screen navigation now follows the same safe permission pattern as ride detail: `client/app/ride/[id]/navigation.tsx` uses passive `getForegroundPermissionsAsync()` checks in mount-time tracking effects (no automatic permission prompt), preventing Android permission-activity app-state interruptions from triggering screen remount loops.
+- Auth screens branding reverted: `client/app/(auth)/login.tsx` and `client/app/(auth)/register.tsx` now use Lucide icons (`MapPin`, `UserPlus`) instead of rendering `assets/icon.png` in the header badge.
 
 ## Assistant Operating Notes
 

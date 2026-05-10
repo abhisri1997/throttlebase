@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.throttlebase.client",
+      "bundleIdentifier": "in.throttlebase.rider",
       "config": {
         "googleMapsApiKey": "AIzaSyCdVBc12MmeJf-qnP98hjFbtascMg9XQdk"
       },
@@ -47,7 +47,7 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
-      "package": "com.throttlebase.client"
+      "package": "in.throttlebase.rider"
     },
     "web": {
       "bundler": "metro",

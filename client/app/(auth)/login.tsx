@@ -8,10 +8,10 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
+import { MapPin } from "lucide-react-native";
 import { Link, router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { MapPin } from "lucide-react-native";
 import { Input } from "../../src/components/Input";
 import { Button } from "../../src/components/Button";
 import { apiClient } from "../../src/api/client";

@@ -8,10 +8,10 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
+import { UserPlus } from "lucide-react-native";
 import { Link, router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { UserPlus } from "lucide-react-native";
 import { Input } from "../../src/components/Input";
 import { Button } from "../../src/components/Button";
 import { apiClient } from "../../src/api/client";
@@ -170,7 +170,7 @@ export default function RegisterScreen() {
               className='w-20 h-20 rounded-3xl items-center justify-center shadow-lg mb-6'
               style={{ backgroundColor: colors.primary }}
             >
-              <UserPlus size={40} color='#ffffff' />
+              <UserPlus size={40} color='white' />
             </View>
             <Text
               className='text-4xl font-extrabold tracking-tight'
