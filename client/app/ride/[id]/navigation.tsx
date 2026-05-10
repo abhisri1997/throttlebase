@@ -307,8 +307,6 @@ export default function RideNavigationScreen() {
     },
   });
 
-  console.log("RideNavigationScreen render");
-
   useEffect(() => {
     if (!token || !id) {
       return;
@@ -596,7 +594,7 @@ export default function RideNavigationScreen() {
         return;
       }
 
-      const permission = await ExpoLocation.requestForegroundPermissionsAsync();
+      const permission = await ExpoLocation.getForegroundPermissionsAsync();
       if (closed || permission.status !== "granted") {
         return;
       }

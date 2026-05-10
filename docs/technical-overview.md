@@ -98,6 +98,7 @@ This keeps permission checks and state transitions in service logic while contro
 - Android full-screen navigation markers keep stable rider-based identity and disable `tracksViewChanges` for custom marker views, reducing marker flicker under live location churn
 - Android full-screen navigation camera follow now applies movement/heading deadbands with a longer refresh cadence, and Android live markers render with native pin markers to reduce flicker/jank from rapid custom-marker re-renders
 - Screen wake lock is scoped to full-screen navigation only: keep-awake activates while `ride/[id]/navigation` is focused and app state is active, and is released on blur/background/unmount with guarded calls
+- Full-screen navigation location tracking now uses passive foreground-permission checks (no automatic mount-time permission prompt), preventing Android `GrantPermissionsActivity` lifecycle interruptions from destabilizing the navigation screen
 - Live socket disconnects when a session ends to prevent stale connected state on completed rides
 - Worker-backed presence sweep, incident escalation scheduling, and lifecycle notification fanout
 - Navigation Phase 1 full-screen route and map UX base
