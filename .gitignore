@@ -1,0 +1,50 @@
+# ThrottleBase root ignore rules
+# Applies workspace-wide; package-specific ignores remain in client/server .gitignore files.
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Dependency directories
+**/node_modules/
+
+# Logs and runtime noise
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build/cache artifacts
+**/dist/
+**/build/
+**/.cache/
+**/.turbo/
+**/.next/
+**/.expo/
+**/.gradle/
+**/coverage/
+
+# TypeScript
+**/*.tsbuildinfo
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Expo / React Native generated native projects
+client/android/
+client/ios/
+
+# Python/tooling artifacts
+__pycache__/
+*.pyc
+
+# Temporary files
+*.tmp
+*.temp
