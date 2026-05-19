@@ -50,6 +50,8 @@ This keeps permission checks and state transitions in service logic while contro
 - Session inventory and rider-initiated session revocation endpoints
 - Login activity audit trail with device fingerprint and IP capture
 - Admin access gating via rider-level `is_admin` flag and middleware
+- Production API security hardening: `X-Powered-By` removed, strict CORS origin allowlist, and browser security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy)
+- Swagger docs exposure is now production-safe by default (disabled unless explicitly enabled, with basic-auth guard for production access)
 
 ### Rides and Routes
 

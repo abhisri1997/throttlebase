@@ -129,6 +129,9 @@ Code locations:
 - Android ride-detail flicker/crash fix verified: the main root cause was mount-time `requestForegroundPermissionsAsync()` calls on `client/app/ride/[id].tsx`, which repeatedly launched Android `GrantPermissionsActivity`, flipped app state to background, and remounted the screen; fixed by switching ride-detail auto effects to passive permission checks and making live-session socket listener attachment idempotent in `client/src/store/liveSessionStore.ts`.
 - Full-screen navigation now follows the same safe permission pattern as ride detail: `client/app/ride/[id]/navigation.tsx` uses passive `getForegroundPermissionsAsync()` checks in mount-time tracking effects (no automatic permission prompt), preventing Android permission-activity app-state interruptions from triggering screen remount loops.
 - Auth screens branding reverted: `client/app/(auth)/login.tsx` and `client/app/(auth)/register.tsx` now use Lucide icons (`MapPin`, `UserPlus`) instead of rendering `assets/icon.png` in the header badge.
+- API security hardening shipped server-side: Express `X-Powered-By` disabled, strict CORS origin allowlist for HTTP + Socket.IO, and security headers enforced (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy).
+- Production Swagger exposure is now safer by default: `/api-docs` disabled unless explicitly enabled, and production access requires configured basic-auth credentials.
+- Rewards authorization tightened: `POST /api/rewards/badges`, `POST /api/rewards/badges/:id/award`, and `POST /api/rewards/achievements` now enforce `requireAdmin` middleware.
 
 ## Assistant Operating Notes
 

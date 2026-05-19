@@ -42,6 +42,13 @@ cd ../client && npm install
 ```
 
 2. Ensure PostgreSQL + PostGIS are available and env is configured in `server/.env`.
+
+	Security-related server env options:
+
+	- `CORS_ALLOWED_ORIGINS` (comma-separated allowlist, e.g. `https://throttlebase.in,https://www.throttlebase.in`)
+	- `ENABLE_SWAGGER_DOCS` (`true`/`false`; defaults to enabled in non-production, disabled in production)
+	- `SWAGGER_USERNAME` and `SWAGGER_PASSWORD` (required to access `/api-docs` in production when docs are enabled)
+
 3. Run migrations using your existing migration workflow.
 4. Start backend and worker:
 

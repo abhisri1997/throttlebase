@@ -14,11 +14,61 @@ import supportRoutes from "./routes/support.routes.js";
 import liveSessionRoutes from "./routes/live-session.routes.js";
 import { createLiveGateway } from "./realtime/gateway.js";
 import cors from "cors";
+import helmet from "helmet";
+import {
+  corsOptions,
+  isProduction,
+  isSwaggerDocsEnabled,
+  requireSwaggerBasicAuth,
+} from "./config/security.js";
 
 const app = express();
 
+if (isProduction) {
+  app.set("trust proxy", 1);
+}
+
+app.disable("x-powered-by");
+
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    frameguard: { action: "deny" },
+    referrerPolicy: { policy: "no-referrer" },
+    hsts: isProduction
+      ? {
+          maxAge: 31536000,
+          includeSubDomains: true,
+          preload: true,
+        }
+      : false,
+  }),
+);
+
+app.use((req, res, next) => {
+  res.setHeader(
+    "Permissions-Policy",
+    "geolocation=(), camera=(), microphone=(), payment=(), usb=(), accelerometer=(), gyroscope=(), magnetometer=()",
+  );
+
+  if (req.path.startsWith("/api-docs")) {
+    res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; script-src 'self' 'unsafe-inline' https:; base-uri 'self'; frame-ancestors 'none'",
+    );
+  } else {
+    res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+    );
+  }
+
+  next();
+});
+
 // Securely unblock localhost ports
-app.use(cors());
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 // Parse JSON request bodies
 app.use(express.json());
@@ -31,19 +81,22 @@ app.get("/health", (req: express.Request, res: express.Response) => {
 // --- Swagger API Docs ---
 let swaggerDocsHandler: express.RequestHandler | null = null;
 
-app.use(
-  "/api-docs",
-  swaggerUi.serve,
-  (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    if (!swaggerDocsHandler) {
-      swaggerDocsHandler = swaggerUi.setup(getSwaggerSpec(), {
-        customSiteTitle: "ThrottleBase API Docs",
-      });
-    }
+if (isSwaggerDocsEnabled) {
+  app.use(
+    "/api-docs",
+    requireSwaggerBasicAuth,
+    swaggerUi.serve,
+    (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      if (!swaggerDocsHandler) {
+        swaggerDocsHandler = swaggerUi.setup(getSwaggerSpec(), {
+          customSiteTitle: "ThrottleBase API Docs",
+        });
+      }
 
-    return swaggerDocsHandler(req, res, next);
-  },
-);
+      return swaggerDocsHandler(req, res, next);
+    },
+  );
+}
 
 // --- Auth routes (public) ---
 app.use("/auth", authRoutes);

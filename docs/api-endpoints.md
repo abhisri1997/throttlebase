@@ -2,6 +2,7 @@
 
 This inventory groups active API surfaces by domain for quick implementation and QA navigation.
 For request/response schema details, use Swagger at `/api-docs`.
+In production, Swagger docs are disabled by default and should only be enabled intentionally with access control.
 
 ## Auth
 
@@ -77,12 +78,12 @@ For request/response schema details, use Swagger at `/api-docs`.
 ## Rewards
 
 - `GET /api/rewards/badges`
-- `POST /api/rewards/badges`
+- `POST /api/rewards/badges` (admin only)
 - `GET /api/rewards/badges/me`
-- `POST /api/rewards/badges/:id/award`
+- `POST /api/rewards/badges/:id/award` (admin only)
 - `GET /api/rewards/badges/rider/:id`
 - `GET /api/rewards/achievements`
-- `POST /api/rewards/achievements`
+- `POST /api/rewards/achievements` (admin only)
 - `GET /api/rewards/achievements/me`
 - `GET /api/rewards/leaderboard`
 

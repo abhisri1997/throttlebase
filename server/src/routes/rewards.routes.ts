@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth.middleware.js';
+import { requireAdmin } from '../middleware/admin.middleware.js';
 import * as rc from '../controllers/rewards.controller.js';
 
 const router = Router();
@@ -53,7 +54,7 @@ router.use(authenticate);
  *         description: Badge created
  */
 router.get('/badges', rc.listBadges);
-router.post('/badges', rc.createBadge);
+router.post('/badges', requireAdmin, rc.createBadge);
 
 /**
  * @swagger
@@ -73,7 +74,7 @@ router.get('/badges/me', rc.getMyBadges);
  * @swagger
  * /api/rewards/badges/{id}/award:
  *   post:
- *     summary: Award a badge to a rider
+ *     summary: Award a badge to a rider (admin)
  *     tags: [Rewards]
  *     security:
  *       - bearerAuth: []
@@ -101,8 +102,10 @@ router.get('/badges/me', rc.getMyBadges);
  *         description: Badge awarded
  *       200:
  *         description: Badge already awarded to this rider
+ *       403:
+ *         description: Admin access required
  */
-router.post('/badges/:id/award', rc.awardBadge);
+router.post('/badges/:id/award', requireAdmin, rc.awardBadge);
 
 /**
  * @swagger
@@ -174,7 +177,7 @@ router.get('/badges/rider/:id', rc.getRiderBadges);
  *         description: Achievement created
  */
 router.get('/achievements', rc.listAchievements);
-router.post('/achievements', rc.createAchievement);
+router.post('/achievements', requireAdmin, rc.createAchievement);
 
 /**
  * @swagger

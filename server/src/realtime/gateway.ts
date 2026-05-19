@@ -16,6 +16,7 @@ import {
   updateLivePresenceHeartbeat,
   updateLivePresenceLocation,
 } from "../services/live-session.service.js";
+import { socketCorsOptions } from "../config/security.js";
 
 type RiderPayload = {
   riderId: string;
@@ -115,10 +116,7 @@ const canAccessRideRoom = async (
 
 export const createLiveGateway = (httpServer: HttpServer) => {
   const io = new Server(httpServer, {
-    cors: {
-      origin: true,
-      credentials: true,
-    },
+    cors: socketCorsOptions,
   });
 
   const liveNamespace = io.of("/live");
