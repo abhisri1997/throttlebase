@@ -35,6 +35,7 @@
 - Production API docs exposure hardened: `/api-docs` is disabled by default in production and can be enabled intentionally with basic-auth protection.
 - Rewards mutation authorization tightened: badge creation, badge awarding, and achievement creation are now admin-only at route middleware level.
 - Security hardening follow-up completed: Swagger/docs endpoints now fail closed by default unless explicitly enabled via `ENABLE_SWAGGER_DOCS=true`; blocked origins return generic `403` JSON (no stack/path leak), and HTTPS requests now always receive HSTS from app middleware.
+- Security hardening second pass completed: API root no longer serves/redirects docs in app routing, Swagger basic-auth checks are env-agnostic (no `NODE_ENV` bypass), explicit `/openapi.json` and `/swagger.json` controls were added, and `Cross-Origin-Embedder-Policy` now accompanies COOP/CORP headers.
 
 ### In Progress
 

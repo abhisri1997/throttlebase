@@ -25,7 +25,7 @@ router.use(authenticate);
  *     summary: Create a new badge definition (admin)
  *     tags: [Rewards]
  *     security:
- *       - bearerAuth: []
+ *       - bearerAdminAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -77,7 +77,7 @@ router.get('/badges/me', rc.getMyBadges);
  *     summary: Award a badge to a rider (admin)
  *     tags: [Rewards]
  *     security:
- *       - bearerAuth: []
+ *       - bearerAdminAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -148,7 +148,7 @@ router.get('/badges/rider/:id', rc.getRiderBadges);
  *     summary: Create a new achievement definition (admin)
  *     tags: [Rewards]
  *     security:
- *       - bearerAuth: []
+ *       - bearerAdminAuth: []
  *     requestBody:
  *       required: true
  *       content:

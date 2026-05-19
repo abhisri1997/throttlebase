@@ -53,6 +53,8 @@ This keeps permission checks and state transitions in service logic while contro
 - Production API security hardening: `X-Powered-By` removed, strict CORS origin allowlist, and browser security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy)
 - CORS origin rejections are fail-closed with generic `403` JSON responses (no stack traces or local path disclosure)
 - Swagger docs exposure is now fail-closed by default (enabled only when `ENABLE_SWAGGER_DOCS=true`, with production basic-auth guard)
+- Swagger/docs hardening includes explicit spec endpoint controls (`/openapi.json`, `/swagger.json`) and no root redirect to docs from API app routes
+- Cross-origin hardening includes explicit COOP/COEP/CORP response headers for API responses
 
 ### Rides and Routes
 

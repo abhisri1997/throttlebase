@@ -26,6 +26,12 @@ const options: swaggerJsdoc.Options = {
           bearerFormat: 'JWT',
           description: 'Enter your JWT token from /auth/login',
         },
+        bearerAdminAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'Admin JWT required (endpoint additionally enforces requireAdmin middleware)',
+        },
       },
     },
     tags: [

@@ -66,11 +66,6 @@ export const hasSwaggerBasicAuthConfig =
   Boolean(swaggerUser) && Boolean(swaggerPass);
 
 export const requireSwaggerBasicAuth: RequestHandler = (req, res, next) => {
-  if (!isProduction) {
-    next();
-    return;
-  }
-
   if (!hasSwaggerBasicAuthConfig) {
     res.status(404).json({ error: "Not found" });
     return;

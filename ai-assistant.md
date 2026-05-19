@@ -134,6 +134,7 @@ Code locations:
 - Rewards authorization tightened: `POST /api/rewards/badges`, `POST /api/rewards/badges/:id/award`, and `POST /api/rewards/achievements` now enforce `requireAdmin` middleware.
 - Express 5 startup compatibility fix: global CORS preflight route changed from `app.options("*")` to regex matcher `app.options(/.*/)` to avoid `path-to-regexp` wildcard parsing crash (`Missing parameter name at index 1: *`).
 - API security follow-up hardening: Swagger docs are now fail-closed unless `ENABLE_SWAGGER_DOCS=true`; blocked CORS origins are rejected with generic `403` JSON (no stack/path leak); app middleware now emits HSTS on HTTPS requests even when upstream env mode is misconfigured.
+- Security hardening (second pass): Swagger basic-auth gate no longer depends on `NODE_ENV`; root-level spec endpoints (`/openapi.json`, `/swagger.json`) are explicitly guarded/hidden; API root path now returns JSON 404 (no docs redirect); COEP (`Cross-Origin-Embedder-Policy: require-corp`) is emitted with existing COOP/CORP headers.
 
 ## Assistant Operating Notes
 

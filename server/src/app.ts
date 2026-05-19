@@ -48,10 +48,15 @@ app.use(
 
 app.use((req, res, next) => {
   const forwardedProto = req.headers["x-forwarded-proto"];
+  const hostHeader = req.headers.host;
+  const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
   const proto = Array.isArray(forwardedProto)
     ? forwardedProto[0]
     : forwardedProto?.split(",")[0]?.trim().toLowerCase();
-  const isHttpsRequest = req.secure || proto === "https";
+  const isThrottlebaseDomain = Boolean(
+    host && (host.includes("throttlebase.in") || host.includes("throttlebase.local")),
+  );
+  const isHttpsRequest = req.secure || proto === "https" || isThrottlebaseDomain;
 
   if (isHttpsRequest) {
     res.setHeader(
@@ -64,6 +69,7 @@ app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
   res.setHeader("Cross-Origin-Resource-Policy", "same-site");
 
   res.setHeader(
@@ -110,10 +116,35 @@ app.get("/health", (req: express.Request, res: express.Response) => {
   res.json({ status: "up", timestamp: new Date().toISOString() });
 });
 
+app.get("/", (_req, res) => {
+  res.status(404).json({ error: "Not found" });
+});
+
 // --- Swagger API Docs ---
 let swaggerDocsHandler: express.RequestHandler | null = null;
+let swaggerJsonHandler: express.RequestHandler | null = null;
 
 if (isSwaggerDocsEnabled) {
+  app.get("/openapi.json", requireSwaggerBasicAuth, (req, res, next) => {
+    if (!swaggerJsonHandler) {
+      swaggerJsonHandler = (_jsonReq, jsonRes) => {
+        jsonRes.json(getSwaggerSpec());
+      };
+    }
+
+    return swaggerJsonHandler(req, res, next);
+  });
+
+  app.get("/swagger.json", requireSwaggerBasicAuth, (req, res, next) => {
+    if (!swaggerJsonHandler) {
+      swaggerJsonHandler = (_jsonReq, jsonRes) => {
+        jsonRes.json(getSwaggerSpec());
+      };
+    }
+
+    return swaggerJsonHandler(req, res, next);
+  });
+
   app.use(
     "/api-docs",
     requireSwaggerBasicAuth,
@@ -129,6 +160,10 @@ if (isSwaggerDocsEnabled) {
     },
   );
 } else {
+  app.use(["/openapi.json", "/swagger.json"], (_req, res) => {
+    res.status(404).json({ error: "Not found" });
+  });
+
   app.use("/api-docs", (_req, res) => {
     res.status(404).json({ error: "Not found" });
   });
