@@ -51,7 +51,8 @@ This keeps permission checks and state transitions in service logic while contro
 - Login activity audit trail with device fingerprint and IP capture
 - Admin access gating via rider-level `is_admin` flag and middleware
 - Production API security hardening: `X-Powered-By` removed, strict CORS origin allowlist, and browser security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy)
-- Swagger docs exposure is now production-safe by default (disabled unless explicitly enabled, with basic-auth guard for production access)
+- CORS origin rejections are fail-closed with generic `403` JSON responses (no stack traces or local path disclosure)
+- Swagger docs exposure is now fail-closed by default (enabled only when `ENABLE_SWAGGER_DOCS=true`, with production basic-auth guard)
 
 ### Rides and Routes
 

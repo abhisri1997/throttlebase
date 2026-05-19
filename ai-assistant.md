@@ -133,6 +133,7 @@ Code locations:
 - Production Swagger exposure is now safer by default: `/api-docs` disabled unless explicitly enabled, and production access requires configured basic-auth credentials.
 - Rewards authorization tightened: `POST /api/rewards/badges`, `POST /api/rewards/badges/:id/award`, and `POST /api/rewards/achievements` now enforce `requireAdmin` middleware.
 - Express 5 startup compatibility fix: global CORS preflight route changed from `app.options("*")` to regex matcher `app.options(/.*/)` to avoid `path-to-regexp` wildcard parsing crash (`Missing parameter name at index 1: *`).
+- API security follow-up hardening: Swagger docs are now fail-closed unless `ENABLE_SWAGGER_DOCS=true`; blocked CORS origins are rejected with generic `403` JSON (no stack/path leak); app middleware now emits HSTS on HTTPS requests even when upstream env mode is misconfigured.
 
 ## Assistant Operating Notes
 

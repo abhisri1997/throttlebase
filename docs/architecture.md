@@ -7,7 +7,7 @@ ThrottleBase is a full-stack mobile-first system with a TypeScript API backend, 
 ## High-Level Components
 
 - Client app (`client`): Expo React Native app with route-driven screens, server-state caching, and realtime session integration.
-- API server (`server`): Express 5 app exposing domain APIs and Swagger docs.
+- API server (`server`): Express 5 app exposing domain APIs and optional guarded Swagger docs.
 - Database (`PostgreSQL + PostGIS`): transactional domain storage + geospatial operations.
 - Realtime gateway (`Socket.IO /live` and `/rides`): authenticated rooms for live-session transport plus lighter ride-detail broadcasts.
 - Queue + worker: DB-backed background job leasing, retries, and domain processors.

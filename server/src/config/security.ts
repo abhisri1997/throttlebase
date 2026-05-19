@@ -40,12 +40,7 @@ export const isAllowedOrigin = (origin?: string): boolean => {
 
 export const corsOptions: CorsOptions = {
   origin(origin, callback) {
-    if (isAllowedOrigin(origin)) {
-      callback(null, true);
-      return;
-    }
-
-    callback(new Error("Not allowed by CORS"));
+    callback(null, isAllowedOrigin(origin));
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -55,19 +50,14 @@ export const corsOptions: CorsOptions = {
 
 export const socketCorsOptions = {
   origin(origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
-    if (isAllowedOrigin(origin)) {
-      callback(null, true);
-      return;
-    }
-
-    callback(new Error("Not allowed by CORS"));
+    callback(null, isAllowedOrigin(origin));
   },
   credentials: true,
 };
 
 const docsFlag = process.env.ENABLE_SWAGGER_DOCS;
 export const isSwaggerDocsEnabled =
-  docsFlag === "true" || (!isProduction && docsFlag !== "false");
+  docsFlag === "true";
 
 const swaggerUser = process.env.SWAGGER_USERNAME;
 const swaggerPass = process.env.SWAGGER_PASSWORD;

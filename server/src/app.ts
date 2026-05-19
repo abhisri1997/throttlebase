@@ -17,6 +17,7 @@ import cors from "cors";
 import helmet from "helmet";
 import {
   corsOptions,
+  isAllowedOrigin,
   isProduction,
   isSwaggerDocsEnabled,
   requireSwaggerBasicAuth,
@@ -46,6 +47,25 @@ app.use(
 );
 
 app.use((req, res, next) => {
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  const proto = Array.isArray(forwardedProto)
+    ? forwardedProto[0]
+    : forwardedProto?.split(",")[0]?.trim().toLowerCase();
+  const isHttpsRequest = req.secure || proto === "https";
+
+  if (isHttpsRequest) {
+    res.setHeader(
+      "Strict-Transport-Security",
+      "max-age=31536000; includeSubDomains; preload",
+    );
+  }
+
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-site");
+
   res.setHeader(
     "Permissions-Policy",
     "geolocation=(), camera=(), microphone=(), payment=(), usb=(), accelerometer=(), gyroscope=(), magnetometer=()",
@@ -61,6 +81,18 @@ app.use((req, res, next) => {
       "Content-Security-Policy",
       "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
     );
+  }
+
+  next();
+});
+
+app.use((req, res, next) => {
+  const originHeader = req.headers.origin;
+  const origin = Array.isArray(originHeader) ? originHeader[0] : originHeader;
+
+  if (origin && !isAllowedOrigin(origin)) {
+    res.status(403).json({ error: "Origin not allowed" });
+    return;
   }
 
   next();
@@ -96,6 +128,10 @@ if (isSwaggerDocsEnabled) {
       return swaggerDocsHandler(req, res, next);
     },
   );
+} else {
+  app.use("/api-docs", (_req, res) => {
+    res.status(404).json({ error: "Not found" });
+  });
 }
 
 // --- Auth routes (public) ---
@@ -128,6 +164,18 @@ app.get("/db-test", async (req, res) => {
       error: error.message,
     });
   }
+});
+
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  if (err && typeof err === "object" && "message" in err) {
+    const message = String((err as { message: unknown }).message);
+    if (message.toLowerCase().includes("cors")) {
+      res.status(403).json({ error: "Origin not allowed" });
+      return;
+    }
+  }
+
+  res.status(500).json({ error: "Internal server error" });
 });
 
 const startServer = async () => {

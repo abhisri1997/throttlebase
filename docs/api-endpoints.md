@@ -1,8 +1,8 @@
 # API Endpoints - ThrottleBase
 
 This inventory groups active API surfaces by domain for quick implementation and QA navigation.
-For request/response schema details, use Swagger at `/api-docs`.
-In production, Swagger docs are disabled by default and should only be enabled intentionally with access control.
+For request/response schema details, use Swagger at `/api-docs` when intentionally enabled.
+Swagger docs are disabled by default in every environment and should only be enabled intentionally (`ENABLE_SWAGGER_DOCS=true`), with access control in production.
 
 ## Auth
 

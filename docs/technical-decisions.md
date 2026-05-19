@@ -12,7 +12,7 @@ This document captures key implementation decisions with rationale.
 
 - Use Express 5 for API routing and middleware composition.
 - Keep feature boundaries consistent with schema -> controller -> service -> route layering.
-- Keep Swagger/OpenAPI docs exposed through `/api-docs` and aligned with runtime contracts.
+- Keep Swagger/OpenAPI docs aligned with runtime contracts, but disabled by default and enabled only intentionally (`ENABLE_SWAGGER_DOCS=true`) with access control in production.
 
 ## Data and Storage
 

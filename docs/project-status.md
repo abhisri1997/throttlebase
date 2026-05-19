@@ -34,6 +34,7 @@
 - API security baseline hardened: Express fingerprint header removed, strict CORS allowlist added for HTTP + Socket.IO, and browser-facing security headers are now enforced.
 - Production API docs exposure hardened: `/api-docs` is disabled by default in production and can be enabled intentionally with basic-auth protection.
 - Rewards mutation authorization tightened: badge creation, badge awarding, and achievement creation are now admin-only at route middleware level.
+- Security hardening follow-up completed: Swagger/docs endpoints now fail closed by default unless explicitly enabled via `ENABLE_SWAGGER_DOCS=true`; blocked origins return generic `403` JSON (no stack/path leak), and HTTPS requests now always receive HSTS from app middleware.
 
 ### In Progress
 
