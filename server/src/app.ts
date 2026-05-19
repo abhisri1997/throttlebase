@@ -68,7 +68,7 @@ app.use((req, res, next) => {
 
 // Securely unblock localhost ports
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 
 // Parse JSON request bodies
 app.use(express.json());

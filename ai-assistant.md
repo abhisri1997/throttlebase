@@ -132,6 +132,7 @@ Code locations:
 - API security hardening shipped server-side: Express `X-Powered-By` disabled, strict CORS origin allowlist for HTTP + Socket.IO, and security headers enforced (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy).
 - Production Swagger exposure is now safer by default: `/api-docs` disabled unless explicitly enabled, and production access requires configured basic-auth credentials.
 - Rewards authorization tightened: `POST /api/rewards/badges`, `POST /api/rewards/badges/:id/award`, and `POST /api/rewards/achievements` now enforce `requireAdmin` middleware.
+- Express 5 startup compatibility fix: global CORS preflight route changed from `app.options("*")` to regex matcher `app.options(/.*/)` to avoid `path-to-regexp` wildcard parsing crash (`Missing parameter name at index 1: *`).
 
 ## Assistant Operating Notes
 
