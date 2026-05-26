@@ -115,9 +115,9 @@ export default function EditProfileModal() {
 
   const seedRider = profileObj
     ? {
-        ...profileObj,
-        home_location_name: currentRider?.home_location_name,
-      }
+      ...profileObj,
+      home_location_name: currentRider?.home_location_name,
+    }
     : currentRider;
 
   const [displayName, setDisplayName] = useState("");
@@ -236,7 +236,7 @@ export default function EditProfileModal() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView className='flex-1 px-4 pt-6'>
+      <ScrollView className='flex-1 px-4 pt-6' keyboardShouldPersistTaps='always'>
         {/* Core Identity */}
         <Text
           className='text-sm font-bold uppercase mb-2'

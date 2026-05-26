@@ -184,9 +184,15 @@ export default function LocationPicker({
                 components: 'country:in',
               }}
               debounce={300}
+              listViewDisplayed='auto'
               enablePoweredByContainer={false}
+              keyboardShouldPersistTaps='always'
               styles={{
-                container: { flex: 0 },
+                container: {
+                  flex: 0,
+                  zIndex: 1000,
+                  elevation: 10,
+                },
                 textInputContainer: {
                   backgroundColor: colors.inputBg,
                   borderRadius: 12,
@@ -201,11 +207,16 @@ export default function LocationPicker({
                   height: 48,
                 },
                 listView: {
+                  position: 'absolute',
+                  top: 56,
+                  left: 0,
+                  right: 0,
                   backgroundColor: colors.surface,
                   borderRadius: 12,
-                  marginTop: 4,
                   borderWidth: 1,
                   borderColor: colors.border,
+                  zIndex: 1000,
+                  elevation: 10,
                 },
                 row: {
                   backgroundColor: 'transparent',
@@ -224,6 +235,9 @@ export default function LocationPicker({
               }}
               textInputProps={{
                 placeholderTextColor: colors.textMuted,
+                underlineColorAndroid: 'transparent',
+                autoCapitalize: 'none',
+                autoCorrect: false,
               }}
             />
 

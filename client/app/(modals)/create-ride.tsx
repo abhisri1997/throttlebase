@@ -117,17 +117,17 @@ export default function CreateRideModal() {
 
   useEffect(() => {
     const points: { latitude: number; longitude: number }[] = [];
-    
+
     if (!autoStart && startCoords) {
       points.push({ latitude: startCoords[1], longitude: startCoords[0] });
     }
-    
+
     stops.forEach((s) => {
       if (s.location_coords) {
         points.push({ latitude: s.location_coords[1], longitude: s.location_coords[0] });
       }
     });
-    
+
     if (endCoords) {
       points.push({ latitude: endCoords[1], longitude: endCoords[0] });
     }
@@ -152,7 +152,7 @@ export default function CreateRideModal() {
           waypoints,
           apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
         });
-        
+
         if (!cancelled && route) {
           setDurationSecs(route.totalDurationSeconds);
         }
@@ -205,10 +205,10 @@ export default function CreateRideModal() {
     stops:
       stops.length > 0
         ? stops.map((s) => ({
-            type: s.type,
-            location_coords: s.location_coords,
-            name: s.name,
-          }))
+          type: s.type,
+          location_coords: s.location_coords,
+          name: s.name,
+        }))
         : undefined,
   });
 
@@ -319,7 +319,7 @@ export default function CreateRideModal() {
 
       <ScrollView
         className='flex-1 px-4 pt-6'
-        keyboardShouldPersistTaps='handled'
+        keyboardShouldPersistTaps='always'
       >
         {/* ──── RIDE DETAILS ──── */}
         <Text
