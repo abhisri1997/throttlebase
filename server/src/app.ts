@@ -38,10 +38,10 @@ app.use(
     referrerPolicy: { policy: "no-referrer" },
     hsts: isProduction
       ? {
-          maxAge: 31536000,
-          includeSubDomains: true,
-          preload: true,
-        }
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true,
+      }
       : false,
   }),
 );
@@ -220,8 +220,9 @@ const startServer = async () => {
   const httpServer = createServer(app);
   createLiveGateway(httpServer);
 
-  httpServer.listen(5001, () => {
-    console.log("🚀 Server started on http://localhost:5001");
+  const port = Number(process.env.PORT || 5001);
+  httpServer.listen(port, () => {
+    console.log(`🚀 Server started on http://localhost:${port}`);
   });
 };
 

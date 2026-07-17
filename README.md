@@ -51,7 +51,24 @@ cd ../client && npm install
 
 3. Run migrations using your existing migration workflow.
 4. Start backend and worker:
+```bash
+cd server
+npm run dev
+# separate terminal
+npm run worker
+```
 
+## Cloud hosting with Railway + Neon
+
+To host the backend in the cloud, use Neon for PostgreSQL and Railway for the Node.js service.
+
+1. Create a Neon PostgreSQL database, then enable the PostGIS extension.
+2. Run the SQL migration scripts from `server/src/db/migrations` against the Neon database.
+3. In Railway, create a new project or service for the backend and set the `start` command to `npm run start`.
+4. Add the Neon `DATABASE_URL` to Railway environment variables along with `JWT_SECRET`, `CORS_ALLOWED_ORIGINS`, `ENABLE_SWAGGER_DOCS=false`, and any API keys.
+5. Add `api.throttlebase.in` as a custom domain in Railway, then point your Cloudflare DNS `CNAME` record to the Railway-hosted app domain.
+
+The backend already reads `PORT` from `process.env.PORT`, so Railway can bind to the platform-assigned port automatically.
 ```bash
 cd server
 npm run dev
