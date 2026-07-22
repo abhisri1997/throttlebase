@@ -4,14 +4,17 @@
 
 Phase 1 delivers an immersive full-screen navigation route for active rides in `client/app/ride/[id]/navigation.tsx`. The screen focuses on current-rider route following with a clean riding UI: dark full-screen map, route polyline, current-location camera follow, top instruction card, and a bottom sheet for crew presence and host controls.
 
-Phase 1 now includes lightweight multi-rider awareness by rendering peer live-location markers and allowing the rider to tap a crew member in the bottom sheet to focus that rider on the map. The goal is still to keep richer coordination overlays and captain-specific tools for later phases.
+Phase 1 now includes lightweight multi-rider awareness by rendering peer live-location markers and allowing the rider to tap a crew member in the bottom sheet to focus that rider on the map. It now also supports live reroute recovery when a rider deviates from the route, using the rider’s current location as the moving origin and preferring the fastest available driving path over the shortest distance.
 
 ## What Phase 1 Includes
 
 - Full-screen navigation route mounted at `/ride/:id/navigation`
 - Google Directions-backed route hydration with fallback polyline generation
+- Traffic-aware route selection that prefers the fastest ETA when alternatives are available
 - Forward-offset camera follow for the current rider
 - Turn-by-turn instruction card with ETA and remaining distance
+- Off-route detection with automatic reroute after a short grace window
+- Detour fallback to the destination when the remaining waypoint chain is no longer routable
 - Live-session integration for start/end flow, room join, heartbeat, and location emit
 - Ride-detail realtime subscription for join and stop-request updates before entering navigation
 - Peer rider markers sourced from live-session location broadcasts
@@ -43,7 +46,6 @@ Phase 1 now includes lightweight multi-rider awareness by rendering peer live-lo
 ## Out of Scope for Phase 1
 
 - Captain/co-captain specific live coordination overlays
-- Deviation detection and reroute triggers
 - Incident visualization on the navigation map
 - Camera modes beyond current-rider follow plus temporary rider-focus lookup
 
@@ -51,26 +53,26 @@ Phase 1 now includes lightweight multi-rider awareness by rendering peer live-lo
 
 This section maps the current codebase against the existing Phase 2 contract already captured in `ai-assistant.md` under `Phase 2 — Socket Gateway and Presence`.
 
-| Phase 2 requirement | Current state | Evidence | Remaining work |
-| --- | --- | --- | --- |
-| Add realtime gateway modules and server bootstrap | Implemented | `server/src/realtime/gateway.ts`, `server/src/realtime/auth.ts`, `server/src/realtime/session-room.ts`, `server/src/app.ts` | None for baseline bootstrap |
-| Authenticated `/live` namespace | Implemented | `createLiveGateway()` + `authenticateLiveSocket()` | None for baseline auth |
-| Room key `ride:<rideId>:session:<sessionId>` | Implemented | `server/src/realtime/session-room.ts` | None |
-| `session:join` and `session:leave` events | Implemented | Server gateway handlers + `client/src/store/liveSessionStore.ts` | None for baseline transport |
-| `presence:heartbeat` event | Implemented | Gateway heartbeat handler + client heartbeat timer | None |
-| `location:update` event | Implemented | Gateway schema validation + `upsertLocation()` in store | None |
-| `incident:create` event | Implemented | Gateway incident handler + client socket service/store | None |
-| `session:state` broadcast | Implemented | `socket.emit("session:state", ...)` on join | None |
-| `presence:update` broadcast | Implemented | Gateway emits on join, heartbeat, leave, disconnect | None |
-| `location:broadcast` broadcast | Implemented | Gateway emits updated location payloads | None |
-| `incident:created` broadcast | Implemented | Gateway emits created incident to room | None |
-| `session:ended` broadcast | Partially implemented | REST controller emits `session:ended` to room, client store handles it | Payload shape differs from the earlier Phase 2 note (`endedAt`, `endedBy` are not sent today) |
-| Broadcast cadence at 2-5 seconds | Implemented for current client | Navigation and ride detail location tracking use a 4-second interval/watch cadence | Future tuning may be needed for battery and network tiers |
-| Persist sampled points every N updates | Implemented | `nextShouldPersistSample()` persists every third update | None for baseline sampling |
-| Drop stale or out-of-order location updates | Not implemented | No freshness guard in `updateLivePresenceLocation()` | Add server-side timestamp thresholding and ordering checks |
-| Reconnect works with token refresh | Partially implemented | Client reconnects and auto-rejoins ride context | Explicit token refresh / socket auth rebind flow is still missing |
-| Presence transitions online/offline reliably | Implemented with hardening | Heartbeat, leave, disconnect, and presence sweep support are present | Validate under mobile background/network churn |
-| No unauthorized room joins | Implemented | JWT socket auth + participant check via `getLiveSession()` | None for baseline authorization |
+| Phase 2 requirement                               | Current state                  | Evidence                                                                                                                    | Remaining work                                                                                |
+| ------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Add realtime gateway modules and server bootstrap | Implemented                    | `server/src/realtime/gateway.ts`, `server/src/realtime/auth.ts`, `server/src/realtime/session-room.ts`, `server/src/app.ts` | None for baseline bootstrap                                                                   |
+| Authenticated `/live` namespace                   | Implemented                    | `createLiveGateway()` + `authenticateLiveSocket()`                                                                          | None for baseline auth                                                                        |
+| Room key `ride:<rideId>:session:<sessionId>`      | Implemented                    | `server/src/realtime/session-room.ts`                                                                                       | None                                                                                          |
+| `session:join` and `session:leave` events         | Implemented                    | Server gateway handlers + `client/src/store/liveSessionStore.ts`                                                            | None for baseline transport                                                                   |
+| `presence:heartbeat` event                        | Implemented                    | Gateway heartbeat handler + client heartbeat timer                                                                          | None                                                                                          |
+| `location:update` event                           | Implemented                    | Gateway schema validation + `upsertLocation()` in store                                                                     | None                                                                                          |
+| `incident:create` event                           | Implemented                    | Gateway incident handler + client socket service/store                                                                      | None                                                                                          |
+| `session:state` broadcast                         | Implemented                    | `socket.emit("session:state", ...)` on join                                                                                 | None                                                                                          |
+| `presence:update` broadcast                       | Implemented                    | Gateway emits on join, heartbeat, leave, disconnect                                                                         | None                                                                                          |
+| `location:broadcast` broadcast                    | Implemented                    | Gateway emits updated location payloads                                                                                     | None                                                                                          |
+| `incident:created` broadcast                      | Implemented                    | Gateway emits created incident to room                                                                                      | None                                                                                          |
+| `session:ended` broadcast                         | Partially implemented          | REST controller emits `session:ended` to room, client store handles it                                                      | Payload shape differs from the earlier Phase 2 note (`endedAt`, `endedBy` are not sent today) |
+| Broadcast cadence at 2-5 seconds                  | Implemented for current client | Navigation and ride detail location tracking use a 4-second interval/watch cadence                                          | Future tuning may be needed for battery and network tiers                                     |
+| Persist sampled points every N updates            | Implemented                    | `nextShouldPersistSample()` persists every third update                                                                     | None for baseline sampling                                                                    |
+| Drop stale or out-of-order location updates       | Not implemented                | No freshness guard in `updateLivePresenceLocation()`                                                                        | Add server-side timestamp thresholding and ordering checks                                    |
+| Reconnect works with token refresh                | Partially implemented          | Client reconnects and auto-rejoins ride context                                                                             | Explicit token refresh / socket auth rebind flow is still missing                             |
+| Presence transitions online/offline reliably      | Implemented with hardening     | Heartbeat, leave, disconnect, and presence sweep support are present                                                        | Validate under mobile background/network churn                                                |
+| No unauthorized room joins                        | Implemented                    | JWT socket auth + participant check via `getLiveSession()`                                                                  | None for baseline authorization                                                               |
 
 ## What Is Already Scaffolded for the Next Navigation Step
 
@@ -91,6 +93,5 @@ This section maps the current codebase against the existing Phase 2 contract alr
 ## Recommended Phase 2 Start Point
 
 1. Add stale-location rejection on the server.
-2. Decide whether rider focus should auto-expire or show richer rider detail when a crew member is selected.
-3. Normalize realtime payload contracts where the implementation has drifted from the earlier note.
-4. Add mobile reconnection testing around token refresh and background resume.
+2. Normalize realtime payload contracts where the implementation has drifted from the earlier note.
+3. Add mobile reconnection testing around token refresh and background resume.

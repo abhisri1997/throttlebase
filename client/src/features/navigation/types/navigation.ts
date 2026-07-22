@@ -18,6 +18,9 @@ export type NavigationRoute = {
   steps: NavigationStep[];
   totalDistanceMeters: number;
   totalDurationSeconds: number;
+  estimatedTrafficDurationSeconds?: number;
+  selectedAlternativeIndex?: number;
+  alternativeCount?: number;
 };
 
 export type RideParticipantView = {

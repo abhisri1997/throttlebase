@@ -22,6 +22,7 @@
 - Ride detail and full-screen navigation maps now render road-following routes in canonical order: current location -> start -> approved stops -> destination, with automatic origin fallback to start when device location is unavailable.
 - Navigation reroute cadence is now throttled to avoid rapid route refetch loops while riding, while preserving movement- and time-based refresh behavior.
 - Navigation polyline rendering is now optimized with adaptive simplification and point-capping to reduce delayed route draw on long rides.
+- Full-screen navigation now auto-reroutes from the rider’s live position when off-route, prefers the fastest ETA among Google Directions alternatives, and falls back to a destination-only detour when the waypoint chain cannot be traversed.
 - Android ride maps are hardened against flicker/crash regressions: ride-detail preview uses lightweight cached rendering, memoized marker data, and reduced rerender pressure, while full-screen navigation keeps stable peer-marker identity with `tracksViewChanges` disabled.
 - Ride-detail Android flicker mitigation now also includes stronger header-map memoization (stable callback + deep prop equality) and paused preview-location sampling after initial origin lock, reducing repeated map repaints on realtime screen updates.
 - Android full-screen navigation now further reduces flicker by throttling camera follow updates with movement/heading thresholds and preferring native pin markers over custom marker views during live location streaming.
