@@ -8,8 +8,13 @@ import MapView, { Marker, PROVIDER_GOOGLE } from './MapWrapper';
 import * as Location from 'expo-location';
 import { X, MapPin, Navigation, Check } from 'lucide-react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { useReverseGeocode } from '../hooks/useReverseGeocode';
+import { formatCoords } from '../utils/reverseGeocode';
 
 const API_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || '';
+
+/** Shown while a lookup is in flight; never a valid saved location name. */
+const PENDING_ADDRESS_LABEL = 'Locating address...';
 
 interface LocationResult {
   coords: [number, number]; // [lng, lat]
@@ -45,21 +50,30 @@ export default function LocationPicker({
   const isControlled = externalVisible !== undefined;
   const visible = isControlled ? externalVisible : internalVisible;
 
-  const handleOpen = () => {
-    if (!isControlled) setInternalVisible(true);
-  };
-
-  const handleClose = () => {
-    if (!isControlled) setInternalVisible(false);
-    if (onClose) onClose();
-  };
-
   const [selectedCoords, setSelectedCoords] = useState<[number, number] | null>(
     initialCoords || null
   );
   const [selectedName, setSelectedName] = useState(initialName || '');
   const [loadingLocation, setLoadingLocation] = useState(false);
   const mapRef = useRef<any>(null);
+
+  const {
+    resolve: resolveAddress,
+    resolveDebounced: resolveAddressDebounced,
+    cancel: cancelAddressLookup,
+  } = useReverseGeocode({ onAddress: setSelectedName });
+
+  const handleOpen = () => {
+    if (!isControlled) setInternalVisible(true);
+  };
+
+  const handleClose = () => {
+    // Drop any lookup still pending so it cannot bill a call for a picker
+    // the user has already dismissed, or land on the next time it opens.
+    cancelAddressLookup();
+    if (!isControlled) setInternalVisible(false);
+    if (onClose) onClose();
+  };
 
   const handlePlaceSelect = (data: any, details: any) => {
     if (details?.geometry?.location) {
@@ -84,15 +98,8 @@ export default function LocationPicker({
       const location = await Location.getCurrentPositionAsync({});
       const { latitude, longitude } = location.coords;
       setSelectedCoords([longitude, latitude]);
-
-      // Reverse geocode to get a name
-      const [geocode] = await Location.reverseGeocodeAsync({ latitude, longitude });
-      if (geocode) {
-        const parts = [geocode.name, geocode.city, geocode.region].filter(Boolean);
-        setSelectedName(parts.join(', ') || 'My Location');
-      } else {
-        setSelectedName('My Location');
-      }
+      setSelectedName(PENDING_ADDRESS_LABEL);
+      resolveAddress(latitude, longitude);
 
       mapRef.current?.animateToRegion({
         latitude, longitude,
@@ -108,12 +115,18 @@ export default function LocationPicker({
   const handleMarkerDrag = (e: any) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
     setSelectedCoords([longitude, latitude]);
-    setSelectedName('Custom pin location');
+    setSelectedName(PENDING_ADDRESS_LABEL);
+    resolveAddressDebounced(latitude, longitude);
   };
 
   const handleConfirm = () => {
     if (selectedCoords) {
-      onSelect({ coords: selectedCoords, name: selectedName });
+      const [lng, lat] = selectedCoords;
+      const hasResolvedName = selectedName && selectedName !== PENDING_ADDRESS_LABEL;
+      onSelect({
+        coords: selectedCoords,
+        name: hasResolvedName ? selectedName : formatCoords(lat, lng),
+      });
     }
     handleClose();
   };
