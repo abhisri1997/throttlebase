@@ -497,6 +497,10 @@ const buildDirectionsRoute = (
   return {
     source: "directions",
     polyline: decoded,
+    // The overview polyline is already simplified by Google, which makes it the
+    // right corridor for search-along-route — the concatenated per-step
+    // polyline used for `decoded` is far denser than that needs.
+    encodedPolyline: route.overview_polyline?.points,
     steps,
     totalDistanceMeters,
     totalDurationSeconds,

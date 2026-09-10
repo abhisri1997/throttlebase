@@ -1,5 +1,23 @@
 import { z } from 'zod';
 
+/**
+ * PostGIS point order: [longitude, latitude]. Bounds are enforced here because
+ * these coordinates feed route geometry — an out-of-range value silently
+ * produces nonsense distances rather than failing loudly.
+ */
+const LngLatSchema = z.tuple([
+  z.number().min(-180).max(180),
+  z.number().min(-90).max(90),
+]);
+
+/** Shared shape for a stop the captain planned or a rider requested. */
+const StopFieldsSchema = {
+  location_coords: LngLatSchema,
+  name: z.string().max(255).optional(),
+  address: z.string().max(512).optional(),
+  google_place_id: z.string().max(255).optional(),
+};
+
 export const CreateRideSchema = z.object({
   title: z.string().min(3, 'Title is too short').max(255),
   description: z.string().optional(),
@@ -9,9 +27,9 @@ export const CreateRideSchema = z.object({
   estimated_duration_min: z.number().int().positive().optional(),
   max_capacity: z.number().int().positive().optional(),
   // For PostGIS points (longitude, latitude)
-  start_point_coords: z.tuple([z.number(), z.number()]).optional(),
+  start_point_coords: LngLatSchema.optional(),
   start_point_name: z.string().max(255).optional(),
-  end_point_coords: z.tuple([z.number(), z.number()]).optional(),
+  end_point_coords: LngLatSchema.optional(),
   end_point_name: z.string().max(255).optional(),
   start_point_auto: z.boolean().default(false),
   // Structured requirements
@@ -23,8 +41,7 @@ export const CreateRideSchema = z.object({
   // Pre-planned intermediate stops
   stops: z.array(z.object({
     type: z.enum(['fuel', 'rest', 'photo']),
-    location_coords: z.tuple([z.number(), z.number()]),
-    name: z.string().max(255).optional(),
+    ...StopFieldsSchema,
   })).optional(),
 });
 
@@ -38,8 +55,7 @@ export const PromoteCoCaptainSchema = z.object({
 
 export const RequestStopSchema = z.object({
   type: z.enum(['fuel', 'rest', 'photo', 'unplanned']),
-  location_coords: z.tuple([z.number(), z.number()]),
-  name: z.string().max(255).optional(),
+  ...StopFieldsSchema,
 });
 
 export const HandleStopSchema = z.object({

@@ -11,13 +11,15 @@ import {
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { X, Check, Plus, Trash2, MapPin } from "lucide-react-native";
+import { X, Check, Plus, MapPin } from "lucide-react-native";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { apiClient } from "../../src/api/client";
 import { getApiErrorMessage } from "../../src/utils/apiError";
 import { useTheme } from "../../src/theme/ThemeContext";
 import LocationPicker from "../../src/components/LocationPicker";
+import { PlannedStops } from "../../src/features/rides/components/PlannedStops";
+import type { PlannedStop } from "../../src/features/rides/types/stops";
 import { fetchNavigationRoute } from "../../src/features/navigation/services/navigationRouteService";
 
 const createRide = async (payload: any) => {
@@ -30,12 +32,6 @@ const updateRide = async (id: string, payload: any) => {
   return data;
 };
 
-type StopType = "fuel" | "rest" | "photo";
-interface PlannedStop {
-  type: StopType;
-  location_coords: [number, number];
-  name: string;
-}
 
 const GEAR_OPTIONS = [
   "helmet",
@@ -110,10 +106,19 @@ export default function CreateRideModal() {
       type: s.type,
       location_coords: s.location.coordinates,
       name: s.name || "",
+      address: s.address || undefined,
+      google_place_id: s.google_place_id || undefined,
     })) || [],
   );
-  const [addingStopType, setAddingStopType] = useState<StopType>("fuel");
-  const [showStopPicker, setShowStopPicker] = useState(false);
+
+  /**
+   * Encoded route polyline from the duration lookup below. The route is already
+   * being fetched for the ETA, so the corridor for stop suggestions costs
+   * nothing extra — it was previously decoded and discarded.
+   */
+  const [encodedRoutePolyline, setEncodedRoutePolyline] = useState<
+    string | undefined
+  >(undefined);
 
   useEffect(() => {
     const points: { latitude: number; longitude: number }[] = [];
@@ -155,6 +160,7 @@ export default function CreateRideModal() {
 
         if (!cancelled && route) {
           setDurationSecs(route.totalDurationSeconds);
+          setEncodedRoutePolyline(route.encodedPolyline);
         }
       } catch (err) {
         console.error("Failed to calculate duration", err);
@@ -208,6 +214,8 @@ export default function CreateRideModal() {
           type: s.type,
           location_coords: s.location_coords,
           name: s.name,
+          address: s.address,
+          google_place_id: s.google_place_id,
         }))
         : undefined,
   });
@@ -267,16 +275,6 @@ export default function CreateRideModal() {
     setSelectedGear((prev) =>
       prev.includes(gear) ? prev.filter((g) => g !== gear) : [...prev, gear],
     );
-  };
-
-  const removeStop = (index: number) => {
-    setStops((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const stopIcon = (type: StopType) => {
-    if (type === "fuel") return "⛽";
-    if (type === "rest") return "☕";
-    return "📸";
   };
 
   const formatDate = (d: Date) =>
@@ -517,105 +515,11 @@ export default function CreateRideModal() {
         />
 
         {/* Intermediate Stops */}
-        <View
-          className='mt-2 mb-6 p-4 rounded-2xl'
-          style={{ borderWidth: 1, borderColor: colors.border }}
-        >
-          <View className='flex-row items-center justify-between mb-3'>
-            <Text className='font-bold' style={{ color: colors.text }}>
-              Planned Stops
-            </Text>
-            <View className='flex-row items-center'>
-              {(["fuel", "rest", "photo"] as StopType[]).map((type) => (
-                <TouchableOpacity
-                  key={type}
-                  onPress={() => setAddingStopType(type)}
-                  className='py-1 px-2 rounded-full mr-1'
-                  style={{
-                    backgroundColor:
-                      addingStopType === type
-                        ? colors.primary + "30"
-                        : "transparent",
-                    borderWidth: 1,
-                    borderColor:
-                      addingStopType === type ? colors.primary : colors.border,
-                  }}
-                >
-                  <Text className='text-xs' style={{ color: colors.text }}>
-                    {stopIcon(type)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Add Stop via LocationPicker */}
-          <LocationPicker
-            label={`Add ${addingStopType} stop`}
-            placeholder={`Search for a ${addingStopType} stop...`}
-            color='#f59e0b'
-            onSelect={(result) => {
-              setStops([
-                ...stops,
-                {
-                  type: addingStopType,
-                  location_coords: result.coords,
-                  name: result.name,
-                },
-              ]);
-            }}
-          />
-
-          {/* Stop list */}
-          {stops.length > 0 && (
-            <View className='mt-2'>
-              {stops.map((stop, i) => (
-                <View
-                  key={i}
-                  className='flex-row items-center justify-between py-3 px-3 rounded-xl mb-2'
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                  }}
-                >
-                  <View className='flex-row items-center flex-1 mr-2'>
-                    <Text className='text-base mr-2'>
-                      {stopIcon(stop.type)}
-                    </Text>
-                    <View className='flex-1'>
-                      <Text
-                        className='font-bold text-sm capitalize'
-                        style={{ color: colors.text }}
-                      >
-                        {stop.type} Stop
-                      </Text>
-                      <Text
-                        className='text-xs mt-0.5'
-                        style={{ color: colors.textMuted }}
-                        numberOfLines={1}
-                      >
-                        {stop.name}
-                      </Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity onPress={() => removeStop(i)}>
-                    <Trash2 color={colors.textMuted} size={16} />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
-          {stops.length === 0 && (
-            <Text
-              className='text-xs text-center py-2'
-              style={{ color: colors.textMuted }}
-            >
-              No stops added yet. Use the search above to add fuel, rest, or
-              photo stops.
-            </Text>
-          )}
-        </View>
+        <PlannedStops
+          stops={stops}
+          onChange={setStops}
+          encodedPolyline={encodedRoutePolyline}
+        />
 
         {/* ──── REQUIREMENTS ──── */}
         <Text

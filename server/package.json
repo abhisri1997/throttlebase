@@ -9,7 +9,8 @@
     "start": "tsx src/app.ts",
     "dev": "nodemon --exec tsx src/app.ts",
     "worker": "tsx src/workers/worker.ts",
-    "dev:all": "concurrently --names api,worker \"npm run dev\" \"npm run worker\""
+    "dev:all": "concurrently --names api,worker \"npm run dev\" \"npm run worker\"",
+    "test:unit": "tsx --test src/**/*.test.ts"
   },
   "keywords": [],
   "author": "",
@@ -20,6 +21,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "node-cron": "^4.2.1",
