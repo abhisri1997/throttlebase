@@ -15,6 +15,14 @@ const dbHost = process.env.DB_HOST || process.env.PGHOST || 'localhost';
 const poolConfig = process.env.DATABASE_URL
   ? {
       connectionString: process.env.DATABASE_URL,
+      // Supabase (and most managed Postgres) requires TLS, but node-postgres's
+      // default strict verification can't complete the chain in many hosting
+      // environments (missing intermediate CAs in the runtime image), which
+      // surfaces as "self-signed certificate in certificate chain" even
+      // though the connection itself is genuinely Supabase's. The connection
+      // is still encrypted; this only skips validating the certificate chain,
+      // which is the standard node-postgres + Supabase configuration.
+      ssl: { rejectUnauthorized: false },
     }
   : {
       host: dbHost,
