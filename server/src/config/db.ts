@@ -12,16 +12,24 @@ const dbPassword = process.env.DB_PASSWORD || process.env.PGPASSWORD || '';
 const dbName = process.env.DB_NAME || process.env.PGDATABASE || 'throttle_base';
 const dbHost = process.env.DB_HOST || process.env.PGHOST || 'localhost';
 
-const poolConfig = process.env.DATABASE_URL
+// pg-connection-string treats an embedded `sslmode=prefer|require|verify-ca`
+// query param as an alias for `verify-full` and builds its OWN strict ssl
+// config from that — which wins over the `ssl: {...}` object below and
+// forces full certificate-chain verification. Supabase's chain fails that
+// verification in most container runtimes (missing intermediate CA in the
+// image), surfacing as "self-signed certificate in certificate chain" even
+// though the connection itself is genuinely Supabase's. Stripping sslmode
+// from the connection string here means only OUR explicit `ssl` option
+// below applies — the connection is still encrypted; this only skips
+// validating the certificate chain.
+const rawConnectionString = process.env.DATABASE_URL;
+const connectionString = rawConnectionString
+  ? rawConnectionString.replace(/([?&])sslmode=[^&]*(&)?/i, (_match, lead, trailing) => (trailing ? lead : lead === '?' ? '?' : '')).replace(/[?&]$/, '')
+  : undefined;
+
+const poolConfig = connectionString
   ? {
-      connectionString: process.env.DATABASE_URL,
-      // Supabase (and most managed Postgres) requires TLS, but node-postgres's
-      // default strict verification can't complete the chain in many hosting
-      // environments (missing intermediate CAs in the runtime image), which
-      // surfaces as "self-signed certificate in certificate chain" even
-      // though the connection itself is genuinely Supabase's. The connection
-      // is still encrypted; this only skips validating the certificate chain,
-      // which is the standard node-postgres + Supabase configuration.
+      connectionString,
       ssl: { rejectUnauthorized: false },
     }
   : {
@@ -38,7 +46,7 @@ const pool = new Pool({
   // Standard production settings (good for learning)
   max: 20, // Max number of clients in the pool
   idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  connectionTimeoutMillis: 2000, // Return an error if a connection takes > 2 seconds
+  connectionTimeoutMillis: 5000, // Return an error if a connection takes > 5 seconds
 });
 
 // Helper function to query the database using the pool
