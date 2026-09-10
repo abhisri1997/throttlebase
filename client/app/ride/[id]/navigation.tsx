@@ -35,6 +35,11 @@ import { NavigationInstructionOverlay } from "../../../src/features/navigation/c
 import {
   buildCanonicalRideRouteInput,
   fetchNavigationRoute,
+  distanceToPolylineMeters,
+  isRouteDeviation,
+  DEFAULT_ROUTE_DEVIATION_GRACE_MS,
+  DEFAULT_ROUTE_DEVIATION_THRESHOLD_METERS,
+  DEFAULT_ROUTE_REROUTE_COOLDOWN_MS,
   haversineMeters,
 } from "../../../src/features/navigation/services/navigationRouteService";
 import type {
@@ -198,6 +203,7 @@ export default function RideNavigationScreen() {
   const [currentHeading, setCurrentHeading] = useState<number>(0);
   const [navigationRoute, setNavigationRoute] = useState<NavigationRoute | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
+  const [routeStatusLabel, setRouteStatusLabel] = useState<string | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [focusedParticipantId, setFocusedParticipantId] = useState<string | null>(null);
   const [topControlsHeight, setTopControlsHeight] = useState(0);
@@ -211,6 +217,9 @@ export default function RideNavigationScreen() {
   const lastRouteRefreshAtRef = useRef(0);
   const lastRouteOriginRef = useRef<LatLng | null>(null);
   const lastRouteUsedDeviceOriginRef = useRef(false);
+  const offRouteSinceRef = useRef<number | null>(null);
+  const rerouteInFlightRef = useRef(false);
+  const lastRerouteAtRef = useRef(0);
   const currentLocationRef = useRef<LatLng | null>(currentLocation);
   currentLocationRef.current = currentLocation;
   const fetchRouteNowRef = useRef<(() => Promise<void>) | null>(null);
@@ -402,6 +411,7 @@ export default function RideNavigationScreen() {
           destination: cr.destination,
           waypoints: cr.waypoints,
           apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
+          preferFastest: true,
         });
         if (!cancelled) {
           if (__DEV__) {
@@ -558,19 +568,19 @@ export default function RideNavigationScreen() {
           lat: position.coords.latitude,
           speed_kmh:
             typeof position.coords.speed === "number" &&
-            Number.isFinite(position.coords.speed) &&
-            position.coords.speed >= 0
+              Number.isFinite(position.coords.speed) &&
+              position.coords.speed >= 0
               ? position.coords.speed * 3.6
               : undefined,
           heading_deg:
             typeof position.coords.heading === "number" &&
-            Number.isFinite(position.coords.heading) &&
-            position.coords.heading >= 0
+              Number.isFinite(position.coords.heading) &&
+              position.coords.heading >= 0
               ? position.coords.heading
               : undefined,
           accuracy_m:
             typeof position.coords.accuracy === "number" &&
-            Number.isFinite(position.coords.accuracy)
+              Number.isFinite(position.coords.accuracy)
               ? position.coords.accuracy
               : undefined,
           captured_at: new Date(position.timestamp).toISOString(),
@@ -689,6 +699,116 @@ export default function RideNavigationScreen() {
     lastCameraHeadingRef.current = normalizeHeading(currentHeading);
     lastCameraUpdateRef.current = now;
   }, [currentHeading, currentLocation, focusedParticipantId]);
+
+  useEffect(() => {
+    const isActiveNavigation =
+      liveStatus === "active" || liveStatus === "starting" || ride?.status === "active";
+
+    if (
+      !isActiveNavigation ||
+      !currentLocation ||
+      !navigationRoute ||
+      !rideEnd ||
+      routeLoading ||
+      !rideStart
+    ) {
+      offRouteSinceRef.current = null;
+      if (!isActiveNavigation) {
+        setRouteStatusLabel(null);
+      }
+      return;
+    }
+
+    const routeDistanceMeters = distanceToPolylineMeters(currentLocation, navigationRoute.polyline);
+    const deviationDetected = isRouteDeviation(
+      currentLocation,
+      navigationRoute.polyline,
+      DEFAULT_ROUTE_DEVIATION_THRESHOLD_METERS,
+    );
+
+    if (!deviationDetected) {
+      offRouteSinceRef.current = null;
+      setRouteStatusLabel(null);
+      return;
+    }
+
+    if (!offRouteSinceRef.current) {
+      offRouteSinceRef.current = Date.now();
+      setRouteStatusLabel(
+        routeDistanceMeters > DEFAULT_ROUTE_DEVIATION_THRESHOLD_METERS
+          ? "Off route — checking a faster path"
+          : "Recalculating route",
+      );
+      return;
+    }
+
+    const elapsedOffRoute = Date.now() - offRouteSinceRef.current;
+    const sinceLastReroute = Date.now() - lastRerouteAtRef.current;
+
+    if (
+      elapsedOffRoute < DEFAULT_ROUTE_DEVIATION_GRACE_MS ||
+      sinceLastReroute < DEFAULT_ROUTE_REROUTE_COOLDOWN_MS ||
+      rerouteInFlightRef.current
+    ) {
+      setRouteStatusLabel("Off route — recalculating");
+      return;
+    }
+
+    rerouteInFlightRef.current = true;
+    setRouteLoading(true);
+    setRouteStatusLabel("Re-routing to fastest path");
+
+    void (async () => {
+      try {
+        const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+        const preferredRoute = await fetchNavigationRoute({
+          origin: currentLocation,
+          destination: rideEnd,
+          waypoints: approvedStopCoords,
+          apiKey,
+          preferFastest: true,
+        });
+
+        let selectedRoute = preferredRoute;
+
+        if (!preferredRoute?.steps?.length) {
+          const destinationOnlyRoute = await fetchNavigationRoute({
+            origin: currentLocation,
+            destination: rideEnd,
+            apiKey,
+            preferFastest: true,
+          });
+
+          if (
+            destinationOnlyRoute?.steps?.length &&
+            (!preferredRoute?.steps?.length ||
+              destinationOnlyRoute.totalDurationSeconds < preferredRoute.totalDurationSeconds)
+          ) {
+            selectedRoute = destinationOnlyRoute;
+          }
+        }
+
+        setNavigationRoute(selectedRoute);
+        setStepIndex(0);
+        lastRouteOriginRef.current = currentLocation;
+        lastRouteUsedDeviceOriginRef.current = true;
+        lastRouteRefreshAtRef.current = Date.now();
+        lastRerouteAtRef.current = Date.now();
+        offRouteSinceRef.current = null;
+
+        setRouteStatusLabel(
+          selectedRoute.source === "fallback"
+            ? "Detour active — heading to destination"
+            : "Back on a faster route",
+        );
+      } catch {
+        setRouteStatusLabel("Route update failed — retrying soon");
+      } finally {
+        rerouteInFlightRef.current = false;
+        setRouteLoading(false);
+      }
+    })();
+  }, [approvedStopCoords, currentLocation, liveStatus, navigationRoute, routeLoading, ride?.status, rideEnd, rideStart]);
 
   const navState: "NOT_STARTED" | "ACTIVE" | "COMPLETED" =
     ride?.status === "completed" || liveStatus === "ended"
@@ -1098,6 +1218,7 @@ export default function RideNavigationScreen() {
         etaLabel={formatEta(remainingDurationSeconds)}
         remainingLabel={formatDistance(remainingDistanceMeters)}
         statusLabel={navState}
+        routeStatusLabel={routeStatusLabel}
         topOffset={topControlsHeight + 8}
         onMeasuredHeight={(height) => {
           setInstructionOverlayHeight((previous) =>
@@ -1106,14 +1227,16 @@ export default function RideNavigationScreen() {
         }}
       />
 
-      {routeLoading || (sessionEndedReason && navState === "COMPLETED") ? (
+      {(routeLoading || routeStatusLabel || (sessionEndedReason && navState === "COMPLETED")) ? (
         <View
           className='absolute left-0 right-0 items-center px-4'
           style={{ top: statusBannerTop, zIndex: 65, elevation: 65 }}
         >
-          {routeLoading ? (
+          {routeLoading || routeStatusLabel ? (
             <View className='mb-2 rounded-full px-3 py-2' style={{ backgroundColor: colors.surface }}>
-              <Text style={{ color: colors.textMuted }}>Loading route...</Text>
+              <Text style={{ color: colors.textMuted }}>
+                {routeLoading ? routeStatusLabel || "Loading route..." : routeStatusLabel}
+              </Text>
             </View>
           ) : null}
 

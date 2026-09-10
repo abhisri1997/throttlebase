@@ -1,10 +1,13 @@
+import type { PoolClient } from "pg";
 import pool, { query } from "../config/db.js";
 import type {
   CreateRideInput,
   UpdateRideInput,
   RequestStopInput,
 } from "../schemas/ride.schemas.js";
-import { calculateGeometricMedian, snapToNearestPlace } from "../utils/geo.js";
+import { calculateGeometricMedian } from "../utils/geo.js";
+import { haversineMeters } from "../utils/polyline.js";
+import { snapToNearestPlace } from "./meetingPoint.service.js";
 import { enqueueRideStatsRecompute } from "./jobs.service.js";
 
 export interface Ride {
@@ -32,6 +35,11 @@ export interface RideStop {
   approved_by: string | null;
   type: string;
   status: string;
+  location?: { type: string; coordinates: [number, number] } | null;
+  name: string | null;
+  address: string | null;
+  google_place_id: string | null;
+  sequence: number | null;
   stopped_at: string | null;
   resumed_at: string | null;
   created_at: string;
@@ -40,6 +48,49 @@ export interface RideStop {
 }
 
 export type RideStatusFilter = "all" | "draft" | "scheduled" | "active";
+
+/**
+ * A participant joining or leaving usually shifts the geometric median by a few
+ * metres. Re-snapping for that spends a Places call to arrive at the same
+ * meeting point, so moves smaller than this are ignored.
+ */
+const MIN_START_POINT_MOVE_METERS = 200;
+
+/** Ride statuses whose planned stops the edit form is allowed to replace. */
+const STOP_EDITABLE_STATUSES = ["draft", "scheduled"];
+
+/**
+ * Inserts captain-planned stops, pre-approved and explicitly ordered.
+ * Shared by ride creation and ride editing so both paths agree on shape.
+ */
+const insertPlannedStops = async (
+  client: PoolClient,
+  rideId: string,
+  captainId: string,
+  stops: NonNullable<CreateRideInput["stops"]>,
+): Promise<void> => {
+  for (let index = 0; index < stops.length; index++) {
+    const stop = stops[index]!;
+    await client.query(
+      `INSERT INTO ride_stops
+         (ride_id, requested_by, approved_by, type, location, name, address,
+          google_place_id, sequence, status, created_at)
+       VALUES ($1, $2, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography,
+               $6, $7, $8, $9, 'approved', now())`,
+      [
+        rideId,
+        captainId,
+        stop.type,
+        stop.location_coords[0],
+        stop.location_coords[1],
+        stop.name || null,
+        stop.address || null,
+        stop.google_place_id || null,
+        index + 1,
+      ],
+    );
+  }
+};
 
 const RIDE_COLUMNS = `
   id, captain_id, title, description, status, visibility,
@@ -156,20 +207,7 @@ export const createRide = async (
 
     // 3. Insert pre-planned stops if provided
     if (data.stops && data.stops.length > 0) {
-      for (const stop of data.stops) {
-        await client.query(
-          `INSERT INTO ride_stops (ride_id, requested_by, approved_by, type, location, name, status, created_at)
-           VALUES ($1, $2, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, $6, 'approved', now())`,
-          [
-            newRide.id,
-            captainId,
-            stop.type,
-            stop.location_coords[0],
-            stop.location_coords[1],
-            stop.name || null,
-          ],
-        );
-      }
+      await insertPlannedStops(client, newRide.id, captainId, data.stops);
     }
 
     await client.query("COMMIT");
@@ -259,8 +297,12 @@ export const getRideById = async (
                   'approved_by', rs.approved_by,
                   'requester_name', req.display_name,
                   'location', ST_AsGeoJSON(rs.location)::json,
+                  'name', rs.name,
+                  'address', rs.address,
+                  'google_place_id', rs.google_place_id,
+                  'sequence', rs.sequence,
                   'created_at', rs.created_at
-                ) ORDER BY rs.created_at ASC
+                ) ORDER BY rs.sequence ASC NULLS LAST, rs.created_at ASC
               )
               FROM ride_stops rs
               LEFT JOIN riders req ON rs.requested_by = req.id
@@ -430,30 +472,70 @@ export const updateRideInfo = async (
     paramIdx++;
   }
 
-  if (setClauses.length === 0) return getRideById(rideId, captainId);
+  // Planned stops are replaced wholesale, but only before the ride starts.
+  // An active ride's stops include ad-hoc rider requests that the edit form
+  // never saw and must not clobber, so stop edits are ignored there.
+  const hasStopEdits = fields.stops !== undefined;
+  const shouldReplaceStops =
+    hasStopEdits && STOP_EDITABLE_STATUSES.includes(currentStatus);
 
-  paramIdx++;
-  const rideIdParam = paramIdx;
-  values.push(rideId);
-
-  const result = await query(
-    `UPDATE rides SET ${setClauses.join(", ")} WHERE id = $${rideIdParam} RETURNING *`,
-    values,
-  );
-
-  if (result.rows.length === 0) {
-    return null;
+  if (hasStopEdits && !shouldReplaceStops) {
+    console.warn(
+      `Ignoring planned-stop edits for ride ${rideId}: status is "${currentStatus}". ` +
+        `Use POST /api/rides/:id/stops to add stops to a ride in progress.`,
+    );
   }
 
-  const updatedRide = result.rows[0] as Ride;
-
-  if (shouldEnqueueRideStats) {
-    enqueueRideStatsRecompute(rideId, "ride-completed").catch((error) => {
-      console.error("Failed to enqueue ride stats recompute job:", error);
-    });
+  if (setClauses.length === 0 && !shouldReplaceStops) {
+    return getRideById(rideId, captainId);
   }
 
-  return updatedRide;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    let updatedRide: Ride | null = null;
+
+    if (setClauses.length > 0) {
+      paramIdx++;
+      const rideIdParam = paramIdx;
+      values.push(rideId);
+
+      const result = await client.query(
+        `UPDATE rides SET ${setClauses.join(", ")} WHERE id = $${rideIdParam} RETURNING *`,
+        values,
+      );
+
+      if (result.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+
+      updatedRide = result.rows[0] as Ride;
+    }
+
+    if (shouldReplaceStops) {
+      await client.query(`DELETE FROM ride_stops WHERE ride_id = $1`, [rideId]);
+      await insertPlannedStops(client, rideId, captainId, fields.stops ?? []);
+    }
+
+    await client.query("COMMIT");
+
+    if (shouldEnqueueRideStats) {
+      enqueueRideStatsRecompute(rideId, "ride-completed").catch((error) => {
+        console.error("Failed to enqueue ride stats recompute job:", error);
+      });
+    }
+
+    // Re-read when only stops changed, so the caller still gets a full ride.
+    return updatedRide ?? (await getRideById(rideId, captainId));
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("updateRideInfo DB error:", error);
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 /**
@@ -613,8 +695,11 @@ export const requestStop = async (
   const isLeader = role === "captain" || role === "co_captain";
 
   const result = await query(
-    `INSERT INTO ride_stops (ride_id, requested_by, approved_by, type, location, status, created_at)
-     VALUES ($1, $2, $3, $4, ST_SetSRID(ST_MakePoint($5, $6), 4326)::geography, $7, now())
+    `INSERT INTO ride_stops
+       (ride_id, requested_by, approved_by, type, location, name, address,
+        google_place_id, status, created_at)
+     VALUES ($1, $2, $3, $4, ST_SetSRID(ST_MakePoint($5, $6), 4326)::geography,
+             $7, $8, $9, $10, now())
      RETURNING *`,
     [
       rideId,
@@ -623,6 +708,9 @@ export const requestStop = async (
       data.type,
       data.location_coords[0],
       data.location_coords[1],
+      data.name || null,
+      data.address || null,
+      data.google_place_id || null,
       isLeader ? "approved" : "pending",
     ],
   );
@@ -699,7 +787,9 @@ export const recalculateStartPoint = async (
     `SELECT 
        start_point_auto, 
        ST_X(end_point::geometry) as dest_lng, 
-       ST_Y(end_point::geometry) as dest_lat 
+       ST_Y(end_point::geometry) as dest_lat,
+       ST_X(start_point::geometry) as current_start_lng,
+       ST_Y(start_point::geometry) as current_start_lat
      FROM rides WHERE id = $1`,
     [rideId],
   );
@@ -735,6 +825,22 @@ export const recalculateStartPoint = async (
 
   // Calculate the most equitable start point using Geometric Median (Weber Problem)
   const medianPoint = calculateGeometricMedian(locations, destination, 1.5);
+
+  // Skip the outbound Places call when the meeting point has barely moved.
+  const currentStart =
+    destRow.current_start_lat && destRow.current_start_lng
+      ? {
+          lat: parseFloat(destRow.current_start_lat),
+          lng: parseFloat(destRow.current_start_lng),
+        }
+      : null;
+
+  if (
+    currentStart &&
+    haversineMeters(currentStart, medianPoint) < MIN_START_POINT_MOVE_METERS
+  ) {
+    return null;
+  }
 
   // Snap to nearest accessible place
   const snapped = await snapToNearestPlace(medianPoint, apiKey);

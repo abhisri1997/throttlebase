@@ -93,6 +93,7 @@ This keeps permission checks and state transitions in service logic while contro
 - Ride detail and full-screen navigation maps now share canonical route composition as current rider location -> start point -> approved stops -> destination, with origin fallback to start when device location is unavailable
 - Full-screen navigation reroute refresh now uses interval/ref-based checks with movement cooldown (40m plus minimum elapsed window) and periodic refresh, preventing rapid re-fetch loops during active tracking
 - Navigation route geometry now applies adaptive, shape-preserving simplification with a point cap before map render, reducing route-draw latency on long directions responses
+- Full-screen navigation now re-routes from the rider’s live location when off-route, prefers the fastest Google Directions alternative by ETA, and falls back to a destination-only detour when the waypoint chain is no longer routable
 - Full-screen navigation exit now follows stack-aware back navigation to prevent duplicate ride-detail screen instances
 - Ride detail live map auto-fit now performs a single initial fit per live-room session instead of repeated animated refits on every location update, improving interaction stability
 - Ride detail preview map render path is hardened for interaction stability via stricter preview-polyline simplification/cap, non-dashed polyline rendering, and reduced camera-computation options (no rotate/pitch)

@@ -8,6 +8,7 @@ type Props = {
   etaLabel: string;
   remainingLabel: string;
   statusLabel: "NOT_STARTED" | "ACTIVE" | "COMPLETED";
+  routeStatusLabel?: string | null;
   topOffset?: number;
   onMeasuredHeight?: (height: number) => void;
 };
@@ -18,6 +19,7 @@ export function NavigationInstructionOverlay({
   etaLabel,
   remainingLabel,
   statusLabel,
+  routeStatusLabel,
   topOffset = 0,
   onMeasuredHeight,
 }: Props) {
@@ -47,6 +49,12 @@ export function NavigationInstructionOverlay({
             ETA {etaLabel}
           </Text>
         </View>
+
+        {routeStatusLabel ? (
+          <Text className='mt-1 text-[11px] font-semibold' style={{ color: colors.primary }}>
+            {routeStatusLabel}
+          </Text>
+        ) : null}
 
         <Text className='mt-2 text-base font-bold' style={{ color: colors.text }} numberOfLines={2}>
           {instruction}
