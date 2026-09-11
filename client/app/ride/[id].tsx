@@ -47,12 +47,20 @@ import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
 import { getApiErrorMessage } from "../../src/utils/apiError";
 import { rideSocket } from "../../src/services/rideSocket";
 import {
-  buildCanonicalRideRouteInput,
-  fetchNavigationRoute,
   haversineMeters,
   simplifyPolyline,
 } from "../../src/features/navigation/services/navigationRouteService";
-import type { LatLng } from "../../src/features/navigation/types/navigation";
+import { NavigationRouteLayer } from "../../src/features/navigation/components/NavigationRouteLayer";
+import { buildTripPlan } from "../../src/features/navigation/core/tripPlan";
+import { usePlannedRoute } from "../../src/features/navigation/hooks/usePlannedRoute";
+import { useRideTrack } from "../../src/features/navigation/hooks/useRideTrack";
+import {
+  formatClockTime,
+  formatDistance,
+  formatDuration,
+} from "../../src/features/navigation/core/format";
+import { navigationDayColors } from "../../src/theme/navigationColors";
+import type { LatLng, RouteLeg } from "../../src/features/navigation/types/navigation";
 
 const fetchRideDetails = async (id: string) => {
   const { data } = await apiClient.get(`/api/rides/${id}`);
@@ -235,17 +243,6 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-const toCoordinate = (raw?: [number, number] | null): LatLng | null => {
-  if (!raw || raw.length < 2) {
-    return null;
-  }
-
-  return {
-    latitude: raw[1],
-    longitude: raw[0],
-  };
-};
-
 type RidePreviewLiveMarker = {
   riderId: string;
   latitude: number;
@@ -258,12 +255,55 @@ type RidePreviewLiveMarker = {
 // Stable empty array passed to RideDetailMapHeader on Android where live markers
 // are intentionally hidden — prevents new-ref prop churn on every location broadcast.
 const EMPTY_LIVE_MARKERS: RidePreviewLiveMarker[] = [];
+const EMPTY_LINE: LatLng[] = [];
+/** The preview shows the whole planned route as one line, with nothing ridden yet. */
+const NO_LATER_LEGS: RouteLeg[] = [];
+
+/** Thinner than navigation needs: this map is a small, static preview. */
+const PREVIEW_ROUTE_MIN_SPACING_METERS = 30;
+const PREVIEW_ROUTE_MAX_POINTS = 320;
+
+/** Closer than this, the viewer is already at the start and a hint adds nothing. */
+const APPROACH_LINE_MIN_METERS = 150;
+const APPROACH_LINE_DASH = [10, 8];
+const APPROACH_LINE_WIDTH = 3;
+
+/** The travelled track is denser than the plan; thin it for the small preview map. */
+const TRACK_PREVIEW_MIN_SPACING_METERS = 15;
+const TRACK_PREVIEW_MAX_POINTS = 800;
+/** Under a travelled track, the plan is a faint reference line. */
+const PLANNED_UNDER_TRACK_WIDTH = 4;
+
+type RideMapStop = {
+  id: string;
+  coordinate: LatLng;
+  title: string;
+  /** e.g. "Reached 4:12 PM" once the ride is done. */
+  description?: string;
+};
+
+const rideMapStopsEqual = (a: RideMapStop[], b: RideMapStop[]): boolean =>
+  a.length === b.length &&
+  a.every(
+    (stop, index) =>
+      stop.id === b[index]!.id &&
+      stop.title === b[index]!.title &&
+      stop.description === b[index]!.description &&
+      coordsEqual(stop.coordinate, b[index]!.coordinate),
+  );
 
 type RideDetailMapHeaderProps = {
   startCoords: [number, number];
   endCoords?: [number, number] | null;
   routePathCoordinates: LatLng[];
-  stopMarkerCoords: LatLng[];
+  /** Straight dashed hint from the viewer to the start; empty when there is nothing to approach. */
+  approachLine: LatLng[];
+  /** The rider's own travelled track on a finished ride; empty otherwise. */
+  trackCoordinates: LatLng[];
+  trackSummaryLabel: string | null;
+  startDescription?: string;
+  endDescription?: string;
+  stopMarkers: RideMapStop[];
   showLiveMarkers: boolean;
   liveMarkers: RidePreviewLiveMarker[];
   rideStatus: string;
@@ -319,7 +359,12 @@ const RideDetailMapHeader = React.memo(
     startCoords,
     endCoords,
     routePathCoordinates,
-    stopMarkerCoords,
+    approachLine,
+    trackCoordinates,
+    trackSummaryLabel,
+    startDescription,
+    endDescription,
+    stopMarkers,
     showLiveMarkers,
     liveMarkers,
     rideStatus,
@@ -352,6 +397,7 @@ const RideDetailMapHeader = React.memo(
               longitude: startCoords[0],
             }}
             title='Start'
+            description={startDescription}
             pinColor='#22c55e'
           />
           {endCoords ? (
@@ -362,24 +408,52 @@ const RideDetailMapHeader = React.memo(
                   longitude: endCoords[0],
                 }}
                 title='End'
+                description={endDescription}
                 pinColor='#f43f5e'
               />
-              {routePathCoordinates.length > 1 ? (
-                <Polyline
-                  coordinates={routePathCoordinates}
-                  strokeColor='#22c55e'
-                  strokeWidth={4}
+              {trackCoordinates.length > 1 ? (
+                <>
+                  {routePathCoordinates.length > 1 ? (
+                    <Polyline
+                      coordinates={routePathCoordinates}
+                      strokeColor={navigationDayColors.laterFill}
+                      strokeWidth={PLANNED_UNDER_TRACK_WIDTH}
+                      zIndex={1}
+                    />
+                  ) : null}
+                  <NavigationRouteLayer
+                    currentLine={trackCoordinates}
+                    laterLegs={NO_LATER_LEGS}
+                    colors={navigationDayColors}
+                  />
+                </>
+              ) : (
+                <NavigationRouteLayer
+                  currentLine={routePathCoordinates}
+                  laterLegs={NO_LATER_LEGS}
+                  colors={navigationDayColors}
                 />
-              ) : null}
+              )}
             </>
           ) : null}
 
-          {stopMarkerCoords.map((coordinate, index) => (
+          {approachLine.length > 1 ? (
+            <Polyline
+              coordinates={approachLine}
+              strokeColor={navigationDayColors.approachLine}
+              strokeWidth={APPROACH_LINE_WIDTH}
+              lineDashPattern={APPROACH_LINE_DASH}
+              zIndex={0}
+            />
+          ) : null}
+
+          {stopMarkers.map((stop) => (
             <Marker
-              key={`stop-${index}`}
-              coordinate={coordinate}
+              key={stop.id}
+              coordinate={stop.coordinate}
               pinColor='#f59e0b'
-              title={`Stop ${index + 1}`}
+              title={stop.title}
+              description={stop.description}
             />
           ))}
 
@@ -398,6 +472,17 @@ const RideDetailMapHeader = React.memo(
               ))
             : null}
         </MapView>
+
+        {trackSummaryLabel ? (
+          <View
+            className='absolute bottom-3 left-3 px-3 py-1.5 rounded-full'
+            style={{ backgroundColor: "rgba(15,23,42,0.8)" }}
+          >
+            <Text className='text-xs font-semibold' style={{ color: "#ffffff" }}>
+              {trackSummaryLabel}
+            </Text>
+          </View>
+        ) : null}
 
         <SafeAreaView className='absolute top-0 left-0 right-0 px-4 pt-2 flex-row justify-between items-center'>
           <TouchableOpacity
@@ -440,7 +525,12 @@ const RideDetailMapHeader = React.memo(
       prev.rideStatus === next.rideStatus &&
       prev.showLiveMarkers === next.showLiveMarkers &&
       coordArrayEqual(prev.routePathCoordinates, next.routePathCoordinates) &&
-      coordArrayEqual(prev.stopMarkerCoords, next.stopMarkerCoords) &&
+      coordArrayEqual(prev.approachLine, next.approachLine) &&
+      coordArrayEqual(prev.trackCoordinates, next.trackCoordinates) &&
+      prev.trackSummaryLabel === next.trackSummaryLabel &&
+      prev.startDescription === next.startDescription &&
+      prev.endDescription === next.endDescription &&
+      rideMapStopsEqual(prev.stopMarkers, next.stopMarkers) &&
       // Skip live-marker deep comparison when markers aren't rendered (Android).
       // Without this guard every location:broadcast breaks the memo and forces a
       // Lite-Mode map repaint even though showLiveMarkers=false.
@@ -448,11 +538,6 @@ const RideDetailMapHeader = React.memo(
     );
   },
 );
-
-const polylineSignature = (points: LatLng[]): string =>
-  points
-    .map((point) => `${point.latitude.toFixed(5)},${point.longitude.toFixed(5)}`)
-    .join("|");
 
 const NEXT_STATUS: Record<string, { label: string; status: string } | null> = {
   draft: { label: "Publish", status: "scheduled" },
@@ -607,13 +692,6 @@ export default function RideDetailScreen() {
   const [reviewText, setReviewText] = useState("");
   const [sosSubmitting, setSOSSubmitting] = useState(false);
   const [sampledLocation, setSampledLocation] = useState<LatLng | null>(null);
-  const [routePathCoordinates, setRoutePathCoordinates] = useState<LatLng[]>([]);
-  const lastRouteRefreshAtRef = useRef(0);
-  const lastRouteOriginRef = useRef<LatLng | null>(null);
-  const [frozenPreviewOrigin, setFrozenPreviewOrigin] = useState<LatLng | null>(null);
-  const routePreviewLoadedRef = useRef(false);
-  const routePreviewFetchInFlightRef = useRef(false);
-  const lastRoutePolylineSignatureRef = useRef("");
   const hasAutoFitLiveMarkersRef = useRef(false);
 
   const joinMutation = useMutation({
@@ -965,12 +1043,12 @@ useEffect(() => {
   }, [appState, inRoom, upsertLocation]);
 
   useEffect(() => {
-    if (appState !== "active" || Platform.OS === "web" || frozenPreviewOrigin) {
+    // One fix per visit is enough for the dashed approach line to the start.
+    if (appState !== "active" || !isFocused || Platform.OS === "web") {
       return;
     }
 
     let cancelled = false;
-    let timer: ReturnType<typeof setInterval> | null = null;
 
     const sampleLocation = async () => {
       try {
@@ -1006,20 +1084,14 @@ useEffect(() => {
       }
 
       await sampleLocation();
-      timer = setInterval(() => {
-        void sampleLocation();
-      }, 12000);
     };
 
     void startSampling();
 
     return () => {
       cancelled = true;
-      if (timer) {
-        clearInterval(timer);
-      }
     };
-  }, [appState, frozenPreviewOrigin]);
+  }, [appState, isFocused]);
 
   // Alert when session is ended remotely via socket fanout
   const prevSessionEndedRef = useRef<string | null>(null);
@@ -1070,26 +1142,37 @@ useEffect(() => {
     hasAutoFitLiveMarkersRef.current = false;
   }, [inRoom]);
 
-  const startPoint = useMemo(
-    () => toCoordinate(ride?.start_point_geojson?.coordinates || null),
-    [ride?.start_point_geojson?.coordinates],
-  );
-  const destinationPoint = useMemo(
-    () => toCoordinate(ride?.end_point_geojson?.coordinates || null),
-    [ride?.end_point_geojson?.coordinates],
-  );
-  const approvedStopCoords = useMemo(() => {
-    if (!ride?.stops) {
-      return [] as LatLng[];
-    }
+  // The ride as planned — start, approved stops, destination. Fetched once per
+  // plan and cached, so opening navigation from here costs no second request.
+  const waypoints = useMemo(() => buildTripPlan(ride), [ride]);
+  const plannedRoute = usePlannedRoute(waypoints);
+  const rideStartPoint = waypoints?.[0]?.coordinate ?? null;
+  const isRideUpcoming = ride?.status === "draft" || ride?.status === "scheduled";
 
-    return ride.stops
-      .filter((stop: any) => stop.status !== "rejected" && stop.location?.coordinates)
-      .map((stop: any) => ({
-        latitude: stop.location.coordinates[1],
-        longitude: stop.location.coordinates[0],
-      }));
-  }, [ride?.stops]);
+  // A finished ride shows the road this rider actually rode, over the plan.
+  const { track } = useRideTrack(id, ride?.status === "completed" && isParticipantFromRide);
+  const trackCoordinates = useMemo(
+    () =>
+      track && track.coordinates.length > 1
+        ? simplifyPolyline(
+            track.coordinates,
+            TRACK_PREVIEW_MIN_SPACING_METERS,
+            TRACK_PREVIEW_MAX_POINTS,
+          )
+        : EMPTY_LINE,
+    [track],
+  );
+  const trackSummaryLabel =
+    track && track.coordinates.length > 1
+      ? `You rode ${formatDistance(track.distanceMeters)} in ${formatDuration(track.durationSeconds)}`
+      : null;
+  const arrivalLabel = useCallback(
+    (waypointId: string): string | undefined => {
+      const reachedAt = track?.arrivals[waypointId];
+      return reachedAt === undefined ? undefined : `Reached ${formatClockTime(reachedAt)}`;
+    },
+    [track],
+  );
 
   const currentLocationOrigin = useMemo(() => {
     const ownLiveLocation = Object.values(locations).find(
@@ -1110,130 +1193,30 @@ useEffect(() => {
     return sampledLocation;
   }, [currentRider?.id, locations, sampledLocation]);
 
-  // Freeze preview origin on first available location to avoid map/route jitter.
-  useEffect(() => {
-    if (!frozenPreviewOrigin && currentLocationOrigin) {
-      setFrozenPreviewOrigin(currentLocationOrigin);
-    }
-  }, [currentLocationOrigin, frozenPreviewOrigin]);
-
-  useEffect(() => {
-    setFrozenPreviewOrigin(null);
-    routePreviewLoadedRef.current = false;
-    routePreviewFetchInFlightRef.current = false;
-    lastRoutePolylineSignatureRef.current = "";
-  }, [id]);
-
-  const previewOrigin = frozenPreviewOrigin || currentLocationOrigin;
-
-  const canonicalRoute = useMemo(
+  const plannedPolyline = plannedRoute.route?.polyline;
+  const routePathCoordinates = useMemo(
     () =>
-      buildCanonicalRideRouteInput({
-        origin: previewOrigin,
-        start: startPoint,
-        stops: approvedStopCoords,
-        destination: destinationPoint,
-      }),
-    [approvedStopCoords, destinationPoint, previewOrigin, startPoint],
+      plannedPolyline && plannedPolyline.length > 1
+        ? simplifyPolyline(
+            plannedPolyline,
+            PREVIEW_ROUTE_MIN_SPACING_METERS,
+            PREVIEW_ROUTE_MAX_POINTS,
+          )
+        : EMPTY_LINE,
+    [plannedPolyline],
   );
 
-  const canonicalRouteKey = useMemo(() => {
-    if (!canonicalRoute) {
-      return "";
-    }
+  // A straight dashed hint towards the start rather than a route from the
+  // viewer: it costs no API call, and it can't loop back through the start the
+  // way routing viewer → start → stops did. Only before the ride starts —
+  // once it is underway, navigation shows the way.
+  const approachLine = useMemo((): LatLng[] => {
+    if (!isRideUpcoming || !currentLocationOrigin || !rideStartPoint) return EMPTY_LINE;
 
-    return canonicalRoute.orderedPoints
-      .map((point) => `${point.latitude},${point.longitude}`)
-      .join("|");
-  }, [canonicalRoute]);
-
-  useEffect(() => {
-    if (!canonicalRoute) {
-      routePreviewLoadedRef.current = false;
-      setRoutePathCoordinates([]);
-      return;
-    }
-
-    // Keep last good rendered route when this screen is blurred/backgrounded.
-    // Avoid temporary straight-line fallback when navigating to full-screen nav
-    // and coming back before async route refresh completes.
-    if (!isFocused || appState !== "active") {
-      return;
-    }
-
-    const now = Date.now();
-    const previousOrigin = lastRouteOriginRef.current;
-    const movedMeters =
-      previousOrigin && currentLocationOrigin
-        ? haversineMeters(previousOrigin, currentLocationOrigin)
-        : Infinity;
-    const elapsedMs = now - lastRouteRefreshAtRef.current;
-    const shouldRefresh =
-      !routePreviewLoadedRef.current || movedMeters >= 40 || elapsedMs >= 25000;
-
-    if (!shouldRefresh || routePreviewFetchInFlightRef.current) {
-      return;
-    }
-
-    let cancelled = false;
-    routePreviewFetchInFlightRef.current = true;
-
-    const commitPreviewPolyline = (nextPoints: LatLng[]) => {
-      const nextSignature = polylineSignature(nextPoints);
-      if (nextSignature === lastRoutePolylineSignatureRef.current) {
-        return;
-      }
-
-      lastRoutePolylineSignatureRef.current = nextSignature;
-      setRoutePathCoordinates(nextPoints);
-    };
-
-    const loadRoute = async () => {
-      try {
-        const route = await fetchNavigationRoute({
-          origin: canonicalRoute.origin,
-          destination: canonicalRoute.destination,
-          waypoints: canonicalRoute.waypoints,
-          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
-        });
-
-        if (cancelled) {
-          return;
-        }
-
-        const previewPolyline =
-          route.polyline.length > 1
-            ? simplifyPolyline(route.polyline, 30, 320)
-            : canonicalRoute.orderedPoints;
-
-        commitPreviewPolyline(previewPolyline);
-        routePreviewLoadedRef.current = true;
-        lastRouteOriginRef.current = canonicalRoute.origin;
-        lastRouteRefreshAtRef.current = Date.now();
-      } catch {
-        if (!cancelled) {
-          commitPreviewPolyline(canonicalRoute.orderedPoints);
-          routePreviewLoadedRef.current = true;
-        }
-      } finally {
-        if (!cancelled) {
-          routePreviewFetchInFlightRef.current = false;
-        }
-      }
-    };
-
-    void loadRoute();
-
-    return () => {
-      cancelled = true;
-      routePreviewFetchInFlightRef.current = false;
-    };
-  }, [
-    isFocused,
-    appState,
-    canonicalRoute,
-    canonicalRouteKey,
-  ]);
+    return haversineMeters(currentLocationOrigin, rideStartPoint) >= APPROACH_LINE_MIN_METERS
+      ? [currentLocationOrigin, rideStartPoint]
+      : EMPTY_LINE;
+  }, [currentLocationOrigin, isRideUpcoming, rideStartPoint]);
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     const tasks: Array<Promise<unknown>> = [refetch(), refetchReviews()];
@@ -1251,15 +1234,20 @@ useEffect(() => {
     [ride?.stops],
   );
 
-  const previewStopMarkerCoords = useMemo(
-    () =>
+  const previewStopMarkers = useMemo(
+    (): RideMapStop[] =>
       stopMarkers
         .filter((s: any) => s.location?.coordinates)
-        .map((s: any) => ({
-          latitude: s.location.coordinates[1],
-          longitude: s.location.coordinates[0],
+        .map((s: any, index: number) => ({
+          id: String(s.id ?? index),
+          coordinate: {
+            latitude: s.location.coordinates[1],
+            longitude: s.location.coordinates[0],
+          },
+          title: `Stop ${index + 1}`,
+          description: arrivalLabel(String(s.id)),
         })),
-    [stopMarkers],
+    [arrivalLabel, stopMarkers],
   );
 
   const liveLocationMarkers = useMemo(
@@ -1524,7 +1512,12 @@ useEffect(() => {
           startCoords={startCoords}
           endCoords={endCoords}
           routePathCoordinates={routePathCoordinates}
-          stopMarkerCoords={previewStopMarkerCoords}
+          approachLine={approachLine}
+          trackCoordinates={trackCoordinates}
+          trackSummaryLabel={trackSummaryLabel}
+          startDescription={arrivalLabel("start")}
+          endDescription={arrivalLabel("destination")}
+          stopMarkers={previewStopMarkers}
           showLiveMarkers={showLiveMarkersOnMap}
           liveMarkers={showLiveMarkersOnMap ? previewLiveMarkers : EMPTY_LIVE_MARKERS}
           rideStatus={ride.status}

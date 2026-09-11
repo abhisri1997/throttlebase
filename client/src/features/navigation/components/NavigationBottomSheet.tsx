@@ -1,19 +1,39 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Animated,
   PanResponder,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   TouchableOpacity,
   useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Route, Users, X } from "lucide-react-native";
 import { useTheme } from "../../../theme/ThemeContext";
 import type { RideParticipantView } from "../types/navigation";
 
-type Props = {
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+/** Collapsed trip bar height above the home indicator. */
+const COLLAPSED_BASE_HEIGHT = 136;
+const EXPANDED_MAX_SCREEN_SHARE = 0.76;
+const EXPANDED_MARGIN = 8;
+const FLING_VELOCITY = 0.35;
+const ROUND_BUTTON_SIZE = 44;
+
+export const navigationSheetCollapsedHeight = (bottomInset: number): number =>
+  COLLAPSED_BASE_HEIGHT + bottomInset;
+
+export interface TripBarAction {
+  label: string;
+  onPress: () => void;
+  isBusy?: boolean;
+}
+
+interface NavigationBottomSheetProps {
   rideName: string;
   participants: RideParticipantView[];
   isHost: boolean;
@@ -22,15 +42,49 @@ type Props = {
   ending: boolean;
   focusedParticipantId?: string | null;
   onParticipantPress?: (participant: RideParticipantView) => void;
-  onExpandedChange?: (expanded: boolean) => void;
   onSnapHeightChange?: (height: number) => void;
-};
+  /** Trip bar: time to the next waypoint, e.g. "12 min". */
+  durationLabel: string;
+  /** Trip bar: e.g. "4.4 km · to Stop 2 · Indian Oil · arrive 4:58 PM". */
+  detailLabel: string;
+  onExit: () => void;
+  onOverview: () => void;
+  isOverview: boolean;
+  /** Start ride, Skip stop, or Continue — whichever applies now. */
+  action: TripBarAction | null;
+}
 
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, value));
+interface RoundButtonProps {
+  label: string;
+  onPress: () => void;
+  isActive?: boolean;
+  children: ReactNode;
+}
 
-export const NAVIGATION_SHEET_COLLAPSED_HEIGHT = 138;
+function RoundButton({ label, onPress, isActive = false, children }: RoundButtonProps) {
+  const { colors } = useTheme();
 
+  return (
+    <TouchableOpacity
+      accessibilityRole='button'
+      accessibilityLabel={label}
+      accessibilityState={{ selected: isActive }}
+      onPress={onPress}
+      style={[
+        styles.roundButton,
+        { backgroundColor: isActive ? colors.primary : colors.bg, borderColor: colors.border },
+      ]}
+    >
+      {children}
+    </TouchableOpacity>
+  );
+}
+
+/**
+ * The trip bar with the crew below it, as in Google Maps: collapsed it shows
+ * the time and distance to the next waypoint with Exit, Overview and the
+ * current action; dragged up it lists the crew and the captain's controls.
+ */
 export function NavigationBottomSheet({
   rideName,
   participants,
@@ -40,58 +94,66 @@ export function NavigationBottomSheet({
   ending,
   focusedParticipantId,
   onParticipantPress,
-  onExpandedChange,
   onSnapHeightChange,
-}: Props) {
+  durationLabel,
+  detailLabel,
+  onExit,
+  onOverview,
+  isOverview,
+  action,
+}: NavigationBottomSheetProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const [isExpanded, setIsExpanded] = useState(false);
-  const [chromeHeight, setChromeHeight] = useState(NAVIGATION_SHEET_COLLAPSED_HEIGHT);
+  const [chromeHeight, setChromeHeight] = useState(COLLAPSED_BASE_HEIGHT);
   const [scrollContentHeight, setScrollContentHeight] = useState(0);
   const onlineCount = participants.filter((participant) => participant.isOnline).length;
 
-  const collapsedHeight = NAVIGATION_SHEET_COLLAPSED_HEIGHT;
+  const collapsedHeight = navigationSheetCollapsedHeight(insets.bottom);
   const expandedHeight = clamp(
     chromeHeight + scrollContentHeight + insets.bottom,
     collapsedHeight,
-    Math.round(windowHeight * 0.76),
+    Math.round(windowHeight * EXPANDED_MAX_SCREEN_SHARE),
   );
   const snapThreshold = (collapsedHeight + expandedHeight) / 2;
 
   const heightValue = useRef(new Animated.Value(collapsedHeight)).current;
   const dragStartHeight = useRef(collapsedHeight);
 
-  const snapToHeight = (targetHeight: number) => {
-    const nextExpanded = targetHeight > collapsedHeight + 8;
-    setIsExpanded(nextExpanded);
-    onExpandedChange?.(nextExpanded);
-    Animated.spring(heightValue, {
-      toValue: targetHeight,
-      damping: 24,
-      stiffness: 220,
-      useNativeDriver: false,
-    }).start();
-  };
+  const snapToHeight = useCallback(
+    (targetHeight: number) => {
+      setIsExpanded(targetHeight > collapsedHeight + EXPANDED_MARGIN);
+      Animated.spring(heightValue, {
+        toValue: targetHeight,
+        damping: 24,
+        stiffness: 220,
+        useNativeDriver: false,
+      }).start();
+    },
+    [collapsedHeight, heightValue],
+  );
+
+  const toggle = useCallback(() => {
+    heightValue.stopAnimation((value: number) => {
+      snapToHeight(value > snapThreshold ? collapsedHeight : expandedHeight);
+    });
+  }, [collapsedHeight, expandedHeight, heightValue, snapThreshold, snapToHeight]);
 
   const panResponder = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: (_, gesture) =>
-          Math.abs(gesture.dy) > Math.abs(gesture.dx),
+        onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > Math.abs(gesture.dx),
         onPanResponderGrant: () => {
           heightValue.stopAnimation((value: number) => {
             dragStartHeight.current = value;
           });
         },
         onPanResponderMove: (_, gesture) => {
-          const nextHeight = clamp(
-            dragStartHeight.current - gesture.dy,
-            collapsedHeight,
-            expandedHeight,
+          heightValue.setValue(
+            clamp(dragStartHeight.current - gesture.dy, collapsedHeight, expandedHeight),
           );
-          heightValue.setValue(nextHeight);
         },
         onPanResponderRelease: (_, gesture) => {
           const currentHeight = clamp(
@@ -99,60 +161,41 @@ export function NavigationBottomSheet({
             collapsedHeight,
             expandedHeight,
           );
-          const shouldExpand = currentHeight > snapThreshold || gesture.vy < -0.35;
+          const shouldExpand = currentHeight > snapThreshold || gesture.vy < -FLING_VELOCITY;
           snapToHeight(shouldExpand ? expandedHeight : collapsedHeight);
         },
       }),
-    [collapsedHeight, expandedHeight, heightValue, snapThreshold],
+    [collapsedHeight, expandedHeight, heightValue, snapThreshold, snapToHeight],
   );
 
   useEffect(() => {
-    if (!onSnapHeightChange) {
-      return;
-    }
+    if (!onSnapHeightChange) return;
 
     const listenerId = heightValue.addListener(({ value }) => {
       onSnapHeightChange(Math.round(value));
     });
-
-    return () => {
-      heightValue.removeListener(listenerId);
-    };
+    return () => heightValue.removeListener(listenerId);
   }, [heightValue, onSnapHeightChange]);
 
+  // Keep the sheet within bounds when they change — content grows, or the safe area arrives.
   useEffect(() => {
     heightValue.stopAnimation((value: number) => {
-      if (value > expandedHeight) {
-        heightValue.setValue(expandedHeight);
-      }
-
-      const nextExpanded = value > collapsedHeight + 8;
-      setIsExpanded(nextExpanded);
-      onExpandedChange?.(nextExpanded);
+      const bounded = clamp(value, collapsedHeight, expandedHeight);
+      if (bounded !== value) heightValue.setValue(bounded);
+      setIsExpanded(bounded > collapsedHeight + EXPANDED_MARGIN);
     });
-  }, [
-    collapsedHeight,
-    expandedHeight,
-    heightValue,
-    onExpandedChange,
-  ]);
+  }, [collapsedHeight, expandedHeight, heightValue]);
 
   return (
     <Animated.View
-      className='rounded-t-3xl'
-      style={{
-        position: "absolute",
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 30,
-        elevation: 30,
-        height: heightValue,
-        backgroundColor: colors.surface,
-        borderTopColor: colors.border,
-        borderTopWidth: 1,
-        overflow: "hidden",
-      }}
+      style={[
+        styles.sheet,
+        {
+          height: heightValue,
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+        },
+      ]}
     >
       <View
         onLayout={(event) => {
@@ -163,50 +206,71 @@ export function NavigationBottomSheet({
         }}
       >
         <Pressable
-          onPress={() => {
-            heightValue.stopAnimation((value: number) => {
-              const next = value > snapThreshold ? collapsedHeight : expandedHeight;
-              snapToHeight(next);
-            });
-          }}
+          onPress={toggle}
+          accessibilityRole='button'
+          accessibilityLabel={isExpanded ? "Collapse crew panel" : "Expand crew panel"}
           {...panResponder.panHandlers}
-          className='pt-3 pb-4 px-4'
+          style={styles.header}
         >
-          <View className='items-center'>
-            <View
-              style={{ width: 42, height: 5, borderRadius: 999, backgroundColor: colors.textMuted }}
-            />
-          </View>
+          <View style={[styles.handle, { backgroundColor: colors.textMuted }]} />
 
-          <View className='mt-4 flex-row items-start justify-between'>
-            <View className='flex-1 pr-3'>
-              <Text className='text-lg font-bold' style={{ color: colors.text }} numberOfLines={1}>
-                {rideName}
+          <View style={styles.tripRow}>
+            <RoundButton label='Exit navigation' onPress={onExit}>
+              <X color={colors.text} size={22} />
+            </RoundButton>
+
+            <View style={styles.tripText}>
+              <Text style={[styles.duration, { color: colors.primary }]} numberOfLines={1}>
+                {durationLabel}
               </Text>
-              <Text className='mt-1 text-xs' style={{ color: colors.textMuted }}>
-                {onlineCount}/{participants.length || 0} riders online
+              <Text style={[styles.detail, { color: colors.textMuted }]} numberOfLines={1}>
+                {detailLabel}
               </Text>
             </View>
 
-            <View
-              className='rounded-full px-3 py-1.5'
-              style={{ backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border }}
+            <RoundButton
+              label={isOverview ? "Back to your position" : "Show route overview"}
+              onPress={onOverview}
+              isActive={isOverview}
             >
-              <Text className='text-xs font-semibold' style={{ color: colors.text }}>
-                {isExpanded ? "Collapse" : "Crew"}
-              </Text>
-            </View>
+              <Route color={isOverview ? "white" : colors.text} size={20} />
+            </RoundButton>
           </View>
 
-          <Text className='mt-3 text-xs' style={{ color: colors.textMuted }}>
-            {isExpanded ? "Tap or drag down to return to the map." : "Swipe up to check rider presence and controls."}
-          </Text>
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              accessibilityRole='button'
+              accessibilityLabel={`Crew, ${onlineCount} of ${participants.length} online`}
+              onPress={toggle}
+              style={[styles.chip, { backgroundColor: colors.bg, borderColor: colors.border }]}
+            >
+              <Users color={colors.text} size={14} />
+              <Text style={[styles.chipText, { color: colors.text }]}>
+                Crew · {onlineCount}/{participants.length} online
+              </Text>
+            </TouchableOpacity>
+
+            {action ? (
+              <TouchableOpacity
+                accessibilityRole='button'
+                accessibilityState={{ disabled: Boolean(action.isBusy) }}
+                onPress={action.onPress}
+                disabled={action.isBusy}
+                style={[
+                  styles.chip,
+                  styles.actionChip,
+                  { backgroundColor: colors.primary, opacity: action.isBusy ? 0.7 : 1 },
+                ]}
+              >
+                <Text style={[styles.chipText, styles.actionText]}>{action.label}</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </Pressable>
       </View>
 
       <ScrollView
-        className='px-4'
-        style={{ flex: 1, opacity: isExpanded ? 1 : 0 }}
+        style={[styles.scroll, { opacity: isExpanded ? 1 : 0 }]}
         scrollEnabled={isExpanded}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 18 }}
@@ -218,11 +282,11 @@ export function NavigationBottomSheet({
         }}
       >
         <View className='mb-3 flex-row items-center justify-between'>
-          <Text className='text-xs font-semibold' style={{ color: colors.textMuted }}>
-            Participants
+          <Text className='text-sm font-bold' style={{ color: colors.text }} numberOfLines={1}>
+            {rideName}
           </Text>
           <Text className='text-xs' style={{ color: colors.textMuted }}>
-            {participants.length} total
+            {participants.length} riders
           </Text>
         </View>
 
@@ -230,44 +294,38 @@ export function NavigationBottomSheet({
           const isFocused = focusedParticipantId === participant.riderId;
 
           return (
-          <Pressable
-            key={participant.riderId}
-            onPress={() => onParticipantPress?.(participant)}
-            className='flex-row items-center justify-between p-3 rounded-xl mb-2'
-            style={{ backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border }}
-          >
-            <View className='flex-row items-center'>
-              <View
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 5,
-                  backgroundColor: participant.isOnline ? "#22c55e" : colors.textMuted,
-                  marginRight: 10,
-                }}
-              />
-              <Text
-                style={{
-                  color: colors.text,
-                  fontWeight: isFocused ? "700" : "400",
-                }}
-              >
-                {participant.displayName}
-              </Text>
-            </View>
-            <Text
-              className='text-xs'
-              style={{ color: isFocused ? colors.primary : colors.textMuted }}
+            <Pressable
+              key={participant.riderId}
+              accessibilityRole='button'
+              accessibilityLabel={`Show ${participant.displayName} on the map`}
+              onPress={() => onParticipantPress?.(participant)}
+              className='flex-row items-center justify-between p-3 rounded-xl mb-2'
+              style={{ backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border }}
             >
-              {isFocused
-                ? "On map"
-                : participant.role === "captain"
-                  ? "Captain"
-                  : participant.role === "co_captain"
-                    ? "Co-Captain"
-                    : "Rider"}
-            </Text>
-          </Pressable>
+              <View className='flex-row items-center'>
+                <View
+                  style={[
+                    styles.presenceDot,
+                    { backgroundColor: participant.isOnline ? colors.primary : colors.textMuted },
+                  ]}
+                />
+                <Text style={{ color: colors.text, fontWeight: isFocused ? "700" : "400" }}>
+                  {participant.displayName}
+                </Text>
+              </View>
+              <Text
+                className='text-xs'
+                style={{ color: isFocused ? colors.primary : colors.textMuted }}
+              >
+                {isFocused
+                  ? "On map"
+                  : participant.role === "captain"
+                    ? "Captain"
+                    : participant.role === "co_captain"
+                      ? "Co-Captain"
+                      : "Rider"}
+              </Text>
+            </Pressable>
           );
         })}
 
@@ -284,20 +342,104 @@ export function NavigationBottomSheet({
 
         {isHost && canEndRide ? (
           <TouchableOpacity
+            accessibilityRole='button'
             onPress={onEndRide}
             disabled={ending}
             className='rounded-xl items-center py-3 mt-3'
-            style={{
-              backgroundColor: colors.danger,
-              opacity: ending ? 0.7 : 1,
-            }}
+            style={{ backgroundColor: colors.danger, opacity: ending ? 0.7 : 1 }}
           >
-            <Text className='font-bold text-white'>
-              {ending ? "Ending Ride..." : "End Ride"}
-            </Text>
+            <Text className='font-bold text-white'>{ending ? "Ending Ride..." : "End Ride"}</Text>
           </TouchableOpacity>
         ) : null}
       </ScrollView>
     </Animated.View>
   );
 }
+
+const styles = StyleSheet.create({
+  sheet: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 30,
+    elevation: 30,
+    borderTopWidth: 1,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: "hidden",
+  },
+  header: {
+    paddingTop: 10,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+  },
+  handle: {
+    alignSelf: "center",
+    width: 42,
+    height: 5,
+    borderRadius: 999,
+  },
+  tripRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 10,
+  },
+  roundButton: {
+    width: ROUND_BUTTON_SIZE,
+    height: ROUND_BUTTON_SIZE,
+    borderRadius: ROUND_BUTTON_SIZE / 2,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tripText: {
+    flex: 1,
+    alignItems: "center",
+    paddingHorizontal: 10,
+  },
+  duration: {
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  detail: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 12,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 36,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginLeft: 6,
+  },
+  actionChip: {
+    borderWidth: 0,
+  },
+  actionText: {
+    color: "white",
+    marginLeft: 0,
+  },
+  scroll: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  presenceDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 10,
+  },
+});

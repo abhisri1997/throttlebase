@@ -435,6 +435,37 @@ router.get(
 
 /**
  * @swagger
+ * /api/rides/{id}/track:
+ *   get:
+ *     summary: The caller's own travelled GPS track for a ride (confirmed participants)
+ *     description: >
+ *       Built from the caller's live location samples, cleaned of GPS spikes and
+ *       inaccurate fixes. Includes the time each waypoint was reached.
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Ride ID
+ *     responses:
+ *       200:
+ *         description: Session metadata, encoded track polyline with distance and duration, waypoint arrivals
+ *       400:
+ *         description: Invalid ride ID
+ *       403:
+ *         description: Not a confirmed participant
+ *       404:
+ *         description: Ride or live session not found
+ */
+router.get("/:id/track", authenticate, liveSessionController.getTrack);
+
+/**
+ * @swagger
  * /api/rides/{id}/promote:
  *   post:
  *     summary: Promote a rider to co-captain (captain only)

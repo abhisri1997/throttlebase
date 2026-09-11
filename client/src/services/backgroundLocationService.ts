@@ -24,6 +24,28 @@ let _authToken: string | null = null;
 let _foregroundSubscription: ExpoLocation.LocationSubscription | null = null;
 let _heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
+const KMH_PER_MPS = 3.6;
+
+/** Expo reports unknown speed, course or accuracy as null or a negative number. */
+const finiteNonNegative = (value: number | null | undefined): number | undefined =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+
+const toLocationUpdate = (rideId: string, position: ExpoLocation.LocationObject) => {
+  const speedMps = finiteNonNegative(position.coords.speed);
+  const heading = finiteNonNegative(position.coords.heading);
+
+  return {
+    rideId,
+    lon: position.coords.longitude,
+    lat: position.coords.latitude,
+    speed_kmh: speedMps === undefined ? undefined : speedMps * KMH_PER_MPS,
+    // The server accepts [0, 360); some devices report exactly 360 for north.
+    heading_deg: heading === undefined ? undefined : heading % 360,
+    accuracy_m: finiteNonNegative(position.coords.accuracy),
+    captured_at: new Date(position.timestamp).toISOString(),
+  };
+};
+
 // ── Background task definition ──────────────────────────────────────────────
 // Must be called at module scope (top level), not inside a component.
 TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
@@ -46,35 +68,15 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
     liveSessionSocket.connect(_authToken);
   }
 
-  const position = locations[locations.length - 1]; // most recent
-  const speedMs = position.coords.speed;
-  const heading = position.coords.heading;
-  const accuracy = position.coords.accuracy;
-
-  liveSessionSocket.emit("location:update", {
-    rideId: _activeRideId,
-    lon: position.coords.longitude,
-    lat: position.coords.latitude,
-    speed_kmh:
-      typeof speedMs === "number" &&
-      Number.isFinite(speedMs) &&
-      speedMs >= 0
-        ? speedMs * 3.6
-        : undefined,
-    heading_deg:
-      typeof heading === "number" &&
-      Number.isFinite(heading) &&
-      heading >= 0
-        ? heading
-        : undefined,
-    accuracy_m:
-      typeof accuracy === "number" &&
-      Number.isFinite(accuracy) &&
-      accuracy >= 0
-        ? accuracy
-        : undefined,
-    captured_at: new Date(position.timestamp).toISOString(),
-  });
+  // The OS batches fixes while the app is backgrounded. Send all of them, oldest
+  // first, so the ride history keeps the road between batches — the server
+  // decides which ones are worth keeping as track samples.
+  const rideId = _activeRideId;
+  [...locations]
+    .sort((left, right) => left.timestamp - right.timestamp)
+    .forEach((position) => {
+      liveSessionSocket.emit("location:update", toLocationUpdate(rideId, position));
+    });
 });
 
 // ── Foreground tracking (runs while app is active) ──────────────────────────
@@ -99,34 +101,7 @@ const startForegroundTracking = async (): Promise<void> => {
         return;
       }
 
-      const speedMs = position.coords.speed;
-      const heading = position.coords.heading;
-      const accuracy = position.coords.accuracy;
-
-      liveSessionSocket.emit("location:update", {
-        rideId: _activeRideId,
-        lon: position.coords.longitude,
-        lat: position.coords.latitude,
-        speed_kmh:
-          typeof speedMs === "number" &&
-          Number.isFinite(speedMs) &&
-          speedMs >= 0
-            ? speedMs * 3.6
-            : undefined,
-        heading_deg:
-          typeof heading === "number" &&
-          Number.isFinite(heading) &&
-          heading >= 0
-            ? heading
-            : undefined,
-        accuracy_m:
-          typeof accuracy === "number" &&
-          Number.isFinite(accuracy) &&
-          accuracy >= 0
-            ? accuracy
-            : undefined,
-        captured_at: new Date(position.timestamp).toISOString(),
-      });
+      liveSessionSocket.emit("location:update", toLocationUpdate(_activeRideId, position));
     },
   );
 };
