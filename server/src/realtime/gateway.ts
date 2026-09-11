@@ -3,7 +3,7 @@ import { Server, type Socket } from "socket.io";
 import { z } from "zod";
 import { authenticateLiveSocket } from "./auth.js";
 import { buildLiveRoomKey, buildRideSocketKey } from "./session-room.js";
-import { shouldPersistSample, type TrackPoint } from "./sampleThrottle.js";
+import { createSampleThrottle, type TrackPoint } from "./sampleThrottle.js";
 import { query } from "../config/db.js";
 import {
   CreateIncidentSchema,
@@ -50,19 +50,11 @@ const WaypointWithRideSchema = WaypointReachedSchema.extend({
 const isAllowedSessionStatus = (status: string): boolean =>
   status === "starting" || status === "active" || status === "paused";
 
-/** Last persisted track sample per ride and rider, so only meaningful moves are stored. */
-const lastSampleByKey = new Map<string, TrackPoint>();
+/** Decides, per ride and rider, which location updates are stored as track samples. */
+const sampleThrottle = createSampleThrottle();
 
 const emitSocketError = (socket: Socket, message: string, code = 400): void => {
   socket.emit("session:error", { error: message, code });
-};
-
-const clearSamplesForRider = (riderId: string): void => {
-  for (const key of lastSampleByKey.keys()) {
-    if (key.endsWith(`:${riderId}`)) {
-      lastSampleByKey.delete(key);
-    }
-  }
 };
 
 let _liveNamespace: ReturnType<InstanceType<typeof Server>["of"]> | null =
@@ -271,29 +263,35 @@ export const createLiveGateway = (httpServer: HttpServer) => {
         const sampleKey = buildRideSocketKey(payload.rideId, rider.riderId);
         const capturedAtMs = payload.captured_at ? Date.parse(payload.captured_at) : Date.now();
         const point: TrackPoint = { lat: payload.lat, lng: payload.lon, capturedAtMs };
-        const persistSample = shouldPersistSample(lastSampleByKey.get(sampleKey), point);
+        // Reserve the baseline before awaiting anything: this handler runs
+        // concurrently for every update in a batch, and each must see the
+        // decisions of the ones before it.
+        const reservation = sampleThrottle.reserve(sampleKey, point);
 
-        const location = await updateLivePresenceLocation(
-          payload.rideId,
-          rider.riderId,
-          {
-            lon: payload.lon,
-            lat: payload.lat,
-            speed_kmh: payload.speed_kmh,
-            heading_deg: payload.heading_deg,
-            accuracy_m: payload.accuracy_m,
-            captured_at: payload.captured_at,
-          },
-          { persistSample },
-        );
-
-        if (!location) {
-          return;
+        let location: Awaited<ReturnType<typeof updateLivePresenceLocation>>;
+        try {
+          location = await updateLivePresenceLocation(
+            payload.rideId,
+            rider.riderId,
+            {
+              lon: payload.lon,
+              lat: payload.lat,
+              speed_kmh: payload.speed_kmh,
+              heading_deg: payload.heading_deg,
+              accuracy_m: payload.accuracy_m,
+              captured_at: payload.captured_at,
+            },
+            { persistSample: reservation !== null },
+          );
+        } catch (error) {
+          reservation?.release();
+          throw error;
         }
 
-        // Only a fix that was actually stored moves the sampling baseline.
-        if (persistSample) {
-          lastSampleByKey.set(sampleKey, point);
+        if (!location) {
+          // Dropped as stale or out of order, so nothing was stored.
+          reservation?.release();
+          return;
         }
 
         liveNamespace
@@ -390,7 +388,7 @@ export const createLiveGateway = (httpServer: HttpServer) => {
         });
       }
 
-      clearSamplesForRider(rider.riderId);
+      sampleThrottle.clearRider(rider.riderId);
     });
   });
 
