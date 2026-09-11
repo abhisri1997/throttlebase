@@ -79,6 +79,12 @@ export type LiveSocketClientEvents = {
     accuracy_m?: number;
     captured_at?: string;
   }) => void;
+  "waypoint:reached": (payload: {
+    rideId: string;
+    waypoint_id: string;
+    waypoint_kind: "start" | "stop" | "destination";
+    reached_at: string;
+  }) => void;
   "incident:create": (payload: {
     rideId: string;
     severity: "low" | "medium" | "high" | "critical";

@@ -31,6 +31,13 @@ export const LiveLocationUpdateSchema = z.object({
   captured_at: z.string().datetime().optional(),
 });
 
+/** A rider reached a waypoint of the ride — the start, an approved stop, or the destination. */
+export const WaypointReachedSchema = z.object({
+  waypoint_id: z.string().min(1).max(64),
+  waypoint_kind: z.enum(["start", "stop", "destination"]),
+  reached_at: z.string().datetime(),
+});
+
 export const StartLiveSessionSchema = z.object({}).optional();
 
 export const EndLiveSessionSchema = z.object({
@@ -60,6 +67,7 @@ export type SessionStatus = z.infer<typeof SessionStatusSchema>;
 export type IncidentSeverity = z.infer<typeof IncidentSeveritySchema>;
 export type IncidentKind = z.infer<typeof IncidentKindSchema>;
 export type LiveLocationUpdateInput = z.infer<typeof LiveLocationUpdateSchema>;
+export type WaypointReachedInput = z.infer<typeof WaypointReachedSchema>;
 export type StartLiveSessionInput = z.infer<typeof StartLiveSessionSchema>;
 export type EndLiveSessionInput = z.infer<typeof EndLiveSessionSchema>;
 export type CreateIncidentInput = z.infer<typeof CreateIncidentSchema>;

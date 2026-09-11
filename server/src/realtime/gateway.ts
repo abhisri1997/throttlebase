@@ -3,11 +3,14 @@ import { Server, type Socket } from "socket.io";
 import { z } from "zod";
 import { authenticateLiveSocket } from "./auth.js";
 import { buildLiveRoomKey, buildRideSocketKey } from "./session-room.js";
+import { shouldPersistSample, type TrackPoint } from "./sampleThrottle.js";
 import { query } from "../config/db.js";
 import {
   CreateIncidentSchema,
   LiveLocationUpdateSchema,
+  WaypointReachedSchema,
 } from "../schemas/live-session.schemas.js";
+import { recordWaypointReached } from "../services/ride-track.service.js";
 import {
   LiveSessionError,
   createLiveIncident,
@@ -40,25 +43,24 @@ const LocationWithRideSchema = LiveLocationUpdateSchema.extend({
   rideId: z.string().uuid(),
 });
 
+const WaypointWithRideSchema = WaypointReachedSchema.extend({
+  rideId: z.string().uuid(),
+});
+
 const isAllowedSessionStatus = (status: string): boolean =>
   status === "starting" || status === "active" || status === "paused";
 
-const locationSequence = new Map<string, number>();
-
-const nextShouldPersistSample = (key: string): boolean => {
-  const next = (locationSequence.get(key) ?? 0) + 1;
-  locationSequence.set(key, next);
-  return next % 3 === 0;
-};
+/** Last persisted track sample per ride and rider, so only meaningful moves are stored. */
+const lastSampleByKey = new Map<string, TrackPoint>();
 
 const emitSocketError = (socket: Socket, message: string, code = 400): void => {
   socket.emit("session:error", { error: message, code });
 };
 
-const clearLocationSequenceForRider = (riderId: string): void => {
-  for (const key of locationSequence.keys()) {
+const clearSamplesForRider = (riderId: string): void => {
+  for (const key of lastSampleByKey.keys()) {
     if (key.endsWith(`:${riderId}`)) {
-      locationSequence.delete(key);
+      lastSampleByKey.delete(key);
     }
   }
 };
@@ -266,7 +268,11 @@ export const createLiveGateway = (httpServer: HttpServer) => {
           return;
         }
 
-        const sequenceKey = buildRideSocketKey(payload.rideId, rider.riderId);
+        const sampleKey = buildRideSocketKey(payload.rideId, rider.riderId);
+        const capturedAtMs = payload.captured_at ? Date.parse(payload.captured_at) : Date.now();
+        const point: TrackPoint = { lat: payload.lat, lng: payload.lon, capturedAtMs };
+        const persistSample = shouldPersistSample(lastSampleByKey.get(sampleKey), point);
+
         const location = await updateLivePresenceLocation(
           payload.rideId,
           rider.riderId,
@@ -278,11 +284,16 @@ export const createLiveGateway = (httpServer: HttpServer) => {
             accuracy_m: payload.accuracy_m,
             captured_at: payload.captured_at,
           },
-          { persistSample: nextShouldPersistSample(sequenceKey) },
+          { persistSample },
         );
 
         if (!location) {
           return;
+        }
+
+        // Only a fix that was actually stored moves the sampling baseline.
+        if (persistSample) {
+          lastSampleByKey.set(sampleKey, point);
         }
 
         liveNamespace
@@ -300,6 +311,30 @@ export const createLiveGateway = (httpServer: HttpServer) => {
         }
 
         console.error("location:update error:", error);
+        emitSocketError(socket, "Internal server error", 500);
+      }
+    });
+
+    socket.on("waypoint:reached", async (rawPayload) => {
+      try {
+        const payload = WaypointWithRideSchema.parse(rawPayload);
+        await recordWaypointReached(payload.rideId, rider.riderId, {
+          waypoint_id: payload.waypoint_id,
+          waypoint_kind: payload.waypoint_kind,
+          reached_at: payload.reached_at,
+        });
+      } catch (error) {
+        if (error instanceof LiveSessionError) {
+          emitSocketError(socket, error.message, error.statusCode);
+          return;
+        }
+
+        if (error instanceof z.ZodError) {
+          emitSocketError(socket, "Invalid waypoint:reached payload", 400);
+          return;
+        }
+
+        console.error("waypoint:reached error:", error);
         emitSocketError(socket, "Internal server error", 500);
       }
     });
@@ -355,7 +390,7 @@ export const createLiveGateway = (httpServer: HttpServer) => {
         });
       }
 
-      clearLocationSequenceForRider(rider.riderId);
+      clearSamplesForRider(rider.riderId);
     });
   });
 

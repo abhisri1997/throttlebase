@@ -50,6 +50,12 @@ type LiveSessionState = {
     accuracy_m?: number;
     captured_at?: string;
   }) => void;
+  /** Records a waypoint arrival for the ride history. False when not in the room yet. */
+  reportWaypointReached: (input: {
+    waypoint_id: string;
+    waypoint_kind: "start" | "stop" | "destination";
+    reached_at: string;
+  }) => boolean;
   reset: () => void;
 };
 
@@ -324,6 +330,19 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
       rideId,
       ...input,
     });
+  },
+
+  reportWaypointReached: (input) => {
+    const { rideId, inRoom } = get();
+    if (!rideId || !inRoom) {
+      return false;
+    }
+
+    liveSessionSocket.emit("waypoint:reached", {
+      rideId,
+      ...input,
+    });
+    return true;
   },
 
   reset: () => {

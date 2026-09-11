@@ -1,28 +1,62 @@
-import type { LatLng, NavigationRoute, NavigationStep } from "../types/navigation";
+import type {
+  LatLng,
+  NavigationRoute,
+  NavigationStep,
+  RouteLeg,
+} from "../types/navigation";
+import {
+  angleDeltaDegrees,
+  bearingDegrees,
+  decodePolyline,
+  haversineMeters,
+  projectOntoPolyline,
+} from "../core/geometry";
+import { parseInstructionHtml } from "../core/instructionText";
+
+// Existing callers import this from here; the implementation lives in core/geometry.
+export { haversineMeters };
 
 const ROUTE_CACHE_TTL_MS = 15000;
+const ROUTE_CACHE_MAX_ENTRIES = 50;
+/**
+ * Point budget per leg after simplification. Legs are simplified one at a time
+ * so their boundaries — the stops — survive by construction.
+ */
+const LEG_MAX_POINTS = 700;
+const LEG_MIN_POINT_SPACING_METERS = 12;
+/** Average speed assumed for straight-line fallback legs when Directions is unavailable. */
+const FALLBACK_SPEED_KMH = 28;
+const DIRECTIONS_URL = "https://maps.googleapis.com/maps/api/directions/json";
+
 export const DEFAULT_ROUTE_DEVIATION_THRESHOLD_METERS = 60;
 export const DEFAULT_ROUTE_DEVIATION_GRACE_MS = 15000;
 export const DEFAULT_ROUTE_REROUTE_COOLDOWN_MS = 25000;
-export const DEFAULT_ROUTE_MIN_MOVEMENT_METERS = 40;
 
-const routeCache = new Map<
-  string,
-  { route: NavigationRoute; cachedAt: number }
->();
-
+const routeCache = new Map<string, { route: NavigationRoute; cachedAt: number }>();
 const inFlightRouteRequests = new Map<string, Promise<NavigationRoute>>();
+let directionsRequestCount = 0;
 
-const stripHtml = (value: string): string =>
-  value
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+/**
+ * Directions requests actually sent this session. Every one is billed, so this
+ * is how fetch frequency is verified during development.
+ */
+export const getDirectionsRequestCount = (): number => directionsRequestCount;
 
-const toRad = (value: number): number => (value * Math.PI) / 180;
-
-const clamp = (value: number, min: number, max: number): number =>
-  Math.min(max, Math.max(min, value));
+interface RouteRequest {
+  origin: LatLng;
+  destination: LatLng;
+  /** Stopovers. Each one adds a leg to the result. */
+  waypoints?: LatLng[];
+  apiKey?: string;
+  /** Pick the fastest of Google's alternatives. Only possible without stopovers. */
+  preferFastest?: boolean;
+  /**
+   * Ask for traffic-aware durations. Google bills this at the Directions
+   * Advanced rate and only returns traffic for requests without stopovers, so
+   * it is off unless a caller needs a live ETA.
+   */
+  trafficAware?: boolean;
+}
 
 const pointsEqual = (left: LatLng, right: LatLng): boolean => {
   const tolerance = 0.00001;
@@ -35,19 +69,16 @@ const pointsEqual = (left: LatLng, right: LatLng): boolean => {
 const serializePoint = (point: LatLng): string =>
   `${point.latitude.toFixed(5)},${point.longitude.toFixed(5)}`;
 
-const buildRouteRequestKey = (input: {
-  origin: LatLng;
-  destination: LatLng;
-  waypoints?: LatLng[];
-  apiKey?: string;
-  preferFastest?: boolean;
-}): string =>
+const toRequestParam = (point: LatLng): string => `${point.latitude},${point.longitude}`;
+
+const buildRouteRequestKey = (input: RouteRequest): string =>
   [
     serializePoint(input.origin),
     ...(input.waypoints || []).map(serializePoint),
     serializePoint(input.destination),
     input.apiKey ? "directions" : "fallback",
     input.preferFastest === false ? "first-route" : "fastest-route",
+    input.trafficAware ? "traffic" : "no-traffic",
   ].join("|");
 
 const getCachedRoute = (key: string): NavigationRoute | null => {
@@ -65,120 +96,36 @@ const getCachedRoute = (key: string): NavigationRoute | null => {
 };
 
 const setCachedRoute = (key: string, route: NavigationRoute): NavigationRoute => {
+  // Live navigation keys on a moving GPS origin, so entries rarely repeat. Sweep
+  // before the map can grow for the length of a ride.
+  if (routeCache.size >= ROUTE_CACHE_MAX_ENTRIES) {
+    const now = Date.now();
+    for (const [cachedKey, entry] of routeCache) {
+      if (now - entry.cachedAt > ROUTE_CACHE_TTL_MS) {
+        routeCache.delete(cachedKey);
+      }
+    }
+
+    if (routeCache.size >= ROUTE_CACHE_MAX_ENTRIES) {
+      const oldestKey = routeCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        routeCache.delete(oldestKey);
+      }
+    }
+  }
+
   routeCache.set(key, { route, cachedAt: Date.now() });
   return route;
 };
 
-const bearingDegrees = (from: LatLng, to: LatLng): number => {
-  const lat1 = toRad(from.latitude);
-  const lat2 = toRad(to.latitude);
-  const dLon = toRad(to.longitude - from.longitude);
-
-  const y = Math.sin(dLon) * Math.cos(lat2);
-  const x =
-    Math.cos(lat1) * Math.sin(lat2) -
-    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-
-  const bearing = (Math.atan2(y, x) * 180) / Math.PI;
-  return (bearing + 360) % 360;
-};
-
-const metersPerDegreeLatitude = 111111;
-
-const toLocalMeters = (point: LatLng, origin: LatLng): { x: number; y: number } => ({
-  x:
-    (point.longitude - origin.longitude) *
-    metersPerDegreeLatitude *
-    Math.cos(toRad(origin.latitude)),
-  y: (point.latitude - origin.latitude) * metersPerDegreeLatitude,
-});
-
-const distanceToSegmentMeters = (
-  point: LatLng,
-  start: LatLng,
-  end: LatLng,
-): number => {
-  const segment = toLocalMeters(end, start);
-  const relative = toLocalMeters(point, start);
-  const segmentLengthSquared = segment.x * segment.x + segment.y * segment.y;
-
-  if (segmentLengthSquared <= 0) {
-    return haversineMeters(point, start);
-  }
-
-  const t = clamp(
-    (relative.x * segment.x + relative.y * segment.y) / segmentLengthSquared,
-    0,
-    1,
-  );
-
-  const closest = {
-    x: segment.x * t,
-    y: segment.y * t,
-  };
-
-  return Math.hypot(relative.x - closest.x, relative.y - closest.y);
-};
-
-export const distanceToPolylineMeters = (
-  point: LatLng,
-  polyline: LatLng[],
-): number => {
-  if (polyline.length === 0) {
-    return Infinity;
-  }
-
-  if (polyline.length === 1) {
-    return haversineMeters(point, polyline[0]);
-  }
-
-  let bestDistance = Infinity;
-
-  for (let index = 0; index < polyline.length - 1; index += 1) {
-    const distance = distanceToSegmentMeters(point, polyline[index], polyline[index + 1]);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-    }
-  }
-
-  return bestDistance;
-};
+export const distanceToPolylineMeters = (point: LatLng, polyline: LatLng[]): number =>
+  projectOntoPolyline(point, polyline)?.offsetMeters ?? Infinity;
 
 export const isRouteDeviation = (
   point: LatLng,
   polyline: LatLng[],
   thresholdMeters = DEFAULT_ROUTE_DEVIATION_THRESHOLD_METERS,
 ): boolean => distanceToPolylineMeters(point, polyline) >= thresholdMeters;
-
-export const getRouteProgressIndex = (
-  point: LatLng,
-  polyline: LatLng[],
-): number => {
-  if (polyline.length <= 1) {
-    return 0;
-  }
-
-  let nearestIndex = 0;
-  let nearestDistance = Infinity;
-
-  for (let index = 0; index < polyline.length; index += 1) {
-    const distance = haversineMeters(point, polyline[index]);
-    if (distance < nearestDistance) {
-      nearestDistance = distance;
-      nearestIndex = index;
-    }
-  }
-
-  return nearestIndex;
-};
-
-const angleDeltaDegrees = (left: number, right: number): number => {
-  let delta = Math.abs(left - right);
-  if (delta > 180) {
-    delta = 360 - delta;
-  }
-  return delta;
-};
 
 const thinByDistanceAndTurns = (
   points: LatLng[],
@@ -275,126 +222,64 @@ export const dedupeConsecutivePoints = (points: LatLng[]): LatLng[] => {
   return deduped;
 };
 
-export type CanonicalRideRouteInput = {
-  origin: LatLng;
-  destination: LatLng;
-  waypoints: LatLng[];
-  orderedPoints: LatLng[];
-};
+const sumBy = <T,>(items: readonly T[], pick: (item: T) => number): number =>
+  items.reduce((sum, item) => sum + pick(item), 0);
 
-export const buildCanonicalRideRouteInput = (input: {
-  origin?: LatLng | null;
-  start?: LatLng | null;
-  stops?: LatLng[];
-  destination?: LatLng | null;
-}): CanonicalRideRouteInput | null => {
-  const effectiveOrigin = input.origin || input.start || null;
-  const chain = [
-    effectiveOrigin,
-    input.start || null,
-    ...(input.stops || []),
-    input.destination || null,
-  ].filter((point): point is LatLng => Boolean(point));
-
-  const orderedPoints = dedupeConsecutivePoints(chain);
-  if (orderedPoints.length < 2) {
-    return null;
-  }
-
-  return {
-    origin: orderedPoints[0],
-    destination: orderedPoints[orderedPoints.length - 1],
-    waypoints: orderedPoints.slice(1, -1),
-    orderedPoints,
-  };
-};
-
-export const haversineMeters = (from: LatLng, to: LatLng): number => {
-  const earthRadiusMeters = 6371000;
-  const dLat = toRad(to.latitude - from.latitude);
-  const dLon = toRad(to.longitude - from.longitude);
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(from.latitude)) *
-    Math.cos(toRad(to.latitude)) *
-    Math.sin(dLon / 2) *
-    Math.sin(dLon / 2);
-
-  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-};
-
-const decodePolyline = (encoded: string): LatLng[] => {
-  const points: LatLng[] = [];
-  let index = 0;
-  let latitude = 0;
-  let longitude = 0;
-
-  while (index < encoded.length) {
-    let shift = 0;
-    let result = 0;
-    let byte = 0;
-
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
-
-    const deltaLat = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
-    latitude += deltaLat;
-
-    shift = 0;
-    result = 0;
-
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
-
-    const deltaLon = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
-    longitude += deltaLon;
-
-    points.push({
-      latitude: latitude / 1e5,
-      longitude: longitude / 1e5,
-    });
-  }
-
-  return points;
-};
-
-const buildFallbackRoute = (points: LatLng[]): NavigationRoute => {
-  const steps: NavigationStep[] = [];
+/** Straight lines between the requested points, one leg per pair. Used when Directions is unavailable. */
+const buildFallbackRoute = (points: readonly LatLng[], errorStatus?: string): NavigationRoute => {
+  const legs: RouteLeg[] = [];
 
   for (let i = 0; i < points.length - 1; i += 1) {
     const start = points[i];
     const end = points[i + 1];
     const distanceMeters = haversineMeters(start, end);
+    const durationSeconds = Math.max(
+      30,
+      Math.round((distanceMeters / 1000 / FALLBACK_SPEED_KMH) * 3600),
+    );
 
-    steps.push({
-      instruction: i === points.length - 2 ? "Arrive at destination" : "Continue on route",
-      distanceMeters,
-      durationSeconds: Math.max(30, Math.round((distanceMeters / 1000 / 28) * 3600)),
+    legs.push({
+      index: i,
       start,
       end,
+      polyline: [start, end],
+      steps: [
+        {
+          instruction:
+            i === points.length - 2 ? "Arrive at destination" : "Continue to the next stop",
+          distanceMeters,
+          durationSeconds,
+          start,
+          end,
+          legIndex: i,
+        },
+      ],
+      distanceMeters,
+      durationSeconds,
     });
   }
 
+  const totalDurationSeconds = sumBy(legs, (leg) => leg.durationSeconds);
+
   return {
     source: "fallback",
-    polyline: points,
-    steps,
-    totalDistanceMeters: steps.reduce((sum, step) => sum + step.distanceMeters, 0),
-    totalDurationSeconds: steps.reduce((sum, step) => sum + step.durationSeconds, 0),
-    estimatedTrafficDurationSeconds: steps.reduce((sum, step) => sum + step.durationSeconds, 0),
+    ...(errorStatus ? { errorStatus } : {}),
+    legs,
+    polyline: [...points],
+    steps: legs.flatMap((leg) => leg.steps),
+    totalDistanceMeters: sumBy(legs, (leg) => leg.distanceMeters),
+    totalDurationSeconds,
+    estimatedTrafficDurationSeconds: totalDurationSeconds,
     selectedAlternativeIndex: 0,
     alternativeCount: 1,
   };
 };
 
+type DirectionsLocation = { lat: number; lng: number };
+
 type DirectionsLeg = {
+  start_location?: DirectionsLocation;
+  end_location?: DirectionsLocation;
   distance?: { value: number };
   duration?: { value: number };
   duration_in_traffic?: { value: number };
@@ -402,8 +287,8 @@ type DirectionsLeg = {
     html_instructions?: string;
     distance?: { value: number };
     duration?: { value: number };
-    start_location?: { lat: number; lng: number };
-    end_location?: { lat: number; lng: number };
+    start_location?: DirectionsLocation;
+    end_location?: DirectionsLocation;
     polyline?: { points: string };
     maneuver?: string;
   }>;
@@ -411,100 +296,114 @@ type DirectionsLeg = {
 
 type DirectionsResponse = {
   status: string;
+  error_message?: string;
   routes?: Array<{
     overview_polyline?: { points: string };
     legs?: DirectionsLeg[];
   }>;
 };
 
+const toLatLng = (location?: DirectionsLocation): LatLng | null =>
+  location ? { latitude: location.lat, longitude: location.lng } : null;
+
+const buildLeg = (
+  leg: DirectionsLeg,
+  legIndex: number,
+  fallbackStart: LatLng,
+  fallbackEnd: LatLng,
+): RouteLeg => {
+  const rawPoints: LatLng[] = [];
+  const steps: NavigationStep[] = [];
+
+  for (const step of leg.steps || []) {
+    if (step.polyline?.points) {
+      rawPoints.push(...decodePolyline(step.polyline.points));
+    }
+
+    const start = toLatLng(step.start_location);
+    const end = toLatLng(step.end_location);
+    if (!start || !end) {
+      continue;
+    }
+
+    const parsed = parseInstructionHtml(step.html_instructions);
+    steps.push({
+      instruction: parsed.primary,
+      roadName: parsed.roadName,
+      note: parsed.note,
+      distanceMeters: step.distance?.value ?? haversineMeters(start, end),
+      durationSeconds: step.duration?.value ?? 30,
+      start,
+      end,
+      maneuver: step.maneuver,
+      legIndex,
+    });
+  }
+
+  const legStart = toLatLng(leg.start_location) ?? steps[0]?.start ?? fallbackStart;
+  const legEnd = toLatLng(leg.end_location) ?? steps[steps.length - 1]?.end ?? fallbackEnd;
+
+  // Consecutive step polylines share their joint point. Deduping first stops
+  // the duplicate reading as a zero-length "turn" that thinning would keep.
+  const points = dedupeConsecutivePoints(rawPoints.length >= 2 ? rawPoints : [legStart, legEnd]);
+
+  return {
+    index: legIndex,
+    start: legStart,
+    end: legEnd,
+    polyline: simplifyPolyline(points, LEG_MIN_POINT_SPACING_METERS, LEG_MAX_POINTS),
+    steps,
+    distanceMeters: leg.distance?.value ?? sumBy(steps, (step) => step.distanceMeters),
+    durationSeconds: leg.duration?.value ?? sumBy(steps, (step) => step.durationSeconds),
+    ...(leg.duration_in_traffic
+      ? { durationInTrafficSeconds: leg.duration_in_traffic.value }
+      : {}),
+  };
+};
+
 const buildDirectionsRoute = (
   route: NonNullable<DirectionsResponse["routes"]>[number],
   routeIndex: number,
-  fallbackPoints: LatLng[],
+  requestPoints: readonly LatLng[],
 ): NavigationRoute | null => {
-  const stepPolylinePoints: LatLng[] = [];
+  const firstPoint = requestPoints[0];
+  const lastPoint = requestPoints[requestPoints.length - 1];
 
-  for (const leg of route.legs || []) {
-    for (const step of leg.steps || []) {
-      if (step.polyline?.points) {
-        stepPolylinePoints.push(...decodePolyline(step.polyline.points));
-      }
-    }
-  }
-
-  const rawDecoded =
-    stepPolylinePoints.length >= 2
-      ? stepPolylinePoints
-      : route.overview_polyline?.points
-        ? decodePolyline(route.overview_polyline.points)
-        : fallbackPoints;
-
-  const decoded = simplifyPolyline(rawDecoded);
-
-  if (__DEV__) {
-    console.log(
-      "[navigation-route] route",
-      routeIndex,
-      "raw pts:",
-      rawDecoded.length,
-      "simplified pts:",
-      decoded.length,
-    );
-  }
-
-  const steps: NavigationStep[] = [];
-  for (const leg of route.legs || []) {
-    for (const step of leg.steps || []) {
-      const start = step.start_location
-        ? { latitude: step.start_location.lat, longitude: step.start_location.lng }
-        : null;
-      const end = step.end_location
-        ? { latitude: step.end_location.lat, longitude: step.end_location.lng }
-        : null;
-
-      if (!start || !end) {
-        continue;
-      }
-
-      steps.push({
-        instruction: stripHtml(step.html_instructions || "Continue"),
-        distanceMeters: step.distance?.value ?? haversineMeters(start, end),
-        durationSeconds: step.duration?.value ?? 30,
-        start,
-        end,
-        maneuver: step.maneuver,
-      });
-    }
-  }
-
-  if (steps.length === 0) {
-    return decoded.length > 1 ? buildFallbackRoute(decoded) : null;
-  }
-
-  const totalDistanceMeters = (route.legs || []).reduce(
-    (sum, leg) => sum + (leg.distance?.value || 0),
-    0,
+  const legs = (route.legs || []).map((leg, index) =>
+    buildLeg(
+      leg,
+      index,
+      requestPoints[index] ?? firstPoint,
+      requestPoints[index + 1] ?? lastPoint,
+    ),
   );
-  const totalDurationSeconds = (route.legs || []).reduce(
-    (sum, leg) => sum + (leg.duration?.value || 0),
-    0,
-  );
-  const estimatedTrafficDurationSeconds = (route.legs || []).reduce(
-    (sum, leg) => sum + (leg.duration_in_traffic?.value ?? leg.duration?.value ?? 0),
-    0,
-  );
+  const steps = legs.flatMap((leg) => leg.steps);
+
+  if (legs.length === 0 || steps.length === 0) {
+    return null;
+  }
+
+  const hasTraffic = legs.every((leg) => leg.durationInTrafficSeconds !== undefined);
 
   return {
     source: "directions",
-    polyline: decoded,
+    legs,
+    polyline: dedupeConsecutivePoints(legs.flatMap((leg) => leg.polyline)),
     // The overview polyline is already simplified by Google, which makes it the
-    // right corridor for search-along-route — the concatenated per-step
-    // polyline used for `decoded` is far denser than that needs.
+    // right corridor for search-along-route — the per-step polylines used for
+    // the legs are far denser than that needs.
     encodedPolyline: route.overview_polyline?.points,
     steps,
-    totalDistanceMeters,
-    totalDurationSeconds,
-    estimatedTrafficDurationSeconds,
+    totalDistanceMeters: sumBy(legs, (leg) => leg.distanceMeters),
+    totalDurationSeconds: sumBy(legs, (leg) => leg.durationSeconds),
+    ...(hasTraffic
+      ? {
+          estimatedTrafficDurationSeconds: sumBy(
+            legs,
+            (leg) => leg.durationInTrafficSeconds ?? leg.durationSeconds,
+          ),
+        }
+      : {}),
     selectedAlternativeIndex: routeIndex,
     alternativeCount: 1,
   };
@@ -527,13 +426,11 @@ const selectFastestRoute = (routes: NavigationRoute[]): NavigationRoute | null =
   })[0];
 };
 
-export const fetchNavigationRoute = async (input: {
-  origin: LatLng;
-  destination: LatLng;
-  waypoints?: LatLng[];
-  apiKey?: string;
-  preferFastest?: boolean;
-}): Promise<NavigationRoute> => {
+/**
+ * Fetches a route from Google Directions. Never rejects: any failure resolves
+ * to a straight-line fallback whose `errorStatus` says why.
+ */
+export const fetchNavigationRoute = async (input: RouteRequest): Promise<NavigationRoute> => {
   const requestKey = buildRouteRequestKey(input);
   const cachedRoute = getCachedRoute(requestKey);
   if (cachedRoute) {
@@ -546,50 +443,84 @@ export const fetchNavigationRoute = async (input: {
   }
 
   const requestPromise = (async (): Promise<NavigationRoute> => {
-    const fallbackPoints = dedupeConsecutivePoints([
+    const waypoints = input.waypoints || [];
+    const requestPoints = dedupeConsecutivePoints([
       input.origin,
-      ...(input.waypoints || []),
+      ...waypoints,
       input.destination,
     ]);
 
     if (!input.apiKey) {
-      return setCachedRoute(requestKey, buildFallbackRoute(fallbackPoints));
+      return setCachedRoute(requestKey, buildFallbackRoute(requestPoints, "NO_API_KEY"));
     }
 
-    const origin = `${input.origin.latitude},${input.origin.longitude}`;
-    const destination = `${input.destination.latitude},${input.destination.longitude}`;
-    const waypointParam = (input.waypoints || [])
-      .map((point) => `${point.latitude},${point.longitude}`)
-      .join("|");
-
+    const hasStopovers = waypoints.length > 0;
     const params = new URLSearchParams({
-      origin,
-      destination,
+      origin: toRequestParam(input.origin),
+      destination: toRequestParam(input.destination),
       mode: "driving",
-      departure_time: "now",
       key: input.apiKey,
     });
 
-    if (waypointParam) {
-      params.set("waypoints", waypointParam);
+    if (hasStopovers) {
+      params.set("waypoints", waypoints.map(toRequestParam).join("|"));
     }
 
-    if (input.preferFastest !== false) {
+    // Google returns traffic and alternatives only for requests without
+    // stopovers, yet still bills `departure_time` at the Directions Advanced
+    // rate. Only ask where the answer can actually come back.
+    if (!hasStopovers && input.trafficAware) {
+      params.set("departure_time", "now");
+    }
+
+    if (!hasStopovers && input.preferFastest !== false) {
       params.set("alternatives", "true");
     }
 
-    const response = await fetch(
-      `https://maps.googleapis.com/maps/api/directions/json?${params.toString()}`,
-    );
+    let payload: DirectionsResponse;
+    try {
+      directionsRequestCount += 1;
+      if (__DEV__) {
+        console.log(
+          "[navigation-route] directions request",
+          directionsRequestCount,
+          hasStopovers ? `${waypoints.length} stopovers` : "direct",
+          input.trafficAware && !hasStopovers ? "traffic" : "no traffic",
+        );
+      }
 
-    const payload = (await response.json()) as DirectionsResponse;
+      const response = await fetch(`${DIRECTIONS_URL}?${params.toString()}`);
+      if (!response.ok) {
+        return setCachedRoute(
+          requestKey,
+          buildFallbackRoute(requestPoints, `HTTP_${response.status}`),
+        );
+      }
 
-    if (!response.ok || payload.status !== "OK" || !payload.routes?.length) {
-      return setCachedRoute(requestKey, buildFallbackRoute(fallbackPoints));
+      payload = (await response.json()) as DirectionsResponse;
+    } catch (error) {
+      if (__DEV__) {
+        console.warn("[navigation-route] directions request failed", error);
+      }
+      return setCachedRoute(requestKey, buildFallbackRoute(requestPoints, "NETWORK_ERROR"));
+    }
+
+    if (payload.status !== "OK" || !payload.routes?.length) {
+      if (__DEV__) {
+        console.warn(
+          "[navigation-route] directions status",
+          payload.status,
+          payload.error_message ?? "",
+        );
+      }
+      return setCachedRoute(
+        requestKey,
+        buildFallbackRoute(requestPoints, payload.status || "UNKNOWN_STATUS"),
+      );
     }
 
     const candidates = payload.routes
-      .map((route, index) => buildDirectionsRoute(route, index, fallbackPoints))
+      .map((route, index) => buildDirectionsRoute(route, index, requestPoints))
       .filter((route): route is NavigationRoute => Boolean(route));
 
     const selectedRoute =
@@ -598,7 +529,7 @@ export const fetchNavigationRoute = async (input: {
         : selectFastestRoute(candidates) ?? candidates[0];
 
     if (!selectedRoute) {
-      return setCachedRoute(requestKey, buildFallbackRoute(fallbackPoints));
+      return setCachedRoute(requestKey, buildFallbackRoute(requestPoints, "NO_STEPS"));
     }
 
     return setCachedRoute(requestKey, {
@@ -615,3 +546,49 @@ export const fetchNavigationRoute = async (input: {
     inFlightRouteRequests.delete(requestKey);
   }
 };
+
+/**
+ * The ride as planned — start → stops → destination, one leg per stop. Fetched
+ * once per plan. No traffic: it would bill the Advanced rate, and Google
+ * returns none for requests with stopovers anyway.
+ */
+export const fetchPlannedRideRoute = (
+  points: readonly LatLng[],
+  apiKey?: string,
+): Promise<NavigationRoute> => {
+  const origin = points[0];
+  const destination = points[points.length - 1];
+
+  if (points.length < 2 || !origin || !destination) {
+    return Promise.reject(
+      new Error("A planned route needs at least a start and a destination."),
+    );
+  }
+
+  return fetchNavigationRoute({
+    origin,
+    destination,
+    waypoints: points.slice(1, -1),
+    apiKey,
+    preferFastest: false,
+    trafficAware: false,
+  });
+};
+
+/**
+ * The leg being ridden, from the rider's position to the next waypoint. No
+ * stopovers, so traffic-aware ETA and the fastest of Google's alternatives both
+ * actually work.
+ */
+export const fetchLiveLeg = (
+  origin: LatLng,
+  destination: LatLng,
+  apiKey?: string,
+): Promise<NavigationRoute> =>
+  fetchNavigationRoute({
+    origin,
+    destination,
+    apiKey,
+    preferFastest: true,
+    trafficAware: true,
+  });

@@ -1,4 +1,6 @@
 import type { Request, Response } from "express";
+import { z } from "zod";
+import { getRiderTrack } from "../services/ride-track.service.js";
 import {
   CreateIncidentSchema,
   EndLiveSessionSchema,
@@ -24,6 +26,8 @@ interface RiderPayload {
 }
 
 const rid = (req: Request) => (req.rider as unknown as RiderPayload).riderId;
+
+const RideIdSchema = z.string().uuid();
 
 const handleLiveSessionError = (res: Response, error: any, context: string) => {
   if (error instanceof LiveSessionError) {
@@ -192,5 +196,14 @@ export const getReplay = async (
     res.json(result);
   } catch (error: any) {
     handleLiveSessionError(res, error, "Error fetching live session replay");
+  }
+};
+
+export const getTrack = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const rideId = RideIdSchema.parse(req.params.id);
+    res.json(await getRiderTrack(rideId, rid(req)));
+  } catch (error: any) {
+    handleLiveSessionError(res, error, "Error fetching rider track");
   }
 };
