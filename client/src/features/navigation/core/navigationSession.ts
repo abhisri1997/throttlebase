@@ -12,9 +12,9 @@ import type { LatLng } from "../types/navigation";
 import { haversineMeters } from "./geometry";
 import { DESTINATION_WAYPOINT_ID, type TripWaypoint } from "./tripPlan";
 
-export const MIN_ARRIVAL_RADIUS_METERS = 60;
+export const MIN_ARRIVAL_RADIUS_METERS = 40;
 export const MAX_ARRIVAL_RADIUS_METERS = 120;
-/** A fix accurate to ±40 m should not need to land within 60 m to count. */
+/** Scales a fix's accuracy into an arrival radius, between the min and max above. */
 const ACCURACY_RADIUS_FACTOR = 1.5;
 export const DEPARTURE_RADIUS_METERS = 150;
 

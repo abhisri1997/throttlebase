@@ -1727,6 +1727,28 @@ useEffect(() => {
               </TouchableOpacity>
             )}
 
+            {__DEV__ && waypoints && waypoints.length >= 2 && (
+              <TouchableOpacity
+                onPress={() =>
+                  router.push(`/ride/${id}/navigation?simulate=1` as any)
+                }
+                className='p-3 rounded-xl mt-2'
+                style={{
+                  backgroundColor: colors.surface,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  borderStyle: "dashed",
+                }}
+              >
+                <Text
+                  className='font-bold text-center'
+                  style={{ color: colors.textMuted }}
+                >
+                  🧪 Simulate Navigation (dev)
+                </Text>
+              </TouchableOpacity>
+            )}
+
             {/* Live presence list */}
             {(liveStatus === "active" ||
               liveStatus === "starting" ||

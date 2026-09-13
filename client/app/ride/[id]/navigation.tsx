@@ -31,6 +31,7 @@ import { useNavigationFix } from "../../../src/features/navigation/hooks/useNavi
 import { useNavigationMapTheme } from "../../../src/features/navigation/hooks/useNavigationMapTheme";
 import { useNavigationSession } from "../../../src/features/navigation/hooks/useNavigationSession";
 import { usePlannedRoute } from "../../../src/features/navigation/hooks/usePlannedRoute";
+import { useSimulatedNavigationFix } from "../../../src/features/navigation/hooks/useSimulatedNavigationFix";
 import { useRideLiveSession } from "../../../src/features/navigation/hooks/useRideLiveSession";
 import { useRideParticipants } from "../../../src/features/navigation/hooks/useRideParticipants";
 import { useScreenAwake } from "../../../src/features/navigation/hooks/useScreenAwake";
@@ -55,7 +56,8 @@ export default function RideNavigationScreen() {
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
   const isAppActive = useAppIsActive();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, simulate } = useLocalSearchParams<{ id: string; simulate?: string }>();
+  const isSimulated = __DEV__ && simulate === "1";
   const currentRiderId = useAuthStore((state: any) => state.rider?.id) as string | undefined;
 
   const mapRef = useRef<InstanceType<typeof MapView> | null>(null);
@@ -93,14 +95,23 @@ export default function RideNavigationScreen() {
     [inRoom, upsertLocation],
   );
 
-  const { fix, headingDegrees, isPermissionDenied } = useNavigationFix({
-    isEnabled: isAppActive && live.isTracking,
-    onPosition: publishPosition,
-  });
-
   // The ride as one trip: start, approved stops in planned order, destination.
   const waypoints = useMemo(() => buildTripPlan(live.ride), [live.ride]);
   const plannedRoute = usePlannedRoute(waypoints);
+
+  const liveFix = useNavigationFix({
+    isEnabled: !isSimulated && isAppActive && live.isTracking,
+    onPosition: publishPosition,
+  });
+  // Dev-only: replays a synthetic ride along the planned route instead of
+  // reading real GPS, so navigation can be watched end-to-end without riding.
+  // Enabled with `?simulate=1` on this screen; never active outside __DEV__.
+  const simulatedFix = useSimulatedNavigationFix({
+    isEnabled: isSimulated,
+    polyline: plannedRoute.route?.polyline ?? null,
+    onPosition: publishPosition,
+  });
+  const { fix, headingDegrees, isPermissionDenied } = isSimulated ? simulatedFix : liveFix;
 
   const { session, skipTarget } = useNavigationSession({
     rideId: id,
@@ -289,8 +300,9 @@ export default function RideNavigationScreen() {
   const statusLabel = isPermissionDenied
     ? "Location is off — allow it to navigate"
     : progress.routeStatusLabel ?? (progress.isRouteLoading ? "Loading route…" : null);
-  const alertLabel =
-    live.sessionEndedReason && live.rideState === "COMPLETED"
+  const alertLabel = isSimulated
+    ? "SIMULATED GPS — dev only"
+    : live.sessionEndedReason && live.rideState === "COMPLETED"
       ? `Ended: ${live.sessionEndedReason}`
       : null;
 

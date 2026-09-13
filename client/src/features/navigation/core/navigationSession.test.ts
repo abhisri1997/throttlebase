@@ -96,7 +96,7 @@ test("placing a rider mid-ride counts the waypoints behind them as passed", () =
 });
 
 test("entering the arrival radius marks the stop reached", () => {
-  const state = run([place(1), fix(at(0.0095))]); // ~56 m short of stop A
+  const state = run([place(1), fix(at(0.0097))]); // ~33 m short of stop A
 
   assert.equal(state.phase, "AT_WAYPOINT");
   assert.equal(state.targetIndex, 1);
@@ -162,8 +162,8 @@ test("skipping moves past the target but never past the destination", () => {
 });
 
 test("arrival radius grows with GPS inaccuracy within fixed bounds", () => {
-  assert.equal(arrivalRadiusMeters(undefined), 60);
-  assert.equal(arrivalRadiusMeters(30), 60);
+  assert.equal(arrivalRadiusMeters(undefined), 40);
+  assert.equal(arrivalRadiusMeters(20), 40);
   assert.equal(arrivalRadiusMeters(60), 90);
   assert.equal(arrivalRadiusMeters(200), 120);
 });
