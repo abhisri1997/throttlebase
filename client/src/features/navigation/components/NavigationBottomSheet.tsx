@@ -13,6 +13,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Route, Users, X } from "lucide-react-native";
 import { useTheme } from "../../../theme/ThemeContext";
+import type { WaypointStatus } from "../core/navigationSession";
+import type { TripWaypoint } from "../core/tripPlan";
 import type { RideParticipantView } from "../types/navigation";
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -42,6 +44,11 @@ interface NavigationBottomSheetProps {
   ending: boolean;
   focusedParticipantId?: string | null;
   onParticipantPress?: (participant: RideParticipantView) => void;
+  /** The trip's waypoints, listed in order so any one can be found on the map. */
+  waypoints: readonly TripWaypoint[];
+  waypointStatuses: readonly WaypointStatus[];
+  focusedWaypointId?: string | null;
+  onWaypointPress?: (waypoint: TripWaypoint) => void;
   onSnapHeightChange?: (height: number) => void;
   /** Trip bar: time to the next waypoint, e.g. "12 min". */
   durationLabel: string;
@@ -94,6 +101,10 @@ export function NavigationBottomSheet({
   ending,
   focusedParticipantId,
   onParticipantPress,
+  waypoints,
+  waypointStatuses,
+  focusedWaypointId,
+  onWaypointPress,
   onSnapHeightChange,
   durationLabel,
   detailLabel,
@@ -187,16 +198,26 @@ export function NavigationBottomSheet({
   }, [collapsedHeight, expandedHeight, heightValue]);
 
   return (
-    <Animated.View
-      style={[
-        styles.sheet,
-        {
-          height: heightValue,
-          backgroundColor: colors.surface,
-          borderTopColor: colors.border,
-        },
-      ]}
-    >
+    <>
+      {isExpanded ? (
+        <Pressable
+          accessibilityRole='button'
+          accessibilityLabel='Collapse crew panel'
+          onPress={() => snapToHeight(collapsedHeight)}
+          style={styles.dismissOverlay}
+        />
+      ) : null}
+
+      <Animated.View
+        style={[
+          styles.sheet,
+          {
+            height: heightValue,
+            backgroundColor: colors.surface,
+            borderTopColor: colors.border,
+          },
+        ]}
+      >
       <View
         onLayout={(event) => {
           const nextHeight = Math.round(event.nativeEvent.layout.height);
@@ -290,6 +311,72 @@ export function NavigationBottomSheet({
           </Text>
         </View>
 
+        {waypoints.length > 0 ? (
+          <View className='mb-4'>
+            <Text className='text-xs font-bold mb-2' style={{ color: colors.textMuted }}>
+              STOPS
+            </Text>
+
+            {waypoints.map((waypoint, index) => {
+              const status = waypointStatuses[index] ?? "upcoming";
+              const isFocused = focusedWaypointId === waypoint.id;
+
+              return (
+                <Pressable
+                  key={waypoint.id}
+                  accessibilityRole='button'
+                  accessibilityLabel={`Show ${waypoint.name} on the map`}
+                  onPress={() => onWaypointPress?.(waypoint)}
+                  className='flex-row items-center justify-between p-3 rounded-xl mb-2'
+                  style={{
+                    backgroundColor: colors.bg,
+                    borderWidth: 1,
+                    borderColor: isFocused ? colors.primary : colors.border,
+                  }}
+                >
+                  <View className='flex-row items-center flex-1 pr-2'>
+                    <View
+                      style={[
+                        styles.stopBadge,
+                        {
+                          backgroundColor:
+                            status === "visited"
+                              ? colors.textMuted
+                              : status === "next"
+                                ? colors.primary
+                                : colors.border,
+                        },
+                      ]}
+                    >
+                      <Text style={styles.stopBadgeText}>
+                        {status === "visited" ? "✓" : (waypoint.stopNumber ?? "·")}
+                      </Text>
+                    </View>
+
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        color: colors.text,
+                        fontWeight: status === "next" ? "700" : "400",
+                        flex: 1,
+                      }}
+                    >
+                      {waypoint.name}
+                    </Text>
+                  </View>
+
+                  <Text
+                    className='text-xs'
+                    style={{ color: status === "next" ? colors.primary : colors.textMuted }}
+                  >
+                    {isFocused ? "On map" : status === "visited" ? "Done" : status === "next" ? "Next" : ""}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+
         {participants.map((participant) => {
           const isFocused = focusedParticipantId === participant.riderId;
 
@@ -352,11 +439,21 @@ export function NavigationBottomSheet({
           </TouchableOpacity>
         ) : null}
       </ScrollView>
-    </Animated.View>
+      </Animated.View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  dismissOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 25,
+    elevation: 25,
+  },
   sheet: {
     position: "absolute",
     left: 0,
@@ -441,5 +538,18 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     marginRight: 10,
+  },
+  stopBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  stopBadgeText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "700",
   },
 });

@@ -42,9 +42,14 @@ export interface NavigationCamera {
   mapPadding: EdgePadding;
   follow: () => void;
   showOverview: (coordinates: LatLng[]) => void;
-  focusOn: (center: LatLng, headingDegrees: number) => void;
+  focusOn: (center: LatLng, headingDegrees: number, options?: FocusOptions) => void;
   onRegionChange: (region: Region, details: Details) => void;
   onPanDrag: () => void;
+}
+
+export interface FocusOptions {
+  zoom?: number;
+  pitch?: number;
 }
 
 interface FollowFrame {
@@ -131,10 +136,15 @@ export const useNavigationCamera = ({
   }, []);
 
   const focusOn = useCallback(
-    (center: LatLng, heading: number) => {
+    (center: LatLng, heading: number, options?: FocusOptions) => {
       setMode("free");
       mapRef.current?.animateCamera(
-        { center, heading, pitch: FOCUS_PITCH_DEGREES, zoom: FOCUS_ZOOM },
+        {
+          center,
+          heading,
+          pitch: options?.pitch ?? FOCUS_PITCH_DEGREES,
+          zoom: options?.zoom ?? FOCUS_ZOOM,
+        },
         { duration: FOCUS_ANIMATION_MS },
       );
     },

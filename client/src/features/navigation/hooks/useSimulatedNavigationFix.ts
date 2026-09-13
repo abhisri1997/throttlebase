@@ -46,8 +46,9 @@ export const useSimulatedNavigationFix = ({
   );
 
   useEffect(() => {
+    // The last fix is kept: a rebuilt trace restarts the ride, but blanking the
+    // position first would take the rider off the map for a frame.
     indexRef.current = 0;
-    setFix(null);
     if (!isEnabled || trace.length === 0) return;
 
     const tick = (): void => {

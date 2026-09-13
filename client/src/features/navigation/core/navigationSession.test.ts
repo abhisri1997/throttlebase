@@ -122,6 +122,26 @@ test("riding out past the departure radius starts the next leg", () => {
   assert.equal(state.targetIndex, 2);
 });
 
+test("a stop close to the next waypoint departs at the halfway point", () => {
+  // ~200 m apart, so the 150 m departure radius would otherwise hold the rider
+  // at the stop for almost the whole hop.
+  const closeTrip: TripWaypoint[] = [
+    waypoint("start", "start", at(0)),
+    waypoint("stop-a", "stop", at(0.0018)),
+    waypoint("stop-b", "stop", at(0.0036)),
+    waypoint("destination", "destination", at(0.0054)),
+  ];
+
+  const waiting = run([place(1), fix(at(0.0018))], closeTrip);
+  assert.equal(waiting.phase, "AT_WAYPOINT");
+
+  // ~111 m past stop A, and nearer stop B than stop A.
+  const state = reduceNavigationSession(waiting, fix(at(0.0028)), closeTrip);
+
+  assert.equal(state.phase, "NAVIGATING");
+  assert.equal(closeTrip[state.targetIndex]!.id, "stop-b");
+});
+
 test("reaching a later stop first skips the one before it", () => {
   const state = run([place(1), fix(at(0.02))]);
 

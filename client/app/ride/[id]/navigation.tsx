@@ -49,6 +49,8 @@ const ESTIMATED_BANNER_HEIGHT = 120;
 const INITIAL_REGION_DELTA = 0.08;
 const RECENTER_GAP = 12;
 const KMH_PER_MPS = 3.6;
+/** Tighter than the default focus zoom so stops metres apart are unambiguous. */
+const WAYPOINT_FOCUS_ZOOM = 18;
 
 export default function RideNavigationScreen() {
   const { colors } = useTheme();
@@ -65,6 +67,7 @@ export default function RideNavigationScreen() {
   const [bannerBottom, setBannerBottom] = useState(insets.top + ESTIMATED_BANNER_HEIGHT);
   const [sheetHeight, setSheetHeight] = useState(sheetCollapsedHeight);
   const [focusedParticipantId, setFocusedParticipantId] = useState<string | null>(null);
+  const [focusedWaypointId, setFocusedWaypointId] = useState<string | null>(null);
 
   const rideDetailHref = `/ride/${id}` as Href;
   const exitNavigation = useCallback(() => {
@@ -106,12 +109,23 @@ export default function RideNavigationScreen() {
   // Dev-only: replays a synthetic ride along the planned route instead of
   // reading real GPS, so navigation can be watched end-to-end without riding.
   // Enabled with `?simulate=1` on this screen; never active outside __DEV__.
+  // Simulated positions are deliberately not published to the live session:
+  // they would be stored as real track samples, and a track fed by both the
+  // simulation and the rider's own GPS reads as constant teleporting.
   const simulatedFix = useSimulatedNavigationFix({
     isEnabled: isSimulated,
     polyline: plannedRoute.route?.polyline ?? null,
-    onPosition: publishPosition,
   });
   const { fix, headingDegrees, isPermissionDenied } = isSimulated ? simulatedFix : liveFix;
+
+  // The rider stays on the map for the whole ride, even once the last waypoint
+  // is reached and tracking stops — the ride is over when the ride is ended,
+  // not when the route runs out.
+  const [lastKnownFix, setLastKnownFix] = useState<NavigationFix | null>(null);
+  useEffect(() => {
+    if (fix) setLastKnownFix(fix);
+  }, [fix]);
+  const puckFix = fix ?? lastKnownFix;
 
   const { session, skipTarget } = useNavigationSession({
     rideId: id,
@@ -145,6 +159,7 @@ export default function RideNavigationScreen() {
     isPlannedRouteSettled: plannedRoute.isSettled,
     liveLeg,
     rideState: live.rideState,
+    fix,
   });
 
   const mapTheme = useNavigationMapTheme();
@@ -190,6 +205,7 @@ export default function RideNavigationScreen() {
 
   const recenter = () => {
     setFocusedParticipantId(null);
+    setFocusedWaypointId(null);
     if (fix) camera.follow();
     else camera.showOverview(overviewCoordinates());
   };
@@ -200,6 +216,7 @@ export default function RideNavigationScreen() {
   };
 
   const focusParticipant = (participant: RideParticipantView) => {
+    setFocusedWaypointId(null);
     if (participant.riderId === currentRiderId) {
       if (!fix) {
         Alert.alert("Location unavailable", "Your live location is not available yet.");
@@ -221,6 +238,15 @@ export default function RideNavigationScreen() {
 
     setFocusedParticipantId(participant.riderId);
     camera.focusOn({ latitude: location.lat, longitude: location.lon }, location.headingDeg ?? 0);
+  };
+
+  const focusWaypoint = (waypoint: TripWaypoint) => {
+    setFocusedParticipantId(null);
+    setFocusedWaypointId(waypoint.id);
+    // Flat and tighter than the self/peer focus view: stops can sit only
+    // metres apart, and a top-down view (plus the marker's halo) makes which
+    // one was tapped unambiguous in a way a tilted 3D view would not.
+    camera.focusOn(waypoint.coordinate, 0, { zoom: WAYPOINT_FOCUS_ZOOM, pitch: 0 });
   };
 
   const confirmSkip = (target: TripWaypoint) => {
@@ -331,6 +357,7 @@ export default function RideNavigationScreen() {
             key={waypoint.id}
             waypoint={waypoint}
             status={progress.waypointStatuses[index] ?? "upcoming"}
+            isFocused={waypoint.id === focusedWaypointId}
             colors={mapTheme.colors}
           />
         ))}
@@ -348,7 +375,12 @@ export default function RideNavigationScreen() {
           focusedColor={colors.primary}
         />
 
-        {fix ? <RiderPuck coordinate={fix.coordinate} headingDegrees={headingDegrees ?? 0} /> : null}
+        {puckFix ? (
+          <RiderPuck
+            coordinate={puckFix.coordinate}
+            headingDegrees={headingDegrees ?? puckFix.headingDegrees ?? 0}
+          />
+        ) : null}
       </MapView>
 
       <ManeuverBanner
@@ -391,6 +423,10 @@ export default function RideNavigationScreen() {
         ending={live.isEnding}
         focusedParticipantId={focusedParticipantId}
         onParticipantPress={focusParticipant}
+        waypoints={waypoints}
+        waypointStatuses={progress.waypointStatuses}
+        focusedWaypointId={focusedWaypointId}
+        onWaypointPress={focusWaypoint}
         onSnapHeightChange={setSheetHeight}
         durationLabel={durationLabel}
         detailLabel={detailLabel}

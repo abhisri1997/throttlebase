@@ -2,6 +2,7 @@ import pool, { query } from "../config/db.js";
 import {
   enqueueLiveIncidentReported,
   enqueueLiveSessionEnded,
+  enqueueRideStatsRecompute,
   enqueueLiveSessionStarted,
 } from "./jobs.service.js";
 import type {
@@ -451,7 +452,10 @@ export const endLiveSession = async (
       );
     }
 
-    if (options?.mark_ride_completed && ctx.ride_status === "active") {
+    const markedRideCompleted =
+      Boolean(options?.mark_ride_completed) && ctx.ride_status === "active";
+
+    if (markedRideCompleted) {
       await client.query(
         `UPDATE rides SET status = 'completed', updated_at = now() WHERE id = $1`,
         [rideId],
@@ -459,6 +463,17 @@ export const endLiveSession = async (
     }
 
     await client.query("COMMIT");
+
+    // Ending the session is how a ride actually completes, so this is where the
+    // track becomes history stats. Editing a ride to "completed" has its own
+    // enqueue; both go through the same de-duplicated job.
+    if (markedRideCompleted) {
+      try {
+        await enqueueRideStatsRecompute(rideId, "ride-completed");
+      } catch (queueError) {
+        console.error("Failed to enqueue ride stats recompute job:", queueError);
+      }
+    }
 
     if (session.status !== "ended") {
       try {

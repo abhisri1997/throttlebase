@@ -326,7 +326,9 @@ export const listDiscoverableRides = async (
 ): Promise<Ride[]> => {
   const params: any[] = [riderId];
   let queryStr = `
-    SELECT r.*, c.display_name as captain_name
+    SELECT r.*, c.display_name as captain_name,
+           (SELECT count(*) FROM ride_stops rs
+             WHERE rs.ride_id = r.id AND rs.status = 'approved')::int AS stop_count
     FROM rides r
     JOIN riders c ON r.captain_id = c.id
     WHERE r.status NOT IN ('completed', 'cancelled')
@@ -359,7 +361,9 @@ export const listDiscoverableRides = async (
  */
 export const getRideHistory = async (riderId: string): Promise<Ride[]> => {
   const result = await query(
-    `SELECT r.*, c.display_name as captain_name
+    `SELECT r.*, c.display_name as captain_name,
+            (SELECT count(*) FROM ride_stops rs
+              WHERE rs.ride_id = r.id AND rs.status = 'approved')::int AS stop_count
      FROM rides r
      JOIN riders c ON r.captain_id = c.id
      WHERE r.status IN ('completed', 'cancelled')

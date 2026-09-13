@@ -1,15 +1,21 @@
 import { useMemo } from "react";
-import { polylineAhead } from "../core/geometry";
+import { polylineAhead, projectOntoPolyline } from "../core/geometry";
 import { buildGuidance, type Guidance, type RideState } from "../core/guidance";
 import {
   getWaypointStatuses,
   type NavigationSessionState,
   type WaypointStatus,
 } from "../core/navigationSession";
-import { locateStep, remainingLegMeters, remainingLegSeconds } from "../core/routeProgress";
+import {
+  buildLegGeometry,
+  locateStep,
+  remainingLegMeters,
+  remainingLegSeconds,
+  OFF_ROUTE_THRESHOLD_METERS,
+} from "../core/routeProgress";
 import type { TripWaypoint } from "../core/tripPlan";
 import { EMPTY_TRIP_SUMMARY, summarizeTrip, type TripSummary } from "../core/tripSummary";
-import type { LatLng, NavigationStep, RouteLeg } from "../types/navigation";
+import type { LatLng, NavigationFix, NavigationStep, RouteLeg } from "../types/navigation";
 import type { LiveLegState } from "./useLiveLeg";
 
 interface UseTripProgressInput {
@@ -19,6 +25,8 @@ interface UseTripProgressInput {
   isPlannedRouteSettled: boolean;
   liveLeg: LiveLegState;
   rideState: RideState;
+  /** Matches the rider to the planned leg while there is no live one. */
+  fix: NavigationFix | null;
 }
 
 export interface TripProgress {
@@ -49,6 +57,7 @@ export const useTripProgress = ({
   isPlannedRouteSettled,
   liveLeg,
   rideState,
+  fix,
 }: UseTripProgressInput): TripProgress => {
   const phase = session?.phase ?? "NAVIGATING";
   const targetIndex = session?.targetIndex ?? 0;
@@ -73,12 +82,37 @@ export const useTripProgress = ({
 
   const { leg: liveRouteLeg, geometry: liveGeometry, progress: liveProgress } = liveLeg;
 
+  // Waiting at a stop, or before a live leg's first fetch lands, the rider is
+  // matched to the planned leg instead. Without this the line and the distance
+  // to go sit frozen at the whole leg until the live one arrives.
+  const standInGeometry = useMemo(
+    () => (standInLeg ? buildLegGeometry(standInLeg) : null),
+    [standInLeg],
+  );
+
+  const standInProgress = useMemo(() => {
+    if (!standInGeometry || !fix || standInGeometry.polyline.length < 2) return null;
+
+    const projection = projectOntoPolyline(
+      fix.coordinate,
+      standInGeometry.polyline,
+      standInGeometry.cumulative,
+      { headingDegrees: fix.headingDegrees },
+    );
+
+    // A rider nowhere near the planned leg keeps the whole leg drawn.
+    return projection && projection.offsetMeters <= OFF_ROUTE_THRESHOLD_METERS ? projection : null;
+  }, [fix, standInGeometry]);
+
   const currentLegLine = useMemo((): LatLng[] => {
     if (liveGeometry) {
       return liveProgress ? polylineAhead(liveGeometry.polyline, liveProgress) : liveGeometry.polyline;
     }
+    if (standInGeometry && standInProgress) {
+      return polylineAhead(standInGeometry.polyline, standInProgress);
+    }
     return standInLeg?.polyline ?? [];
-  }, [liveGeometry, liveProgress, standInLeg]);
+  }, [liveGeometry, liveProgress, standInGeometry, standInLeg, standInProgress]);
 
   const waypointStatuses = useMemo(
     () => (waypoints ? getWaypointStatuses(session, waypoints) : []),
@@ -114,14 +148,25 @@ export const useTripProgress = ({
     [isPlaced, liveMetrics, phase, rideState, targetIndex, waypoints],
   );
 
+  const currentLeg = useMemo((): { meters: number; seconds: number } | null => {
+    if (liveMetrics) {
+      return { meters: liveMetrics.remainingMeters, seconds: liveMetrics.remainingSeconds };
+    }
+    if (!standInLeg) return null;
+
+    if (standInGeometry && standInProgress) {
+      const along = standInProgress.distanceAlongMeters;
+      return {
+        meters: remainingLegMeters(standInGeometry, along),
+        seconds: remainingLegSeconds(standInLeg, standInGeometry, along),
+      };
+    }
+
+    return { meters: standInLeg.distanceMeters, seconds: standInLeg.durationSeconds };
+  }, [liveMetrics, standInGeometry, standInLeg, standInProgress]);
+
   const summary = useMemo((): TripSummary => {
     if (!waypoints) return EMPTY_TRIP_SUMMARY;
-
-    const currentLeg = liveMetrics
-      ? { meters: liveMetrics.remainingMeters, seconds: liveMetrics.remainingSeconds }
-      : standInLeg
-        ? { meters: standInLeg.distanceMeters, seconds: standInLeg.durationSeconds }
-        : null;
 
     return summarizeTrip({
       waypoints,
@@ -131,7 +176,7 @@ export const useTripProgress = ({
       currentLeg,
       laterLegs: plannedLegs ? laterLegs : null,
     });
-  }, [isPlaced, laterLegs, liveMetrics, phase, plannedLegs, standInLeg, targetIndex, waypoints]);
+  }, [currentLeg, isPlaced, laterLegs, phase, plannedLegs, targetIndex, waypoints]);
 
   const routeStatusLabel =
     liveLeg.status === "rerouting"

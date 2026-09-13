@@ -23,6 +23,8 @@ interface RiderStatsComputation {
 }
 
 const EARTH_RADIUS_METERS = 6371000;
+/** Above this, a segment is a GPS outlier rather than road covered. */
+const MAX_PLAUSIBLE_SPEED_KMH = 200;
 
 const toNumber = (value: unknown): number | null => {
   const num = Number(value);
@@ -109,9 +111,19 @@ const computeForRider = (
     }
 
     const segmentMeters = haversineMeters(prevLat, prevLng, currLat, currLng);
-    if (Number.isFinite(segmentMeters) && segmentMeters >= 0) {
-      totalDistanceMeters += segmentMeters;
+    if (!Number.isFinite(segmentMeters) || segmentMeters < 0) {
+      continue;
     }
+
+    // A leap no motorcycle makes is a bad fix, not distance ridden. Without
+    // this one outlier adds kilometres, and a track fed by two sources at once
+    // (a rider's GPS and a dev simulation) reads as thousands of them.
+    const impliedSpeedKmh = segmentMeters / 1000 / (dtSec / 3600);
+    if (impliedSpeedKmh > MAX_PLAUSIBLE_SPEED_KMH) {
+      continue;
+    }
+
+    totalDistanceMeters += segmentMeters;
 
     const currSpeed = toNumber(curr.speed_kmh) ?? 0;
     const prevSpeed = toNumber(prev.speed_kmh) ?? 0;
@@ -233,11 +245,21 @@ const refreshRiderAggregateTotals = async (riderId: string): Promise<void> => {
 export const recomputeRideHistoryStats = async (
   rideId: string,
 ): Promise<{ rideId: string; ridersProcessed: number }> => {
+  // The track comes from the live session's sampled positions — what the
+  // navigation screen and background tracker actually broadcast. `gps_traces`
+  // is a separate upload path no client writes to, so reading it found nothing.
+  // Altitude is never sent over the socket, so elevation stays unknown.
   const tracesResult = await query(
-    `SELECT rider_id, latitude, longitude, altitude_m, speed_kmh, recorded_at
-     FROM gps_traces
-     WHERE ride_id = $1
-     ORDER BY rider_id ASC, recorded_at ASC`,
+    `SELECT s.rider_id,
+            ST_Y(s.location::geometry) AS latitude,
+            ST_X(s.location::geometry) AS longitude,
+            NULL::numeric AS altitude_m,
+            s.speed_kmh,
+            s.captured_at AS recorded_at
+     FROM ride_live_location_samples s
+     JOIN ride_live_sessions ls ON ls.id = s.session_id
+     WHERE ls.ride_id = $1
+     ORDER BY s.rider_id ASC, s.captured_at ASC`,
     [rideId],
   );
 

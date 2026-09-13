@@ -1,10 +1,11 @@
-import React, { memo, useEffect, useState } from "react";
+import React, { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Check, Flag } from "lucide-react-native";
 import { Marker } from "../../../components/MapWrapper";
 import type { NavigationColors } from "../../../theme/navigationColors";
 import type { WaypointStatus } from "../core/navigationSession";
 import type { StopCategory, TripWaypoint } from "../core/tripPlan";
+import { useTracksViewChanges } from "../hooks/useTracksViewChanges";
 
 const CATEGORY_EMOJI: Readonly<Record<StopCategory, string>> = {
   fuel: "⛽",
@@ -27,24 +28,7 @@ const Z_INDEX: Readonly<Record<WaypointStatus, number>> = {
   visited: 10,
 };
 
-/**
- * Android snapshots a child-view marker into a bitmap. It has to track view
- * changes until that snapshot is drawn — or the marker comes out blank — and
- * then stop, or it re-snapshots on every frame.
- */
-const TRACK_VIEW_CHANGES_MS = 600;
-
-const useTracksViewChanges = (renderKey: string): boolean => {
-  const [tracksViewChanges, setTracksViewChanges] = useState(true);
-
-  useEffect(() => {
-    setTracksViewChanges(true);
-    const timer = setTimeout(() => setTracksViewChanges(false), TRACK_VIEW_CHANGES_MS);
-    return () => clearTimeout(timer);
-  }, [renderKey]);
-
-  return tracksViewChanges;
-};
+const HALO_SIZE = NEXT_BADGE_SIZE + 28;
 
 const badgeColor = (
   waypoint: TripWaypoint,
@@ -97,22 +81,26 @@ export interface WaypointMarkerProps {
   waypoint: TripWaypoint;
   status: WaypointStatus;
   colors: NavigationColors;
+  /** Highlighted after being tapped in the bottom sheet, so it reads clearly among stops close together. */
+  isFocused?: boolean;
 }
 
 /**
  * A trip waypoint: a numbered badge for stops with the category alongside, a
  * flag for the destination, a check once reached. The next waypoint is drawn
- * larger so it stands out from the rest of the trip.
+ * larger so it stands out from the rest of the trip; a tapped-from-the-sheet
+ * waypoint gets a halo ring so it's unambiguous even when stops sit close together.
  */
 export const WaypointMarker = memo(function WaypointMarker({
   waypoint,
   status,
   colors,
+  isFocused = false,
 }: WaypointMarkerProps) {
   const size = status === "next" ? NEXT_BADGE_SIZE : BADGE_SIZE;
-  const containerSize = size + CONTAINER_PADDING * 2;
+  const containerSize = Math.max(size + CONTAINER_PADDING * 2, isFocused ? HALO_SIZE : 0);
   const fill = badgeColor(waypoint, status, colors);
-  const tracksViewChanges = useTracksViewChanges(`${status}:${fill}`);
+  const tracksViewChanges = useTracksViewChanges(`${status}:${fill}:${isFocused}`);
   const category = waypoint.kind === "stop" && status !== "visited" ? waypoint.category : null;
 
   return (
@@ -120,7 +108,7 @@ export const WaypointMarker = memo(function WaypointMarker({
       coordinate={waypoint.coordinate}
       title={waypoint.stopNumber ? `${waypoint.stopNumber}. ${waypoint.name}` : waypoint.name}
       anchor={CENTER_ANCHOR}
-      zIndex={Z_INDEX[status]}
+      zIndex={isFocused ? Z_INDEX.next + 1 : Z_INDEX[status]}
       tracksViewChanges={tracksViewChanges}
     >
       <View
@@ -128,6 +116,16 @@ export const WaypointMarker = memo(function WaypointMarker({
         accessibilityLabel={accessibilityLabelFor(waypoint, status)}
         style={[styles.container, { width: containerSize, height: containerSize }]}
       >
+        {isFocused ? (
+          <View
+            style={[
+              styles.halo,
+              { width: HALO_SIZE, height: HALO_SIZE, borderRadius: HALO_SIZE / 2 },
+              { backgroundColor: colors.waypointStop, opacity: 0.28 },
+            ]}
+          />
+        ) : null}
+
         <View
           style={[
             styles.badge,
@@ -137,6 +135,7 @@ export const WaypointMarker = memo(function WaypointMarker({
               borderRadius: size / 2,
               backgroundColor: fill,
               borderColor: colors.waypointOutline,
+              borderWidth: isFocused ? 3.5 : 2.5,
             },
           ]}
         >
@@ -161,7 +160,9 @@ const styles = StyleSheet.create({
   badge: {
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2.5,
+  },
+  halo: {
+    position: "absolute",
   },
   startDot: {
     width: 8,

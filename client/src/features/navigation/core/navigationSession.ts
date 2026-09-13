@@ -192,7 +192,21 @@ export const reduceNavigationSession = (
       }
 
       const waitingAt = waypoints[state.targetIndex]!;
-      if (haversineMeters(event.coordinate, waitingAt.coordinate) > DEPARTURE_RADIUS_METERS) {
+      const nextWaypoint = waypoints[nextTarget.targetIndex];
+      const fromWaitingMeters = haversineMeters(event.coordinate, waitingAt.coordinate);
+
+      // Riding out past the departure radius starts the next leg. Where the
+      // next waypoint is nearer than that radius, passing the halfway point
+      // between the two counts instead — otherwise a short hop is ridden
+      // entirely at the stop behind it, freezing the line and the distance to
+      // go. Leaving the arrival radius first keeps the hysteresis.
+      const hasDeparted =
+        fromWaitingMeters > DEPARTURE_RADIUS_METERS ||
+        (nextWaypoint !== undefined &&
+          fromWaitingMeters > radius &&
+          haversineMeters(event.coordinate, nextWaypoint.coordinate) < fromWaitingMeters);
+
+      if (hasDeparted) {
         return { ...state, phase: "NAVIGATING", targetIndex: state.targetIndex + 1 };
       }
 
