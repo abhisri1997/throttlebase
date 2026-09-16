@@ -53,6 +53,14 @@ const isAllowedSessionStatus = (status: string): boolean =>
 /** Decides, per ride and rider, which location updates are stored as track samples. */
 const sampleThrottle = createSampleThrottle();
 
+/**
+ * How long a simulated fix keeps a rider's real GPS suppressed. Long enough to
+ * cover the gap between simulated updates, short enough that closing the
+ * simulation hands the rider straight back to their own device.
+ */
+const SIMULATION_TAKEOVER_MS = 30_000;
+const simulatingRiders = new Map<string, number>();
+
 const emitSocketError = (socket: Socket, message: string, code = 400): void => {
   socket.emit("session:error", { error: message, code });
 };
@@ -260,6 +268,20 @@ export const createLiveGateway = (httpServer: HttpServer) => {
           return;
         }
 
+        // A simulated ride takes over the rider's position while it runs. The
+        // device keeps reporting real GPS from the background tracker, and
+        // letting both through makes the rider's marker flick between the two.
+        if (payload.simulated) {
+          simulatingRiders.set(rider.riderId, Date.now());
+        } else {
+          const simulatingSince = simulatingRiders.get(rider.riderId);
+
+          if (simulatingSince !== undefined) {
+            if (Date.now() - simulatingSince < SIMULATION_TAKEOVER_MS) return;
+            simulatingRiders.delete(rider.riderId);
+          }
+        }
+
         const sampleKey = buildRideSocketKey(payload.rideId, rider.riderId);
         const capturedAtMs = payload.captured_at ? Date.parse(payload.captured_at) : Date.now();
         const point: TrackPoint = { lat: payload.lat, lng: payload.lon, capturedAtMs };
@@ -392,6 +414,7 @@ export const createLiveGateway = (httpServer: HttpServer) => {
       }
 
       sampleThrottle.clearRider(rider.riderId);
+      simulatingRiders.delete(rider.riderId);
     });
   });
 
