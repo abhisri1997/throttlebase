@@ -265,8 +265,11 @@ export const createLiveGateway = (httpServer: HttpServer) => {
         const point: TrackPoint = { lat: payload.lat, lng: payload.lon, capturedAtMs };
         // Reserve the baseline before awaiting anything: this handler runs
         // concurrently for every update in a batch, and each must see the
-        // decisions of the ones before it.
-        const reservation = sampleThrottle.reserve(sampleKey, point);
+        // decisions of the ones before it. A simulated fix is broadcast to the
+        // crew but never reserved, so it stays out of the ride's track.
+        const reservation = payload.simulated
+          ? null
+          : sampleThrottle.reserve(sampleKey, point);
 
         let location: Awaited<ReturnType<typeof updateLivePresenceLocation>>;
         try {

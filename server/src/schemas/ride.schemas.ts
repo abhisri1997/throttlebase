@@ -58,6 +58,12 @@ export const RequestStopSchema = z.object({
   ...StopFieldsSchema,
 });
 
+/** A regroup is always a rest stop; the estimate is only there for the prompt. */
+export const RequestRegroupSchema = z.object({
+  ...StopFieldsSchema,
+  wait_seconds: z.number().int().min(0).nullish(),
+});
+
 export const HandleStopSchema = z.object({
   status: z.enum(['approved', 'rejected']),
 });
@@ -66,4 +72,5 @@ export type CreateRideInput = z.infer<typeof CreateRideSchema>;
 export type UpdateRideInput = z.infer<typeof UpdateRideSchema>;
 export type PromoteCoCaptainInput = z.infer<typeof PromoteCoCaptainSchema>;
 export type RequestStopInput = z.infer<typeof RequestStopSchema>;
+export type RequestRegroupInput = z.infer<typeof RequestRegroupSchema>;
 export type HandleStopInput = z.infer<typeof HandleStopSchema>;

@@ -29,8 +29,14 @@ const FALLBACK_SPEED_KMH = 28;
 const DIRECTIONS_URL = "https://maps.googleapis.com/maps/api/directions/json";
 
 export const DEFAULT_ROUTE_DEVIATION_THRESHOLD_METERS = 60;
-export const DEFAULT_ROUTE_DEVIATION_GRACE_MS = 15000;
-export const DEFAULT_ROUTE_REROUTE_COOLDOWN_MS = 25000;
+/**
+ * A rider only counts as off route once they are past
+ * OFF_ROUTE_THRESHOLD_METERS, so the grace is short: long enough to ride out a
+ * GPS blip, not long enough to leave a stale line down the wrong road. The
+ * cooldown bounds Directions calls while a rider keeps deviating.
+ */
+export const DEFAULT_ROUTE_DEVIATION_GRACE_MS = 5000;
+export const DEFAULT_ROUTE_REROUTE_COOLDOWN_MS = 12000;
 
 const routeCache = new Map<string, { route: NavigationRoute; cachedAt: number }>();
 const inFlightRouteRequests = new Map<string, Promise<NavigationRoute>>();

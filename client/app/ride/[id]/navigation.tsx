@@ -24,6 +24,17 @@ import {
 } from "../../../src/features/navigation/core/format";
 import { waypointLabel } from "../../../src/features/navigation/core/guidance";
 import { buildTripPlan, type TripWaypoint } from "../../../src/features/navigation/core/tripPlan";
+import {
+  groupTargetIndex,
+  shouldOfferCatchUp,
+} from "../../../src/features/navigation/core/lateJoin";
+import {
+  suggestRegroupPoint,
+  type RegroupCandidate,
+} from "../../../src/features/navigation/core/regroup";
+import { projectOntoPolyline } from "../../../src/features/navigation/core/geometry";
+import { fetchStopSuggestions } from "../../../src/features/rides/api/stopSuggestions";
+import { apiClient } from "../../../src/api/client";
 import { useAppIsActive } from "../../../src/features/navigation/hooks/useAppIsActive";
 import { useLiveLeg } from "../../../src/features/navigation/hooks/useLiveLeg";
 import { useNavigationCamera } from "../../../src/features/navigation/hooks/useNavigationCamera";
@@ -84,7 +95,7 @@ export default function RideNavigationScreen() {
 
   const { inRoom, upsertLocation } = live;
   const publishPosition = useCallback(
-    (fix: NavigationFix) => {
+    (fix: NavigationFix, isSimulatedFix = false) => {
       if (!inRoom) return;
       upsertLocation({
         lon: fix.coordinate.longitude,
@@ -93,9 +104,15 @@ export default function RideNavigationScreen() {
         heading_deg: fix.headingDegrees ?? undefined,
         accuracy_m: fix.accuracyMeters ?? undefined,
         captured_at: new Date(fix.timestamp).toISOString(),
+        ...(isSimulatedFix ? { simulated: true } : {}),
       });
     },
     [inRoom, upsertLocation],
+  );
+
+  const publishSimulatedPosition = useCallback(
+    (fix: NavigationFix) => publishPosition(fix, true),
+    [publishPosition],
   );
 
   // The ride as one trip: start, approved stops in planned order, destination.
@@ -115,6 +132,9 @@ export default function RideNavigationScreen() {
   const simulatedFix = useSimulatedNavigationFix({
     isEnabled: isSimulated,
     polyline: plannedRoute.route?.polyline ?? null,
+    // Shared with the crew so peer markers move during a simulated ride; the
+    // server is told these are simulated and keeps them out of the track.
+    onPosition: publishSimulatedPosition,
   });
   const { fix, headingDegrees, isPermissionDenied } = isSimulated ? simulatedFix : liveFix;
 
@@ -127,13 +147,129 @@ export default function RideNavigationScreen() {
   }, [fix]);
   const puckFix = fix ?? lastKnownFix;
 
+  // Where the group has actually got to, from the riders reporting in.
+  const groupIndex = useMemo(() => {
+    if (!plannedRoute.tripGeometry) return 0;
+
+    const positions = Object.values(live.locations)
+      .filter((location) => location.riderId !== currentRiderId)
+      .map((location) => ({ latitude: location.lat, longitude: location.lon }));
+
+    return groupTargetIndex(positions, plannedRoute.tripGeometry);
+  }, [currentRiderId, live.locations, plannedRoute.tripGeometry]);
+
+  // A rider opening navigation after the group has left is asked how to join
+  // rather than being silently sent back to the start.
+  const [joinChoice, setJoinChoice] = useState<number | null>(null);
+  const [hasChosenJoin, setHasChosenJoin] = useState(false);
+  const needsJoinChoice =
+    !hasChosenJoin &&
+    live.rideState === "ACTIVE" &&
+    plannedRoute.isSettled &&
+    fix !== null &&
+    waypoints !== null &&
+    shouldOfferCatchUp({
+      riderCoordinate: fix.coordinate,
+      start: waypoints[0]!.coordinate,
+      groupTargetIndex: groupIndex,
+    });
+
   const { session, skipTarget } = useNavigationSession({
     rideId: id,
     waypoints,
     tripGeometry: plannedRoute.tripGeometry,
     isPlannedRouteSettled: plannedRoute.isSettled,
     fix,
+    isPlacementBlocked: needsJoinChoice,
+    placementIndexOverride: joinChoice,
   });
+
+  /**
+   * Asks the group to wait somewhere. A stop the ride was already making needs
+   * no asking — the rider simply catches them there — so this only speaks up
+   * when the group would otherwise ride on past.
+   */
+  const proposeRegroup = async (): Promise<void> => {
+    const trip = plannedRoute.tripGeometry;
+    if (!trip || !waypoints || !fix) return;
+
+    const groupAlongMeters = trip.waypointAlongMeters[groupIndex] ?? 0;
+    const riderAlongMeters =
+      projectOntoPolyline(fix.coordinate, trip.polyline, trip.cumulative)
+        ?.distanceAlongMeters ?? 0;
+
+    const plannedStops: RegroupCandidate[] = waypoints.flatMap((waypoint, index) =>
+      waypoint.kind === "stop"
+        ? [
+            {
+              id: waypoint.id,
+              name: waypoint.name,
+              coordinate: waypoint.coordinate,
+              alongMeters: trip.waypointAlongMeters[index] ?? 0,
+              isExistingStop: true,
+            },
+          ]
+        : [],
+    );
+
+    const alreadyStopping = suggestRegroupPoint({
+      candidates: plannedStops,
+      groupAlongMeters,
+      riderAlongMeters,
+    });
+    if (alreadyStopping) return;
+
+    const encodedPolyline = plannedRoute.route?.encodedPolyline;
+    if (!encodedPolyline) return;
+
+    try {
+      const { suggestions } = await fetchStopSuggestions("rest", encodedPolyline);
+      const suggestion = suggestRegroupPoint({
+        candidates: suggestions.map((place) => ({
+          id: place.google_place_id,
+          name: place.name,
+          coordinate: { latitude: place.coords[1]!, longitude: place.coords[0]! },
+          alongMeters: place.distance_along_route_m,
+          isExistingStop: false,
+        })),
+        groupAlongMeters,
+        riderAlongMeters,
+      });
+
+      if (!suggestion) return;
+
+      await apiClient.post(`/api/rides/${id}/regroup`, {
+        location_coords: [
+          suggestion.candidate.coordinate.longitude,
+          suggestion.candidate.coordinate.latitude,
+        ],
+        name: `Regroup at ${suggestion.candidate.name}`,
+        google_place_id: suggestion.candidate.id,
+        wait_seconds: Math.round(suggestion.waitSeconds),
+      });
+    } catch {
+      // Catching up still works; the group just won't be asked to wait.
+    }
+  };
+
+  const chooseJoin = (targetIndex: number) => {
+    setJoinChoice(targetIndex);
+    setHasChosenJoin(true);
+    // Only a rider chasing the group has anything to regroup about.
+    if (targetIndex > 0) void proposeRegroup();
+  };
+
+  const decideRegroup = async (status: "approved" | "rejected") => {
+    const stopId = live.regroupRequest?.stop?.id;
+    if (!stopId) return;
+
+    try {
+      await apiClient.patch(`/api/rides/${id}/stops/${stopId}`, { status });
+      live.refetch();
+    } catch {
+      Alert.alert("Couldn't answer", "Check your connection and try again.");
+    }
+  };
 
   // Arrival times go to the server so the ride history can show them.
   useWaypointReports({
@@ -288,6 +424,15 @@ export default function RideNavigationScreen() {
 
   const tripAction = ((): TripBarAction | null => {
     if (isHost && live.rideState === "NOT_STARTED") {
+      // Roll call is open: the next step is setting off, not starting again.
+      if (live.liveStatus === "starting") {
+        return {
+          label: live.isRollingOut ? "Setting off…" : "Roll out",
+          onPress: live.rollOut,
+          isBusy: live.isRollingOut,
+        };
+      }
+
       return {
         label: live.isStarting ? "Starting…" : "Start ride",
         onPress: live.startRide,
@@ -376,12 +521,77 @@ export default function RideNavigationScreen() {
         />
 
         {puckFix ? (
+          // Remounted whenever a waypoint changes status: that redraws the
+          // waypoint's marker, which the map then stacks above the rider. The
+          // puck has to be added after it to stay on top of the one it is
+          // standing on — otherwise arriving anywhere hides the rider.
           <RiderPuck
+            key={`rider-puck-${progress.waypointStatuses.join("")}`}
             coordinate={puckFix.coordinate}
             headingDegrees={headingDegrees ?? puckFix.headingDegrees ?? 0}
           />
         ) : null}
       </MapView>
+
+      {isHost && live.regroupRequest ? (
+        <View style={[styles.joinSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.joinTitle, { color: colors.text }]}>A rider has fallen behind</Text>
+          <Text style={[styles.joinBody, { color: colors.textMuted }]}>
+            {participants.find(
+              (participant) => participant.riderId === live.regroupRequest?.requestedBy,
+            )?.displayName ?? "A rider"}{" "}
+            is asking the crew to regroup at {live.regroupRequest.stop?.name ?? "a stop"}
+            {live.regroupRequest.waitSeconds
+              ? ` · about ${formatDuration(live.regroupRequest.waitSeconds)} of waiting`
+              : ""}
+            .
+          </Text>
+
+          <TouchableOpacity
+            accessibilityRole='button'
+            onPress={() => decideRegroup("approved")}
+            style={[styles.joinPrimary, { backgroundColor: colors.primary }]}
+          >
+            <Text style={styles.joinPrimaryText}>Add the stop for everyone</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            accessibilityRole='button'
+            onPress={() => decideRegroup("rejected")}
+            style={[styles.joinSecondary, { borderColor: colors.border }]}
+          >
+            <Text style={[styles.joinSecondaryText, { color: colors.text }]}>Keep riding</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {needsJoinChoice && waypoints ? (
+        <View style={[styles.joinSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.joinTitle, { color: colors.text }]}>The ride has already set off</Text>
+          <Text style={[styles.joinBody, { color: colors.textMuted }]}>
+            The group is heading to {waypointLabel(waypoints[groupIndex] ?? waypoints[0]!)}. How do
+            you want to join?
+          </Text>
+
+          <TouchableOpacity
+            accessibilityRole='button'
+            onPress={() => chooseJoin(groupIndex)}
+            style={[styles.joinPrimary, { backgroundColor: colors.primary }]}
+          >
+            <Text style={styles.joinPrimaryText}>Catch up with the group</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            accessibilityRole='button'
+            onPress={() => chooseJoin(0)}
+            style={[styles.joinSecondary, { borderColor: colors.border }]}
+          >
+            <Text style={[styles.joinSecondaryText, { color: colors.text }]}>
+              Join from the start
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       <ManeuverBanner
         guidance={progress.guidance}
@@ -462,5 +672,48 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     marginLeft: 8,
+  },
+  joinSheet: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    top: "30%",
+    padding: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    zIndex: 80,
+    elevation: 80,
+  },
+  joinTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  joinBody: {
+    fontSize: 14,
+    marginTop: 6,
+    marginBottom: 16,
+  },
+  joinPrimary: {
+    minHeight: 48,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  joinPrimaryText: {
+    color: "white",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  joinSecondary: {
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 10,
+  },
+  joinSecondaryText: {
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

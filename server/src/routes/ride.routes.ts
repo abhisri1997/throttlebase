@@ -253,6 +253,28 @@ router.post(
 
 /**
  * @swagger
+ * /api/rides/{id}/live/roll-out:
+ *   post:
+ *     summary: Set the group off after the start-point roll call
+ *     tags: [Live Session]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Ride is under way
+ */
+router.post(
+  "/:id/live/roll-out",
+  authenticate,
+  liveSessionController.rollOutSession,
+);
+
+/**
+ * @swagger
  * /api/rides/{id}/live/session:
  *   get:
  *     summary: Get current live session for a ride (confirmed participants only)
@@ -552,6 +574,40 @@ router.post("/:id/promote", authenticate, rideController.promoteCoCaptain);
  */
 router.get("/:id/stops", authenticate, rideController.getRideStops);
 router.post("/:id/stops", authenticate, rideController.requestStop);
+
+/**
+ * @swagger
+ * /api/rides/{id}/regroup:
+ *   post:
+ *     summary: Propose somewhere for the group to wait for a rider left behind
+ *     tags: [Rides]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [location_coords]
+ *             properties:
+ *               location_coords:
+ *                 type: array
+ *                 items: { type: number }
+ *                 description: "[longitude, latitude]"
+ *               name: { type: string }
+ *               address: { type: string }
+ *               google_place_id: { type: string }
+ *               wait_seconds: { type: integer }
+ *     responses:
+ *       201:
+ *         description: Regroup proposed as a pending stop
+ */
+router.post("/:id/regroup", authenticate, rideController.requestRegroup);
 
 /**
  * @swagger

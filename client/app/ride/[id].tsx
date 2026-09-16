@@ -52,6 +52,11 @@ import {
 } from "../../src/features/navigation/services/navigationRouteService";
 import { NavigationRouteLayer } from "../../src/features/navigation/components/NavigationRouteLayer";
 import { buildTripPlan } from "../../src/features/navigation/core/tripPlan";
+import {
+  buildRollCall,
+  summarizeRollCall,
+  type RollCallRider,
+} from "../../src/features/navigation/core/rollCall";
 import { usePlannedRoute } from "../../src/features/navigation/hooks/usePlannedRoute";
 import { useRideTrack } from "../../src/features/navigation/hooks/useRideTrack";
 import {
@@ -151,6 +156,11 @@ const fetchLiveSession = async (rideId: string) => {
 
 const startLiveSessionReq = async (rideId: string) => {
   const { data } = await apiClient.post(`/api/rides/${rideId}/live/start`);
+  return data;
+};
+
+const rollOutLiveSessionReq = async (rideId: string) => {
+  const { data } = await apiClient.post(`/api/rides/${rideId}/live/roll-out`);
   return data;
 };
 
@@ -795,13 +805,29 @@ export default function RideDetailScreen() {
       }
       await refetchLiveSession();
       joinRoom(id!);
-      router.replace(`/ride/${id}/navigation` as any);
+      // Deliberately stays on this screen: starting opens the roll call so the
+      // captain can see who is still on their way before setting off.
     },
     onError: (err: any) => {
       Alert.alert(
         "Error",
         getApiErrorMessage(err, "Failed to start live session"),
       );
+    },
+  });
+
+  const liveRollOutMutation = useMutation({
+    mutationFn: () => rollOutLiveSessionReq(id!),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["ride", id] }),
+        queryClient.invalidateQueries({ queryKey: ["live-session", id] }),
+      ]);
+      await refetchLiveSession();
+      router.replace(`/ride/${id}/navigation` as any);
+    },
+    onError: (err: any) => {
+      Alert.alert("Error", getApiErrorMessage(err, "Failed to set off"));
     },
   });
 
@@ -1147,6 +1173,27 @@ useEffect(() => {
   const waypoints = useMemo(() => buildTripPlan(ride), [ride]);
   const plannedRoute = usePlannedRoute(waypoints);
   const rideStartPoint = waypoints?.[0]?.coordinate ?? null;
+
+  // Who has actually made it to the start. Riders only report a position once
+  // the session is open, so this is empty until the captain starts.
+  const rollCall = useMemo(() => {
+    if (!rideStartPoint) return null;
+
+    const riders: RollCallRider[] = (ride?.participants ?? []).map(
+      (participant: any): RollCallRider => ({
+        riderId: participant.rider_id,
+        displayName: participant.display_name || "Rider",
+        role:
+          participant.role === "captain" || participant.role === "co_captain"
+            ? participant.role
+            : "member",
+      }),
+    );
+
+    if (riders.length === 0) return null;
+
+    return summarizeRollCall(buildRollCall({ riders, locations, start: rideStartPoint }));
+  }, [locations, ride?.participants, rideStartPoint]);
   const isRideUpcoming = ride?.status === "draft" || ride?.status === "scheduled";
 
   // A finished ride shows the road this rider actually rode, over the plan.
@@ -1709,6 +1756,64 @@ useEffect(() => {
                 </Text>
               ) : null}
             </View>
+
+            {liveStatus === "starting" && isLeader && rollCall && (
+              <View
+                className='p-4 rounded-2xl mb-3'
+                style={{ backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border }}
+              >
+                <Text className='text-base font-bold mb-1' style={{ color: colors.text }}>
+                  Roll call
+                </Text>
+                <Text className='text-sm mb-3' style={{ color: colors.textMuted }}>
+                  {rollCall.atStart.length} at the start
+                  {rollCall.hasAbsentees
+                    ? ` · ${rollCall.enRoute.length + rollCall.noLocation.length} not here yet`
+                    : " · everyone is here"}
+                </Text>
+
+                {rollCall.enRoute.map((entry) => (
+                  <View key={entry.riderId} className='flex-row justify-between items-center mb-2'>
+                    <Text style={{ color: colors.text }} numberOfLines={1}>
+                      {entry.displayName}
+                    </Text>
+                    <Text className='text-xs' style={{ color: colors.primary }}>
+                      {formatDistance(entry.distanceMeters ?? 0)} away
+                    </Text>
+                  </View>
+                ))}
+
+                {rollCall.noLocation.map((entry) => (
+                  <View key={entry.riderId} className='flex-row justify-between items-center mb-2'>
+                    <Text style={{ color: colors.text }} numberOfLines={1}>
+                      {entry.displayName}
+                    </Text>
+                    <Text className='text-xs' style={{ color: colors.textMuted }}>
+                      No location — call them
+                    </Text>
+                  </View>
+                ))}
+
+                <TouchableOpacity
+                  accessibilityRole='button'
+                  onPress={() => liveRollOutMutation.mutate()}
+                  disabled={liveRollOutMutation.isPending}
+                  className='p-3 rounded-xl mt-2'
+                  style={{
+                    backgroundColor: colors.primary,
+                    opacity: liveRollOutMutation.isPending ? 0.7 : 1,
+                  }}
+                >
+                  <Text className='font-bold text-center' style={{ color: "#ffffff" }}>
+                    {liveRollOutMutation.isPending
+                      ? "Setting off…"
+                      : rollCall.hasAbsentees
+                        ? "Roll out anyway"
+                        : "Roll out"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {(liveStatus === "active" || liveStatus === "starting") && (
               <TouchableOpacity

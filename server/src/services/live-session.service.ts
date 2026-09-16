@@ -282,12 +282,9 @@ export const startLiveSession = async (rideId: string, riderId: string) => {
       );
     }
 
-    if (ctx.ride_status === "scheduled") {
-      await client.query(
-        `UPDATE rides SET status = 'active', updated_at = now() WHERE id = $1`,
-        [rideId],
-      );
-    }
+    // The ride itself only becomes active on roll-out. Starting opens the
+    // session so riders join and report where they are, which is what gives
+    // the captain a roll call before the group actually sets off.
 
     const existingSession = await getLiveSessionByRide(client, rideId);
 
@@ -297,7 +294,7 @@ export const startLiveSession = async (rideId: string, riderId: string) => {
     if (!existingSession) {
       const insert = await client.query(
         `INSERT INTO ride_live_sessions (ride_id, status, started_by, started_at, created_at, updated_at)
-         VALUES ($1, 'active', $2, now(), now(), now())
+         VALUES ($1, 'starting', $2, now(), now(), now())
          RETURNING id`,
         [rideId, riderId],
       );
@@ -306,7 +303,7 @@ export const startLiveSession = async (rideId: string, riderId: string) => {
     } else if (existingSession.status === "ended") {
       const reopen = await client.query(
         `UPDATE ride_live_sessions
-         SET status = 'active',
+         SET status = 'starting',
              started_by = $2,
              started_at = now(),
              ended_by = NULL,
@@ -488,6 +485,63 @@ export const endLiveSession = async (
       ended: session.status !== "ended",
       session: updatedSession,
       mark_ride_completed: Boolean(options?.mark_ride_completed),
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Sets the group off. Starting the session only gathers riders for the roll
+ * call; this is the point the ride is actually under way, so it is also where
+ * the ride row becomes active. Idempotent: rolling out twice changes nothing.
+ */
+export const rollOutLiveSession = async (rideId: string, riderId: string) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const ctx = await getRideContext(client, rideId, riderId);
+    requireCaptainOrCoCaptain(ctx);
+
+    const session = await getLiveSessionByRide(client, rideId);
+    if (!session || session.status === "ended") {
+      throw new LiveSessionError("No live session to roll out", 400);
+    }
+
+    const wasStarting = session.status === "starting";
+
+    if (wasStarting) {
+      await client.query(
+        `UPDATE ride_live_sessions
+         SET status = 'active', updated_at = now()
+         WHERE id = $1`,
+        [session.id],
+      );
+
+      await client.query(
+        `INSERT INTO ride_live_events (session_id, actor_rider_id, event_type, payload)
+         VALUES ($1, $2, 'session_rolled_out', jsonb_build_object('source', 'api'))`,
+        [session.id, riderId],
+      );
+    }
+
+    if (ctx.ride_status === "scheduled") {
+      await client.query(
+        `UPDATE rides SET status = 'active', updated_at = now() WHERE id = $1`,
+        [rideId],
+      );
+    }
+
+    await client.query("COMMIT");
+
+    return {
+      rolledOut: wasStarting,
+      session: await getLiveSessionWithParticipants(rideId),
     };
   } catch (error) {
     await client.query("ROLLBACK");

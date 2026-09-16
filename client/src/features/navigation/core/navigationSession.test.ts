@@ -122,6 +122,26 @@ test("riding out past the departure radius starts the next leg", () => {
   assert.equal(state.targetIndex, 2);
 });
 
+test("reaching the start rides straight on instead of waiting there", () => {
+  const state = run([place(0), fix(at(0))]);
+
+  assert.equal(state.phase, "NAVIGATING");
+  assert.equal(trip[state.targetIndex]!.id, "stop-a");
+  assert.ok("start" in state.reachedAt);
+  assert.deepEqual(getWaypointStatuses(state, trip), ["visited", "next", "upcoming", "upcoming"]);
+});
+
+test("a rider joining late still rides on through the start", () => {
+  const heading = run([place(0)]);
+  assert.equal(heading.phase, "NAVIGATING");
+  assert.equal(trip[heading.targetIndex]!.id, "start");
+
+  const arrived = reduceNavigationSession(heading, fix(at(0)), trip);
+
+  assert.equal(arrived.phase, "NAVIGATING");
+  assert.equal(trip[arrived.targetIndex]!.id, "stop-a");
+});
+
 test("a stop close to the next waypoint departs at the halfway point", () => {
   // ~200 m apart, so the 150 m departure radius would otherwise hold the rider
   // at the stop for almost the whole hop.

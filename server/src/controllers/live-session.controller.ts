@@ -15,6 +15,7 @@ import {
   getLiveLocationDropTelemetry,
   getLiveSessionFoundationStatus,
   startLiveSession,
+  rollOutLiveSession,
   acknowledgeLiveIncident,
   getLiveSessionTimeline,
   getLiveSessionReplay,
@@ -74,6 +75,18 @@ export const startSession = async (
     res.status(result.started ? 201 : 200).json(result);
   } catch (error: any) {
     handleLiveSessionError(res, error, "Error starting live session");
+  }
+};
+
+export const rollOutSession = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const result = await rollOutLiveSession(req.params.id as string, rid(req));
+    res.status(200).json(result);
+  } catch (error: any) {
+    handleLiveSessionError(res, error, "Error rolling out live session");
   }
 };
 

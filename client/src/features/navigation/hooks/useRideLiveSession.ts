@@ -57,6 +57,10 @@ const startLiveSession = async (rideId: string): Promise<void> => {
   await apiClient.post(`/api/rides/${rideId}/live/start`);
 };
 
+const rollOutLiveSession = async (rideId: string): Promise<void> => {
+  await apiClient.post(`/api/rides/${rideId}/live/roll-out`);
+};
+
 const endLiveSession = async (rideId: string): Promise<void> => {
   await apiClient.post(`/api/rides/${rideId}/live/end`, {
     mark_ride_completed: true,
@@ -80,12 +84,19 @@ export interface RideLiveSession {
   isTracking: boolean;
   startRide: () => void;
   isStarting: boolean;
+  /** Sets the group off once the captain has seen the roll call. */
+  rollOut: () => void;
+  isRollingOut: boolean;
+  /** Raw live session status: "starting" is the roll call, before the ride rolls. */
+  liveStatus: string;
   endRide: () => void;
   isEnding: boolean;
   inRoom: boolean;
   presence: LiveSessionStore["presence"];
   locations: LiveSessionStore["locations"];
   sessionEndedReason: LiveSessionStore["sessionEndedReason"];
+  /** A rider left behind asking the group to wait; null once a leader answers. */
+  regroupRequest: LiveSessionStore["regroupRequest"];
   upsertLocation: LiveSessionStore["upsertLocation"];
   reportWaypointReached: LiveSessionStore["reportWaypointReached"];
 }
@@ -141,6 +152,12 @@ export const useRideLiveSession = ({
     onError: () => Alert.alert("Couldn't start the ride", "Check your connection and try again."),
   });
 
+  const rollOutMutation = useMutation({
+    mutationFn: () => rollOutLiveSession(rideId!),
+    onSuccess: refreshRide,
+    onError: () => Alert.alert("Couldn't set off", "Check your connection and try again."),
+  });
+
   const endMutation = useMutation({
     mutationFn: () => endLiveSession(rideId!),
     onSuccess: async () => {
@@ -182,10 +199,12 @@ export const useRideLiveSession = ({
   }, [inRoom, isAppActive, sendHeartbeat]);
 
   const ride = rideQuery.data ?? null;
+  // "starting" is the roll call: riders are joining and reporting where they
+  // are, but the group has not set off, so the ride is not under way yet.
   const rideState: RideState =
     ride?.status === "completed" || liveStatus === "ended"
       ? "COMPLETED"
-      : TRACKING_STATUSES.has(liveStatus) || ride?.status === "active"
+      : liveStatus === "active" || ride?.status === "active"
         ? "ACTIVE"
         : "NOT_STARTED";
 
@@ -198,12 +217,16 @@ export const useRideLiveSession = ({
     isTracking: TRACKING_STATUSES.has(liveStatus),
     startRide: () => startMutation.mutate(),
     isStarting: startMutation.isPending,
+    rollOut: () => rollOutMutation.mutate(),
+    isRollingOut: rollOutMutation.isPending,
+    liveStatus,
     endRide: () => endMutation.mutate(),
     isEnding: endMutation.isPending,
     inRoom,
     presence: store.presence,
     locations: store.locations,
     sessionEndedReason: store.sessionEndedReason,
+    regroupRequest: store.regroupRequest,
     upsertLocation: store.upsertLocation,
     reportWaypointReached: store.reportWaypointReached,
   };

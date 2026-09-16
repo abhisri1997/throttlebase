@@ -7,6 +7,7 @@ import {
   type PresenceUpdateEvent,
   type SessionEndedEvent,
   type SessionErrorEvent,
+  type RegroupRequestEvent,
 } from "../services/liveSessionSocket";
 
 type LiveIncident = IncidentCreatedEvent;
@@ -33,6 +34,8 @@ type LiveSessionState = {
   presence: PresenceMap;
   locations: LocationMap;
   incidents: LiveIncident[];
+  /** A rider left behind is asking the group to wait somewhere; null once answered. */
+  regroupRequest: RegroupRequestEvent | null;
   lastError: string | null;
   sessionEndedReason: string | null;
   connect: (token: string) => void;
@@ -49,6 +52,8 @@ type LiveSessionState = {
     heading_deg?: number;
     accuracy_m?: number;
     captured_at?: string;
+    /** Dev simulation: shared with the crew, but kept out of the ride's track. */
+    simulated?: boolean;
   }) => void;
   /** Records a waypoint arrival for the ride history. False when not in the room yet. */
   reportWaypointReached: (input: {
@@ -130,6 +135,19 @@ const attachSocketListeners = () => {
     }));
   });
 
+  liveSessionSocket.on("regroup:requested", (event: RegroupRequestEvent) => {
+    useLiveSessionStore.setState((state) => ({ ...state, regroupRequest: event }));
+  });
+
+  // Answered — by this leader or another — so the prompt goes away everywhere.
+  liveSessionSocket.on("regroup:decided", (event: { stopId: string }) => {
+    useLiveSessionStore.setState((state) => ({
+      ...state,
+      regroupRequest:
+        state.regroupRequest?.stop?.id === event.stopId ? null : state.regroupRequest,
+    }));
+  });
+
   liveSessionSocket.on("session:error", (event: SessionErrorEvent) => {
     useLiveSessionStore.setState((state) => ({
       ...state,
@@ -178,6 +196,7 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
   presence: {},
   locations: {},
   incidents: [],
+  regroupRequest: null,
   lastError: null,
   sessionEndedReason: null,
 
@@ -230,6 +249,7 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
       isJoining: true,
       inRoom: false,
       incidents: [],
+      regroupRequest: null,
       lastError: null,
     }));
   },
@@ -249,6 +269,7 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
       presence: {},
       locations: {},
       incidents: [],
+      regroupRequest: null,
     }));
   },
 
@@ -267,6 +288,7 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
         presence: {},
         locations: {},
         incidents: [],
+        regroupRequest: null,
         lastError: null,
       };
     });
@@ -282,6 +304,7 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
       presence: {},
       locations: {},
       incidents: [],
+      regroupRequest: null,
       lastError: null,
     }));
   },
@@ -359,6 +382,7 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
       presence: {},
       locations: {},
       incidents: [],
+      regroupRequest: null,
       lastError: null,
       sessionEndedReason: null,
     }));

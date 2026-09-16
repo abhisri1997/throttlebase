@@ -27,6 +27,10 @@ interface UseNavigationSessionInput {
   /** Placement waits for the planned route, so a rider joining mid-ride isn't sent to the start. */
   isPlannedRouteSettled: boolean;
   fix: NavigationFix | null;
+  /** Holds placement while a late rider is being asked how they want to join. */
+  isPlacementBlocked?: boolean;
+  /** Their answer: the waypoint to set off from, instead of the one their position implies. */
+  placementIndexOverride?: number | null;
 }
 
 export interface NavigationSessionControls {
@@ -45,6 +49,8 @@ export const useNavigationSession = ({
   tripGeometry,
   isPlannedRouteSettled,
   fix,
+  isPlacementBlocked = false,
+  placementIndexOverride = null,
 }: UseNavigationSessionInput): NavigationSessionControls => {
   const planKey = useMemo(() => (waypoints ? tripPlanKey(waypoints) : null), [waypoints]);
   const [session, setSession] = useState<NavigationSessionState | null>(null);
@@ -103,17 +109,31 @@ export const useNavigationSession = ({
   // Place the rider once, from their first fix, after the planned route settles.
   useEffect(() => {
     if (!session || session.isPlaced || !waypoints || !fix || !isPlannedRouteSettled) return;
+    // A late rider is choosing how to join; placing them now would pick for them.
+    if (isPlacementBlocked) return;
 
     const canUsePlannedRoute =
       tripGeometry !== null && tripGeometry.waypointAlongMeters.length === waypoints.length;
+    const fromPosition = canUsePlannedRoute
+      ? placeRiderOnTrip(fix.coordinate, tripGeometry)
+      : 0;
 
     dispatch({
       type: "PLACE",
-      targetIndex: canUsePlannedRoute ? placeRiderOnTrip(fix.coordinate, tripGeometry) : 0,
+      targetIndex: placementIndexOverride ?? fromPosition,
     });
     // A rider already standing at their first waypoint arrives without waiting for another fix.
     dispatch(toLocationEvent(fix));
-  }, [dispatch, fix, isPlannedRouteSettled, session, tripGeometry, waypoints]);
+  }, [
+    dispatch,
+    fix,
+    isPlacementBlocked,
+    isPlannedRouteSettled,
+    placementIndexOverride,
+    session,
+    tripGeometry,
+    waypoints,
+  ]);
 
   // Every fix may reach or leave a waypoint.
   useEffect(() => {

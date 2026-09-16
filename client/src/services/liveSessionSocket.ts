@@ -57,11 +57,34 @@ export type SessionEndedEvent = {
   reason: string | null;
 };
 
+/** A stop proposed so the group can wait for a rider who has fallen behind. */
+export type RegroupRequestEvent = {
+  rideId: string;
+  stop: {
+    id: string;
+    name?: string | null;
+    address?: string | null;
+    status: string;
+    location_geojson?: { coordinates?: unknown } | null;
+  };
+  requestedBy: string;
+  waitSeconds: number | null;
+};
+
+export type RegroupDecidedEvent = {
+  rideId: string;
+  stopId: string;
+  status: "approved" | "rejected";
+  decidedBy: string;
+};
+
 export type LiveSocketServerEvents = {
   "session:state": (event: LiveSessionStateEvent) => void;
   "presence:update": (event: PresenceUpdateEvent) => void;
   "location:broadcast": (event: LocationBroadcastEvent) => void;
   "incident:created": (event: IncidentCreatedEvent) => void;
+  "regroup:requested": (event: RegroupRequestEvent) => void;
+  "regroup:decided": (event: RegroupDecidedEvent) => void;
   "session:error": (event: SessionErrorEvent) => void;
   "session:ended": (event: SessionEndedEvent) => void;
 };

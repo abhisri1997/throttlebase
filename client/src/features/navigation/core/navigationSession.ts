@@ -106,10 +106,17 @@ const arriveAt = (
     .map((waypoint) => waypoint.id)
     .filter((id) => !(id in state.reachedAt) && !state.skippedIds.includes(id));
 
+  const isLast = index >= waypoints.length - 1;
+  // Nobody waits at the start — the ride begins there. Reaching it starts the
+  // first leg straight away, so a rider is never asked to continue from the
+  // point they set off from. A rider joining late still navigates to the
+  // start; they just ride on through it rather than stopping again.
+  const ridesStraightOn = arrived.kind === "start" && !isLast;
+
   return {
     ...state,
-    phase: index >= waypoints.length - 1 ? "FINISHED" : "AT_WAYPOINT",
-    targetIndex: index,
+    phase: isLast ? "FINISHED" : ridesStraightOn ? "NAVIGATING" : "AT_WAYPOINT",
+    targetIndex: ridesStraightOn ? index + 1 : index,
     reachedAt: { ...state.reachedAt, [arrived.id]: timestamp },
     skippedIds: [...state.skippedIds, ...passedOver],
   };

@@ -29,6 +29,12 @@ export const LiveLocationUpdateSchema = z.object({
   heading_deg: z.number().gte(0).lt(360).optional(),
   accuracy_m: z.number().nonnegative().optional(),
   captured_at: z.string().datetime().optional(),
+  /**
+   * A dev simulation rather than a real fix. Still broadcast so the crew can
+   * watch it move, but never kept as a track sample — the ride's history would
+   * otherwise interleave the simulation with the rider's own GPS.
+   */
+  simulated: z.boolean().optional(),
 });
 
 /** A rider reached a waypoint of the ride — the start, an approved stop, or the destination. */

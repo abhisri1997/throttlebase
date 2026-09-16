@@ -4,10 +4,13 @@ import {
   UpdateRideSchema,
   PromoteCoCaptainSchema,
   RequestStopSchema,
+  RequestRegroupSchema,
   HandleStopSchema,
 } from "../schemas/ride.schemas.js";
 import * as RideService from "../services/ride.service.js";
-import { emitToRideRoom } from "../realtime/gateway.js";
+import { emitToLiveRoom, emitToRideRoom } from "../realtime/gateway.js";
+import { buildLiveRoomKey } from "../realtime/session-room.js";
+import { getLiveSession } from "../services/live-session.service.js";
 
 interface RiderPayload {
   riderId: string;
@@ -260,6 +263,72 @@ export const requestStop = async (
   }
 };
 
+/**
+ * A rider who has fallen behind proposes somewhere for the group to wait.
+ *
+ * It is an ordinary pending stop, so the captain's existing approve/reject
+ * flow applies and an accepted one becomes a waypoint for everybody. The
+ * difference is reach: this also goes to the live room, because the captain
+ * who needs to answer is riding, not sitting on the ride screen.
+ */
+export const requestRegroup = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const validated = RequestRegroupSchema.parse(req.body);
+    const riderId = (req.rider as unknown as RiderPayload).riderId;
+    const rideId = req.params.id as string;
+
+    const stop = await RideService.requestStop(rideId, riderId, {
+      type: "rest",
+      location_coords: validated.location_coords,
+      name: validated.name,
+      address: validated.address,
+      google_place_id: validated.google_place_id,
+    } as any);
+
+    if (!stop) {
+      res
+        .status(403)
+        .json({ error: "You are not a confirmed participant of this ride" });
+      return;
+    }
+
+    emitToRideRoom(rideId, "ride:stop_requested", { rideId, stop });
+
+    const payload = {
+      rideId,
+      stop,
+      requestedBy: riderId,
+      waitSeconds: validated.wait_seconds ?? null,
+    };
+
+    try {
+      const session = await getLiveSession(rideId, riderId);
+      emitToLiveRoom(
+        buildLiveRoomKey(rideId, session.id),
+        "regroup:requested",
+        payload,
+      );
+    } catch (error: unknown) {
+      // No live session to shout into; the stop still stands on the ride screen.
+      console.warn("Regroup requested without a live session:", error);
+    }
+
+    res.status(201).json({ message: "Regroup requested", stop });
+  } catch (error: any) {
+    if (error.name === "ZodError") {
+      res
+        .status(400)
+        .json({ error: "Validation failed", details: error.errors });
+    } else {
+      console.error("Error requesting regroup:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+};
+
 export const handleStopRequest = async (
   req: Request,
   res: Response,
@@ -279,6 +348,21 @@ export const handleStopRequest = async (
 
     if (success) {
       emitToRideRoom(rideId, "ride:stop_updated", { rideId, stopId, status: validated.status });
+
+      // Riders in navigation are in the live room, not the ride room, and an
+      // approved stop changes the route they are following right now.
+      try {
+        const session = await getLiveSession(rideId, captainId);
+        emitToLiveRoom(buildLiveRoomKey(rideId, session.id), "regroup:decided", {
+          rideId,
+          stopId,
+          status: validated.status,
+          decidedBy: captainId,
+        });
+      } catch {
+        // Not riding yet; the ride-room broadcast above is enough.
+      }
+
       res.json({ message: `Stop request ${validated.status}` });
     } else {
       res.status(400).json({
