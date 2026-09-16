@@ -29,13 +29,18 @@ interface UseNavigationSessionInput {
   fix: NavigationFix | null;
   /** Holds placement while a late rider is being asked how they want to join. */
   isPlacementBlocked?: boolean;
-  /** Their answer: the waypoint to set off from, instead of the one their position implies. */
-  placementIndexOverride?: number | null;
 }
 
 export interface NavigationSessionControls {
   session: NavigationSessionState | null;
   skipTarget: () => void;
+  /**
+   * Sets the rider off from a chosen waypoint, counting everything before it
+   * as passed. Unlike the automatic placement this also moves a rider who has
+   * already been placed — a late joiner's answer arrives after the crew's
+   * positions do, which is well after their own first fix.
+   */
+  placeAt: (targetIndex: number) => void;
 }
 
 /**
@@ -50,7 +55,6 @@ export const useNavigationSession = ({
   isPlannedRouteSettled,
   fix,
   isPlacementBlocked = false,
-  placementIndexOverride = null,
 }: UseNavigationSessionInput): NavigationSessionControls => {
   const planKey = useMemo(() => (waypoints ? tripPlanKey(waypoints) : null), [waypoints]);
   const [session, setSession] = useState<NavigationSessionState | null>(null);
@@ -118,10 +122,7 @@ export const useNavigationSession = ({
       ? placeRiderOnTrip(fix.coordinate, tripGeometry)
       : 0;
 
-    dispatch({
-      type: "PLACE",
-      targetIndex: placementIndexOverride ?? fromPosition,
-    });
+    dispatch({ type: "PLACE", targetIndex: fromPosition });
     // A rider already standing at their first waypoint arrives without waiting for another fix.
     dispatch(toLocationEvent(fix));
   }, [
@@ -129,7 +130,6 @@ export const useNavigationSession = ({
     fix,
     isPlacementBlocked,
     isPlannedRouteSettled,
-    placementIndexOverride,
     session,
     tripGeometry,
     waypoints,
@@ -144,5 +144,15 @@ export const useNavigationSession = ({
 
   const skipTarget = useCallback(() => dispatch({ type: "SKIP_TARGET" }), [dispatch]);
 
-  return { session, skipTarget };
+  const placeAt = useCallback(
+    (targetIndex: number) => {
+      dispatch({ type: "PLACE", targetIndex });
+      // A rider placed at a waypoint they are already standing on arrives
+      // without waiting for the next fix.
+      if (fix) dispatch(toLocationEvent(fix));
+    },
+    [dispatch, fix],
+  );
+
+  return { session, skipTarget, placeAt };
 };

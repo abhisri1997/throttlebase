@@ -61,6 +61,24 @@ test("marks the waypoint being ridden to as next and those behind as done", () =
   assert.deepEqual(getWaypointStatuses(state, trip), ["visited", "next", "upcoming", "upcoming"]);
 });
 
+test("re-places a rider already set off from the start, skipping what is behind", () => {
+  // A late joiner is placed at the start from their own first fix, then
+  // answers "catch up" once the crew's positions arrive. Without this the
+  // answer would be ignored and they would be sent back to the start.
+  const placedAtStart = run([place(0)]);
+
+  const catchingUp = reduceNavigationSession(placedAtStart, place(2), trip);
+
+  assert.equal(catchingUp.targetIndex, 2);
+  assert.equal(catchingUp.phase, "NAVIGATING");
+  assert.deepEqual(getWaypointStatuses(catchingUp, trip), [
+    "visited",
+    "visited",
+    "next",
+    "upcoming",
+  ]);
+});
+
 test("while waiting at a stop, the stop is done and the waypoint after it is next", () => {
   const state = run([place(1), fix(at(0.01))]);
 

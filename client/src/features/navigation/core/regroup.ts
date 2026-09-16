@@ -12,6 +12,14 @@ import type { LatLng } from "../types/navigation";
 const DEFAULT_SPEED_MPS = 12;
 /** Longer than this stood at the roadside and the regroup is not worth it. */
 export const MAX_REGROUP_WAIT_SECONDS = 15 * 60;
+/**
+ * How far ahead of the rider furthest along a meeting point has to sit. They
+ * are still moving while the proposal is written, sent and answered, so a
+ * point just in front of them would be behind them by the time anyone agreed
+ * to it — and asking the front of the group to turn back is the one thing a
+ * regroup must never do.
+ */
+export const REGROUP_LEAD_MARGIN_METERS = 1500;
 
 export interface RegroupCandidate {
   id: string;
@@ -25,13 +33,14 @@ export interface RegroupCandidate {
 
 export interface RegroupInput {
   candidates: readonly RegroupCandidate[];
-  /** How far along the route the group has got. */
+  /** How far along the route the rider furthest ahead has got. */
   groupAlongMeters: number;
   /** How far along the route the rider behind has got. */
   riderAlongMeters: number;
   groupSpeedMps?: number;
   riderSpeedMps?: number;
   maxWaitSeconds?: number;
+  leadMarginMeters?: number;
 }
 
 export interface RegroupSuggestion {
@@ -57,8 +66,11 @@ export const suggestRegroupPoint = ({
   groupSpeedMps = DEFAULT_SPEED_MPS,
   riderSpeedMps = DEFAULT_SPEED_MPS,
   maxWaitSeconds = MAX_REGROUP_WAIT_SECONDS,
+  leadMarginMeters = REGROUP_LEAD_MARGIN_METERS,
 }: RegroupInput): RegroupSuggestion | null => {
-  const ahead = candidates.filter((candidate) => candidate.alongMeters > groupAlongMeters);
+  const ahead = candidates.filter(
+    (candidate) => candidate.alongMeters > groupAlongMeters + leadMarginMeters,
+  );
 
   const scored = ahead.map((candidate): RegroupSuggestion => {
     const groupEtaSeconds = etaSeconds(

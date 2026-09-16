@@ -280,7 +280,10 @@ export const getRideById = async (
                   'rider_id', rp.rider_id, 
                   'joined_at', rp.joined_at, 
                   'role', rp.role, 
-                  'display_name', u.display_name
+                  'display_name', u.display_name,
+                  -- Whether they have said where they are riding from, which
+                  -- is what an auto-calculated meeting point is derived from.
+                  'has_start_override', rp.start_location_override IS NOT NULL
                 )
               )
               FROM ride_participants rp
@@ -746,6 +749,26 @@ export const handleStopRequest = async (
     [decision, captainId, stopId, rideId],
   );
   return result.rows.length > 0;
+};
+
+/**
+ * One stop of a ride, but only for a confirmed participant of it — a rider
+ * who is not on the ride has no business reading where it stops.
+ */
+export const findRideStopForParticipant = async (
+  rideId: string,
+  stopId: string,
+  riderId: string,
+): Promise<RideStop | null> => {
+  const result = await query(
+    `SELECT rs.*, ST_AsGeoJSON(rs.location)::json AS location_geojson
+     FROM ride_stops rs
+     JOIN ride_participants rp
+       ON rp.ride_id = rs.ride_id AND rp.rider_id = $3 AND rp.status = 'confirmed'
+     WHERE rs.ride_id = $1 AND rs.id = $2`,
+    [rideId, stopId, riderId],
+  );
+  return result.rows.length ? (result.rows[0] as RideStop) : null;
 };
 
 /**

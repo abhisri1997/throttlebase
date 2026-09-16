@@ -43,6 +43,7 @@ test("reports how long the group waits and when each arrives", () => {
     riderAlongMeters: 2000,
     groupSpeedMps: 10,
     riderSpeedMps: 10,
+    leadMarginMeters: 0,
   });
 
   assert.equal(suggestion?.groupEtaSeconds, 120);
@@ -55,6 +56,7 @@ test("a rider already past the point leaves the group waiting for nobody", () =>
     candidates: [candidate("stop", 6000)],
     groupAlongMeters: 5000,
     riderAlongMeters: 5800,
+    leadMarginMeters: 0,
   });
 
   assert.equal(suggestion?.waitSeconds, 0);
@@ -66,6 +68,7 @@ test("suggests nothing when the group would be left standing too long", () => {
     groupAlongMeters: 5000,
     riderAlongMeters: -40_000, // 40 km behind the start
     maxWaitSeconds: 600,
+    leadMarginMeters: 0,
   });
 
   assert.equal(suggestion, null);
@@ -93,4 +96,29 @@ test("nothing ahead means nothing to suggest", () => {
     }),
     null,
   );
+});
+
+test("keeps the meeting point clear of the rider furthest ahead", () => {
+  // The lead rider is still moving while the proposal is answered, so a point
+  // just in front of them would be behind them by the time anyone agreed.
+  const suggestion = suggestRegroupPoint({
+    candidates: [candidate("just-ahead", 5200), candidate("clear", 8000)],
+    groupAlongMeters: 5000,
+    riderAlongMeters: 2000,
+    leadMarginMeters: 1500,
+  });
+
+  assert.equal(suggestion?.candidate.id, "clear");
+});
+
+test("an existing stop too close to the lead rider is not reused", () => {
+  // Being already on the plan does not help if the group is about to pass it.
+  const suggestion = suggestRegroupPoint({
+    candidates: [candidate("planned-stop", 5200, true)],
+    groupAlongMeters: 5000,
+    riderAlongMeters: 2000,
+    leadMarginMeters: 1500,
+  });
+
+  assert.equal(suggestion, null);
 });

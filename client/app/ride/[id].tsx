@@ -237,6 +237,12 @@ const hasGrantedForegroundLocation = async (): Promise<boolean> => {
   }
 };
 
+/**
+ * How long before a ride the meeting point stops moving. Riders set off for it
+ * around then, so a late change would send them somewhere they are not headed.
+ */
+const START_OVERRIDE_CUTOFF_MS = 12 * 60 * 60 * 1000;
+
 const STATUS_COLORS: Record<string, string> = {
   draft: "#64748b",
   scheduled: "#3b82f6",
@@ -1407,6 +1413,22 @@ useEffect(() => {
     (p: any) => p.rider_id === currentRider?.id && p.role === "co_captain",
   );
   const isLeader = isCaptain || isCoCaptain;
+  // An auto-calculated meeting point is the geometric median of where each
+  // rider sets off from, so this button is about this rider's own origin —
+  // it feeds the calculation rather than overriding its result.
+  const hasStartOverride = Boolean(
+    ride.participants?.find((p: any) => p.rider_id === currentRider?.id)
+      ?.has_start_override,
+  );
+  const startOverrideLabel = hasStartOverride
+    ? "Change where you're riding from"
+    : "Set where you're riding from";
+  // Late changes would move the meeting point out from under riders already
+  // on their way to it.
+  const canSetStartOverride =
+    ride.status === "scheduled" &&
+    new Date(ride.scheduled_at).getTime() - Date.now() >
+      START_OVERRIDE_CUTOFF_MS;
   const hasReviewed = Boolean(
     reviews?.some((r) => r.rider_id === currentRider?.id),
   );
@@ -2446,32 +2468,51 @@ useEffect(() => {
             >
               You are participating in this ride! 🎉
             </Text>
-            {ride.start_point_auto &&
-              ride.status === "scheduled" &&
-              new Date(ride.scheduled_at).getTime() - Date.now() >
-                12 * 60 * 60 * 1000 && (
-                <LocationPicker
-                  label='Update Starting Location'
-                  onSelect={(result) =>
-                    updateLocationMutation.mutate(result.coords)
-                  }
-                  customTrigger={(showModal) => (
-                    <TouchableOpacity
-                      onPress={showModal}
-                      className='mt-3 p-3 rounded-xl items-center'
-                      style={{ backgroundColor: colors.primary }}
-                    >
-                      {updateLocationMutation.isPending ? (
-                        <ActivityIndicator color='white' />
-                      ) : (
-                        <Text className='font-bold text-white'>
-                          Update Starting Location
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                  )}
-                />
-              )}
+            {ride.start_point_auto && (
+              <View className='mt-3'>
+                {/* The meeting point is derived from where everyone rides
+                    from, so it is shown here — otherwise the button below
+                    reads as if it sets the ride's start point itself. */}
+                <Text className='text-xs' style={{ color: colors.textMuted }}>
+                  Meeting point · set automatically
+                </Text>
+                <Text
+                  className='font-semibold mt-0.5'
+                  style={{ color: ride.start_point_name ? colors.text : colors.textMuted }}
+                >
+                  {ride.start_point_name ??
+                    "Waiting for riders to say where they're riding from"}
+                </Text>
+
+                {canSetStartOverride ? (
+                  <LocationPicker
+                    label={startOverrideLabel}
+                    onSelect={(result) =>
+                      updateLocationMutation.mutate(result.coords)
+                    }
+                    customTrigger={(showModal) => (
+                      <TouchableOpacity
+                        onPress={showModal}
+                        className='mt-3 p-3 rounded-xl items-center'
+                        style={{ backgroundColor: colors.primary }}
+                      >
+                        {updateLocationMutation.isPending ? (
+                          <ActivityIndicator color='white' />
+                        ) : (
+                          <Text className='font-bold text-white'>
+                            {startOverrideLabel}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    )}
+                  />
+                ) : (
+                  <Text className='text-xs mt-2' style={{ color: colors.textMuted }}>
+                    The meeting point is locked in 12 hours before the ride.
+                  </Text>
+                )}
+              </View>
+            )}
           </View>
         ) : (
           <TouchableOpacity

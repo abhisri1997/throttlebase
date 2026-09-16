@@ -62,6 +62,12 @@ export const RequestStopSchema = z.object({
 export const RequestRegroupSchema = z.object({
   ...StopFieldsSchema,
   wait_seconds: z.number().int().min(0).nullish(),
+  /**
+   * A stop the ride was already making. There is nothing for the leaders to
+   * approve — everyone planned to pull in there — so the request only tells
+   * them somebody is behind, and no new stop is created.
+   */
+  existing_stop_id: z.string().uuid('Must be a valid UUID').nullish(),
 });
 
 export const HandleStopSchema = z.object({

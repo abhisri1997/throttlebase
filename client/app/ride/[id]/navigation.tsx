@@ -31,9 +31,11 @@ import {
 import {
   suggestRegroupPoint,
   type RegroupCandidate,
+  type RegroupSuggestion,
 } from "../../../src/features/navigation/core/regroup";
 import { projectOntoPolyline } from "../../../src/features/navigation/core/geometry";
 import { fetchStopSuggestions } from "../../../src/features/rides/api/stopSuggestions";
+import type { StopSuggestion } from "../../../src/features/rides/types/stops";
 import { apiClient } from "../../../src/api/client";
 import { useAppIsActive } from "../../../src/features/navigation/hooks/useAppIsActive";
 import { useLiveLeg } from "../../../src/features/navigation/hooks/useLiveLeg";
@@ -62,6 +64,15 @@ const RECENTER_GAP = 12;
 const KMH_PER_MPS = 3.6;
 /** Tighter than the default focus zoom so stops metres apart are unambiguous. */
 const WAYPOINT_FOCUS_ZOOM = 18;
+/**
+ * How long to wait for the crew's live positions before guiding a rider who
+ * has opened navigation on an already-running ride. Their own first fix
+ * arrives long before the first `location:broadcast`, and placing them in
+ * that gap would set them off from the start before anyone could ask.
+ */
+const GROUP_POSITION_GRACE_MS = 5_000;
+/** Alternatives offered to a leader who would rather regroup somewhere else. */
+const MAX_REGROUP_ALTERNATIVES = 3;
 
 export default function RideNavigationScreen() {
   const { colors } = useTheme();
@@ -147,21 +158,57 @@ export default function RideNavigationScreen() {
   }, [fix]);
   const puckFix = fix ?? lastKnownFix;
 
-  // Where the group has actually got to, from the riders reporting in.
+  const crewPositions = useMemo(
+    () =>
+      Object.values(live.locations)
+        .filter((location) => location.riderId !== currentRiderId)
+        .map((location) => ({ latitude: location.lat, longitude: location.lon })),
+    [currentRiderId, live.locations],
+  );
+
+  // Which waypoint the group is heading to, for placing a late rider.
   const groupIndex = useMemo(() => {
     if (!plannedRoute.tripGeometry) return 0;
+    return groupTargetIndex(crewPositions, plannedRoute.tripGeometry);
+  }, [crewPositions, plannedRoute.tripGeometry]);
 
-    const positions = Object.values(live.locations)
-      .filter((location) => location.riderId !== currentRiderId)
-      .map((location) => ({ latitude: location.lat, longitude: location.lon }));
+  /**
+   * How far along the route the rider furthest ahead actually is.
+   *
+   * Deliberately not the distance of the waypoint they are heading to: on a
+   * ride whose next waypoint is the destination that would read as the end of
+   * the route, and nothing can be found beyond it, so no regroup point would
+   * ever be offered.
+   */
+  const groupAlongMeters = useMemo(() => {
+    const trip = plannedRoute.tripGeometry;
+    if (!trip) return 0;
 
-    return groupTargetIndex(positions, plannedRoute.tripGeometry);
-  }, [currentRiderId, live.locations, plannedRoute.tripGeometry]);
+    return crewPositions.reduce((furthest, position) => {
+      const projected = projectOntoPolyline(position, trip.polyline, trip.cumulative);
+      return projected
+        ? Math.max(furthest, projected.distanceAlongMeters)
+        : furthest;
+    }, 0);
+  }, [crewPositions, plannedRoute.tripGeometry]);
 
   // A rider opening navigation after the group has left is asked how to join
   // rather than being silently sent back to the start.
-  const [joinChoice, setJoinChoice] = useState<number | null>(null);
   const [hasChosenJoin, setHasChosenJoin] = useState(false);
+
+  // Nothing is known about where the crew is until their first broadcast, so
+  // guidance holds briefly rather than committing the rider to the start.
+  const [isGraceOver, setIsGraceOver] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setIsGraceOver(true), GROUP_POSITION_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  const hasCrewPositions = Object.keys(live.locations).some(
+    (riderId) => riderId !== currentRiderId,
+  );
+  const isAwaitingCrew =
+    live.rideState === "ACTIVE" && !hasChosenJoin && !hasCrewPositions && !isGraceOver;
+
   const needsJoinChoice =
     !hasChosenJoin &&
     live.rideState === "ACTIVE" &&
@@ -174,26 +221,52 @@ export default function RideNavigationScreen() {
       groupTargetIndex: groupIndex,
     });
 
-  const { session, skipTarget } = useNavigationSession({
+  const { session, skipTarget, placeAt } = useNavigationSession({
     rideId: id,
     waypoints,
     tripGeometry: plannedRoute.tripGeometry,
     isPlannedRouteSettled: plannedRoute.isSettled,
     fix,
-    isPlacementBlocked: needsJoinChoice,
-    placementIndexOverride: joinChoice,
+    isPlacementBlocked: needsJoinChoice || isAwaitingCrew,
   });
 
   /**
-   * Asks the group to wait somewhere. A stop the ride was already making needs
-   * no asking — the rider simply catches them there — so this only speaks up
-   * when the group would otherwise ride on past.
+   * Tells the leaders a rider is behind, and where the crew could wait for
+   * them. An existing stop is sent as a notification only — everyone already
+   * planned to pull in there, so there is nothing to approve — while a new
+   * point becomes a pending stop the leaders answer.
+   */
+  const sendRegroupRequest = async (
+    suggestion: RegroupSuggestion,
+    existingStopId: string | null,
+  ): Promise<string | null> => {
+    const { data } = await apiClient.post(`/api/rides/${id}/regroup`, {
+      location_coords: [
+        suggestion.candidate.coordinate.longitude,
+        suggestion.candidate.coordinate.latitude,
+      ],
+      name: existingStopId
+        ? suggestion.candidate.name
+        : `Regroup at ${suggestion.candidate.name}`,
+      google_place_id: existingStopId ? null : suggestion.candidate.id,
+      wait_seconds: Math.round(suggestion.waitSeconds),
+      existing_stop_id: existingStopId,
+    });
+
+    const stopId: unknown = data?.stop?.id;
+    return typeof stopId === "string" ? stopId : null;
+  };
+
+  /**
+   * Asks the crew to wait somewhere, and says what came of it — catching up
+   * in silence leaves the rider wondering whether anyone knows they are
+   * behind. Either way they are already routed to the crew, so every outcome
+   * here only changes whether the crew waits, never where the rider is sent.
    */
   const proposeRegroup = async (): Promise<void> => {
     const trip = plannedRoute.tripGeometry;
     if (!trip || !waypoints || !fix) return;
 
-    const groupAlongMeters = trip.waypointAlongMeters[groupIndex] ?? 0;
     const riderAlongMeters =
       projectOntoPolyline(fix.coordinate, trip.polyline, trip.cumulative)
         ?.distanceAlongMeters ?? 0;
@@ -212,17 +285,28 @@ export default function RideNavigationScreen() {
         : [],
     );
 
-    const alreadyStopping = suggestRegroupPoint({
-      candidates: plannedStops,
-      groupAlongMeters,
-      riderAlongMeters,
-    });
-    if (alreadyStopping) return;
-
-    const encodedPolyline = plannedRoute.route?.encodedPolyline;
-    if (!encodedPolyline) return;
-
     try {
+      const alreadyStopping = suggestRegroupPoint({
+        candidates: plannedStops,
+        groupAlongMeters,
+        riderAlongMeters,
+      });
+
+      if (alreadyStopping) {
+        await sendRegroupRequest(alreadyStopping, alreadyStopping.candidate.id);
+        Alert.alert(
+          "Catching up",
+          `The crew is already stopping at ${alreadyStopping.candidate.name}. Your leaders know you're on your way.`,
+        );
+        return;
+      }
+
+      const encodedPolyline = plannedRoute.route?.encodedPolyline;
+      if (!encodedPolyline) {
+        Alert.alert("Catching up", "Heading straight for the crew.");
+        return;
+      }
+
       const { suggestions } = await fetchStopSuggestions("rest", encodedPolyline);
       const suggestion = suggestRegroupPoint({
         candidates: suggestions.map((place) => ({
@@ -236,25 +320,57 @@ export default function RideNavigationScreen() {
         riderAlongMeters,
       });
 
-      if (!suggestion) return;
+      if (!suggestion) {
+        Alert.alert(
+          "Catching up",
+          "There's nowhere sensible for the crew to wait, so you're heading straight for them.",
+        );
+        return;
+      }
 
-      await apiClient.post(`/api/rides/${id}/regroup`, {
-        location_coords: [
-          suggestion.candidate.coordinate.longitude,
-          suggestion.candidate.coordinate.latitude,
-        ],
-        name: `Regroup at ${suggestion.candidate.name}`,
-        google_place_id: suggestion.candidate.id,
-        wait_seconds: Math.round(suggestion.waitSeconds),
-      });
+      const stopId = await sendRegroupRequest(suggestion, null);
+      if (stopId) setPendingRegroup({ stopId, name: suggestion.candidate.name });
+      Alert.alert(
+        "Your leaders have been asked",
+        `They've been asked to regroup at ${suggestion.candidate.name}. Keep riding — you're routed to the crew either way.`,
+      );
     } catch {
-      // Catching up still works; the group just won't be asked to wait.
+      Alert.alert(
+        "Couldn't reach the crew",
+        "Nobody could be asked to wait, so you're heading straight for them.",
+      );
     }
   };
 
+  // A notify-only regroup has nothing to answer, so it is dismissed locally.
+  const [dismissedRegroupStopId, setDismissedRegroupStopId] = useState<string | null>(null);
+
+  // A regroup this rider asked for, until the leaders answer it.
+  const [pendingRegroup, setPendingRegroup] = useState<{
+    stopId: string;
+    name: string;
+  } | null>(null);
+  const { regroupDecision } = live;
+  useEffect(() => {
+    if (!pendingRegroup || regroupDecision?.stopId !== pendingRegroup.stopId) return;
+
+    setPendingRegroup(null);
+    // An approved stop joins everyone's route on its own; a rejected one just
+    // leaves this rider chasing, which is already where they are headed.
+    Alert.alert(
+      regroupDecision.status === "approved" ? "The crew is waiting" : "Not that spot",
+      regroupDecision.status === "approved"
+        ? `They'll regroup with you at ${pendingRegroup.name}.`
+        : "Your leaders turned that spot down. Keep heading for the crew — if they pick somewhere else it'll appear on your route.",
+    );
+  }, [pendingRegroup, regroupDecision]);
+
   const chooseJoin = (targetIndex: number) => {
-    setJoinChoice(targetIndex);
     setHasChosenJoin(true);
+    // The crew's positions arrive well after this rider's own first fix, so by
+    // the time the choice is offered they have usually been placed already.
+    // Re-placing is what makes the answer mean anything.
+    placeAt(targetIndex);
     // Only a rider chasing the group has anything to regroup about.
     if (targetIndex > 0) void proposeRegroup();
   };
@@ -268,6 +384,55 @@ export default function RideNavigationScreen() {
       live.refetch();
     } catch {
       Alert.alert("Couldn't answer", "Check your connection and try again.");
+    }
+  };
+
+  /**
+   * A leader adds their own regroup point. Their stop requests are approved on
+   * creation, so the alternative becomes a waypoint for everyone, and the
+   * rider's original suggestion is turned down in the same breath.
+   */
+  const addRegroupStop = async (place: StopSuggestion): Promise<void> => {
+    try {
+      await apiClient.post(`/api/rides/${id}/stops`, {
+        type: "rest",
+        location_coords: place.coords,
+        name: place.name,
+        address: place.address,
+        google_place_id: place.google_place_id,
+      });
+      await decideRegroup("rejected");
+    } catch {
+      Alert.alert("Couldn't add the stop", "Check your connection and try again.");
+    }
+  };
+
+  /** Somewhere else along the route for the crew to wait. */
+  const counterProposeRegroup = async (): Promise<void> => {
+    const encodedPolyline = plannedRoute.route?.encodedPolyline;
+    if (!encodedPolyline) {
+      Alert.alert("No alternatives yet", "The route hasn't finished loading.");
+      return;
+    }
+
+    try {
+      const { suggestions } = await fetchStopSuggestions("rest", encodedPolyline);
+      const options = suggestions.slice(0, MAX_REGROUP_ALTERNATIVES);
+
+      if (options.length === 0) {
+        Alert.alert("No alternatives", "Nothing suitable was found along the route.");
+        return;
+      }
+
+      Alert.alert("Where should the crew wait?", "The stop is added for everyone.", [
+        ...options.map((place) => ({
+          text: place.name,
+          onPress: () => void addRegroupStop(place),
+        })),
+        { text: "Cancel", style: "cancel" as const },
+      ]);
+    } catch {
+      Alert.alert("Couldn't load places", "Check your connection and try again.");
     }
   };
 
@@ -420,6 +585,16 @@ export default function RideNavigationScreen() {
 
   const rideStart = waypoints[0]!.coordinate;
   const isHost = live.ride.captain_id === currentRiderId;
+
+  const regroupRequest = live.regroupRequest;
+  const regroupStopName = regroupRequest?.stop?.name ?? "a stop";
+  const behindRiderName =
+    participants.find((participant) => participant.riderId === regroupRequest?.requestedBy)
+      ?.displayName ?? "A rider";
+  const showRegroupPrompt =
+    isHost &&
+    regroupRequest !== null &&
+    regroupRequest.stop?.id !== dismissedRegroupStopId;
   const isFinished = live.rideState === "COMPLETED" || session?.phase === "FINISHED";
 
   const tripAction = ((): TripBarAction | null => {
@@ -533,35 +708,59 @@ export default function RideNavigationScreen() {
         ) : null}
       </MapView>
 
-      {isHost && live.regroupRequest ? (
+      {showRegroupPrompt && regroupRequest ? (
         <View style={[styles.joinSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.joinTitle, { color: colors.text }]}>A rider has fallen behind</Text>
           <Text style={[styles.joinBody, { color: colors.textMuted }]}>
-            {participants.find(
-              (participant) => participant.riderId === live.regroupRequest?.requestedBy,
-            )?.displayName ?? "A rider"}{" "}
-            is asking the crew to regroup at {live.regroupRequest.stop?.name ?? "a stop"}
-            {live.regroupRequest.waitSeconds
-              ? ` · about ${formatDuration(live.regroupRequest.waitSeconds)} of waiting`
+            {behindRiderName} is{" "}
+            {regroupRequest.isExistingStop
+              ? `catching up — the crew is already stopping at ${regroupStopName}`
+              : `asking the crew to regroup at ${regroupStopName}`}
+            {regroupRequest.waitSeconds
+              ? ` · about ${formatDuration(regroupRequest.waitSeconds)} of waiting`
               : ""}
             .
           </Text>
 
-          <TouchableOpacity
-            accessibilityRole='button'
-            onPress={() => decideRegroup("approved")}
-            style={[styles.joinPrimary, { backgroundColor: colors.primary }]}
-          >
-            <Text style={styles.joinPrimaryText}>Add the stop for everyone</Text>
-          </TouchableOpacity>
+          {regroupRequest.isExistingStop ? (
+            // Nothing to decide: everyone was already pulling in there. The
+            // leaders only needed to know not to roll out without them.
+            <TouchableOpacity
+              accessibilityRole='button'
+              onPress={() => setDismissedRegroupStopId(regroupRequest.stop?.id ?? null)}
+              style={[styles.joinPrimary, { backgroundColor: colors.primary }]}
+            >
+              <Text style={styles.joinPrimaryText}>Got it</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              <TouchableOpacity
+                accessibilityRole='button'
+                onPress={() => decideRegroup("approved")}
+                style={[styles.joinPrimary, { backgroundColor: colors.primary }]}
+              >
+                <Text style={styles.joinPrimaryText}>Add the stop for everyone</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            accessibilityRole='button'
-            onPress={() => decideRegroup("rejected")}
-            style={[styles.joinSecondary, { borderColor: colors.border }]}
-          >
-            <Text style={[styles.joinSecondaryText, { color: colors.text }]}>Keep riding</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityRole='button'
+                onPress={() => void counterProposeRegroup()}
+                style={[styles.joinSecondary, { borderColor: colors.border }]}
+              >
+                <Text style={[styles.joinSecondaryText, { color: colors.text }]}>
+                  Wait somewhere else
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                accessibilityRole='button'
+                onPress={() => decideRegroup("rejected")}
+                style={[styles.joinSecondary, { borderColor: colors.border }]}
+              >
+                <Text style={[styles.joinSecondaryText, { color: colors.text }]}>Keep riding</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       ) : null}
 

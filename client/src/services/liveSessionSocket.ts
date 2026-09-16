@@ -69,6 +69,8 @@ export type RegroupRequestEvent = {
   };
   requestedBy: string;
   waitSeconds: number | null;
+  /** The ride was already stopping there: news for the leaders, not a decision. */
+  isExistingStop?: boolean;
 };
 
 export type RegroupDecidedEvent = {

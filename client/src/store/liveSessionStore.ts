@@ -8,6 +8,7 @@ import {
   type SessionEndedEvent,
   type SessionErrorEvent,
   type RegroupRequestEvent,
+  type RegroupDecidedEvent,
 } from "../services/liveSessionSocket";
 
 type LiveIncident = IncidentCreatedEvent;
@@ -36,6 +37,8 @@ type LiveSessionState = {
   incidents: LiveIncident[];
   /** A rider left behind is asking the group to wait somewhere; null once answered. */
   regroupRequest: RegroupRequestEvent | null;
+  /** The leaders' last answer, so the rider who asked hears it. */
+  regroupDecision: RegroupDecidedEvent | null;
   lastError: string | null;
   sessionEndedReason: string | null;
   connect: (token: string) => void;
@@ -140,9 +143,10 @@ const attachSocketListeners = () => {
   });
 
   // Answered — by this leader or another — so the prompt goes away everywhere.
-  liveSessionSocket.on("regroup:decided", (event: { stopId: string }) => {
+  liveSessionSocket.on("regroup:decided", (event: RegroupDecidedEvent) => {
     useLiveSessionStore.setState((state) => ({
       ...state,
+      regroupDecision: event,
       regroupRequest:
         state.regroupRequest?.stop?.id === event.stopId ? null : state.regroupRequest,
     }));
@@ -197,6 +201,7 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
   locations: {},
   incidents: [],
   regroupRequest: null,
+  regroupDecision: null,
   lastError: null,
   sessionEndedReason: null,
 
@@ -250,6 +255,7 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
       inRoom: false,
       incidents: [],
       regroupRequest: null,
+      regroupDecision: null,
       lastError: null,
     }));
   },
@@ -270,6 +276,7 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
       locations: {},
       incidents: [],
       regroupRequest: null,
+      regroupDecision: null,
     }));
   },
 
@@ -289,6 +296,7 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
         locations: {},
         incidents: [],
         regroupRequest: null,
+        regroupDecision: null,
         lastError: null,
       };
     });
@@ -305,6 +313,7 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
       locations: {},
       incidents: [],
       regroupRequest: null,
+      regroupDecision: null,
       lastError: null,
     }));
   },
@@ -383,6 +392,7 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
       locations: {},
       incidents: [],
       regroupRequest: null,
+      regroupDecision: null,
       lastError: null,
       sessionEndedReason: null,
     }));

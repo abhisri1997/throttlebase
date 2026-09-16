@@ -97,6 +97,8 @@ export interface RideLiveSession {
   sessionEndedReason: LiveSessionStore["sessionEndedReason"];
   /** A rider left behind asking the group to wait; null once a leader answers. */
   regroupRequest: LiveSessionStore["regroupRequest"];
+  /** The leaders' answer to a regroup, for the rider who asked for it. */
+  regroupDecision: LiveSessionStore["regroupDecision"];
   upsertLocation: LiveSessionStore["upsertLocation"];
   reportWaypointReached: LiveSessionStore["reportWaypointReached"];
 }
@@ -227,6 +229,7 @@ export const useRideLiveSession = ({
     locations: store.locations,
     sessionEndedReason: store.sessionEndedReason,
     regroupRequest: store.regroupRequest,
+    regroupDecision: store.regroupDecision,
     upsertLocation: store.upsertLocation,
     reportWaypointReached: store.reportWaypointReached,
   };

@@ -266,10 +266,14 @@ export const requestStop = async (
 /**
  * A rider who has fallen behind proposes somewhere for the group to wait.
  *
- * It is an ordinary pending stop, so the captain's existing approve/reject
- * flow applies and an accepted one becomes a waypoint for everybody. The
- * difference is reach: this also goes to the live room, because the captain
- * who needs to answer is riding, not sitting on the ride screen.
+ * A new point is an ordinary pending stop, so the captain's existing
+ * approve/reject flow applies and an accepted one becomes a waypoint for
+ * everybody. A stop the ride was already making needs no approval, so it is
+ * sent as a notification instead — the leaders still have to know somebody is
+ * behind, or they will roll out of that stop without them.
+ *
+ * Either way this also goes to the live room, because the captain who needs
+ * to answer is riding, not sitting on the ride screen.
  */
 export const requestRegroup = async (
   req: Request,
@@ -279,29 +283,42 @@ export const requestRegroup = async (
     const validated = RequestRegroupSchema.parse(req.body);
     const riderId = (req.rider as unknown as RiderPayload).riderId;
     const rideId = req.params.id as string;
+    const isExistingStop = Boolean(validated.existing_stop_id);
 
-    const stop = await RideService.requestStop(rideId, riderId, {
-      type: "rest",
-      location_coords: validated.location_coords,
-      name: validated.name,
-      address: validated.address,
-      google_place_id: validated.google_place_id,
-    } as any);
+    const stop = isExistingStop
+      ? await RideService.findRideStopForParticipant(
+          rideId,
+          validated.existing_stop_id as string,
+          riderId,
+        )
+      : await RideService.requestStop(rideId, riderId, {
+          type: "rest",
+          location_coords: validated.location_coords,
+          name: validated.name,
+          address: validated.address,
+          google_place_id: validated.google_place_id,
+        } as any);
 
     if (!stop) {
-      res
-        .status(403)
-        .json({ error: "You are not a confirmed participant of this ride" });
+      res.status(403).json({
+        error: isExistingStop
+          ? "That stop is not part of this ride"
+          : "You are not a confirmed participant of this ride",
+      });
       return;
     }
 
-    emitToRideRoom(rideId, "ride:stop_requested", { rideId, stop });
+    // Only a new stop changes the ride's plan; an existing one is unchanged.
+    if (!isExistingStop) {
+      emitToRideRoom(rideId, "ride:stop_requested", { rideId, stop });
+    }
 
     const payload = {
       rideId,
       stop,
       requestedBy: riderId,
       waitSeconds: validated.wait_seconds ?? null,
+      isExistingStop,
     };
 
     try {
