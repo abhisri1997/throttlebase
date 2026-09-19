@@ -192,10 +192,6 @@ export default function RideNavigationScreen() {
     }, 0);
   }, [crewPositions, plannedRoute.tripGeometry]);
 
-  // A rider opening navigation after the group has left is asked how to join
-  // rather than being silently sent back to the start.
-  const [hasChosenJoin, setHasChosenJoin] = useState(false);
-
   // Nothing is known about where the crew is until their first broadcast, so
   // guidance holds briefly rather than committing the rider to the start.
   const [isGraceOver, setIsGraceOver] = useState(false);
@@ -203,14 +199,14 @@ export default function RideNavigationScreen() {
     const timer = setTimeout(() => setIsGraceOver(true), GROUP_POSITION_GRACE_MS);
     return () => clearTimeout(timer);
   }, []);
-  const hasCrewPositions = Object.keys(live.locations).some(
-    (riderId) => riderId !== currentRiderId,
-  );
+  const hasCrewPositions = crewPositions.length > 0;
   const isAwaitingCrew =
-    live.rideState === "ACTIVE" && !hasChosenJoin && !hasCrewPositions && !isGraceOver;
+    live.rideState === "ACTIVE" && !hasCrewPositions && !isGraceOver;
 
-  const needsJoinChoice =
-    !hasChosenJoin &&
+  // A rider opening navigation after the group has left is asked how to join
+  // rather than being silently sent back to the start. Whether they have
+  // answered lives in the session, so reopening the screen does not re-ask.
+  const shouldAskJoin =
     live.rideState === "ACTIVE" &&
     plannedRoute.isSettled &&
     fix !== null &&
@@ -227,8 +223,11 @@ export default function RideNavigationScreen() {
     tripGeometry: plannedRoute.tripGeometry,
     isPlannedRouteSettled: plannedRoute.isSettled,
     fix,
-    isPlacementBlocked: needsJoinChoice || isAwaitingCrew,
+    isPlacementBlocked: isAwaitingCrew,
+    isJoinChoicePending: shouldAskJoin,
   });
+
+  const needsJoinChoice = shouldAskJoin && session?.isJoinChosen !== true;
 
   /**
    * Tells the leaders a rider is behind, and where the crew could wait for
@@ -366,7 +365,6 @@ export default function RideNavigationScreen() {
   }, [pendingRegroup, regroupDecision]);
 
   const chooseJoin = (targetIndex: number) => {
-    setHasChosenJoin(true);
     // The crew's positions arrive well after this rider's own first fix, so by
     // the time the choice is offered they have usually been placed already.
     // Re-placing is what makes the answer mean anything.

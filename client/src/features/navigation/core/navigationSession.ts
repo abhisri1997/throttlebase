@@ -30,10 +30,16 @@ export interface NavigationSessionState {
   skippedIds: readonly string[];
   /** False until the rider has been placed on the trip for the first time. */
   isPlaced: boolean;
+  /**
+   * The rider has said how they are joining a ride that set off without them.
+   * Persisted with the rest of the session: reopening navigation must not ask
+   * again, or every reopen would undo the answer.
+   */
+  isJoinChosen: boolean;
 }
 
 export type NavigationSessionEvent =
-  | { type: "PLACE"; targetIndex: number }
+  | { type: "PLACE"; targetIndex: number; isJoinChoice?: boolean }
   | {
       type: "LOCATION";
       coordinate: LatLng;
@@ -49,6 +55,7 @@ export const createInitialSession = (planKey: string): NavigationSessionState =>
   reachedAt: {},
   skippedIds: [],
   isPlaced: false,
+  isJoinChosen: false,
 });
 
 export const arrivalRadiusMeters = (accuracyMeters?: number | null): number => {
@@ -145,6 +152,7 @@ export const reduceNavigationSession = (
       return {
         ...state,
         isPlaced: true,
+        isJoinChosen: state.isJoinChosen || event.isJoinChoice === true,
         phase: "NAVIGATING",
         targetIndex,
         skippedIds: [...state.skippedIds, ...passed],
@@ -301,6 +309,8 @@ const PersistedSessionSchema = z.object({
   reachedAt: z.record(z.string(), z.number()),
   skippedIds: z.array(z.string()),
   isPlaced: z.boolean(),
+  // Sessions saved before the join choice existed simply have not answered.
+  isJoinChosen: z.boolean().default(false),
 });
 
 /**

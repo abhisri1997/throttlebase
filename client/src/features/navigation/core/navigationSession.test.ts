@@ -261,3 +261,45 @@ test("restoring an unreadable session starts afresh, a valid one resumes", () =>
   const saved = run([place(1), fix(at(0.01))]);
   assert.deepEqual(restoreSession(JSON.parse(JSON.stringify(saved)), trip, planKey), saved);
 });
+
+test("remembers how a late rider chose to join, so reopening does not re-ask", () => {
+  const planKey = tripPlanKey(trip);
+  const chosen = reduceNavigationSession(
+    createInitialSession(planKey),
+    { type: "PLACE", targetIndex: 2, isJoinChoice: true },
+    trip,
+  );
+
+  assert.equal(chosen.isJoinChosen, true);
+
+  const reopened = restoreSession(JSON.parse(JSON.stringify(chosen)), trip, planKey);
+
+  assert.equal(reopened.isJoinChosen, true);
+  assert.equal(reopened.targetIndex, 2);
+});
+
+test("placing a rider from their own position is not an answer to anything", () => {
+  const planKey = tripPlanKey(trip);
+  const placed = run([place(1)]);
+
+  assert.equal(placed.isJoinChosen, false);
+
+  // A session saved before the choice existed has not answered either.
+  const { isJoinChosen: _omitted, ...legacy } = placed;
+  assert.equal(restoreSession(legacy, trip, planKey).isJoinChosen, false);
+});
+
+test("a stop added mid-ride does not re-open the join question", () => {
+  // The regroup stop a catching-up rider asks for changes the plan, which
+  // reconciles the session — the answer has to survive that.
+  const chosen = reduceNavigationSession(
+    createInitialSession(tripPlanKey(trip)),
+    { type: "PLACE", targetIndex: 1, isJoinChoice: true },
+    trip,
+  );
+
+  const withRegroup = [...trip.slice(0, 2), waypoint("regroup", "stop", at(0.015)), ...trip.slice(2)];
+  const reconciled = reconcileSessionWithPlan(chosen, withRegroup, tripPlanKey(withRegroup));
+
+  assert.equal(reconciled.isJoinChosen, true);
+});

@@ -27,8 +27,14 @@ interface UseNavigationSessionInput {
   /** Placement waits for the planned route, so a rider joining mid-ride isn't sent to the start. */
   isPlannedRouteSettled: boolean;
   fix: NavigationFix | null;
-  /** Holds placement while a late rider is being asked how they want to join. */
+  /** Holds placement while nothing useful is known yet, such as where the crew is. */
   isPlacementBlocked?: boolean;
+  /**
+   * This rider would be asked how to join a ride that set off without them.
+   * Placing them before they answer would pick for them — but only until they
+   * have answered, which the session remembers across reopens.
+   */
+  isJoinChoicePending?: boolean;
 }
 
 export interface NavigationSessionControls {
@@ -55,6 +61,7 @@ export const useNavigationSession = ({
   isPlannedRouteSettled,
   fix,
   isPlacementBlocked = false,
+  isJoinChoicePending = false,
 }: UseNavigationSessionInput): NavigationSessionControls => {
   const planKey = useMemo(() => (waypoints ? tripPlanKey(waypoints) : null), [waypoints]);
   const [session, setSession] = useState<NavigationSessionState | null>(null);
@@ -113,8 +120,9 @@ export const useNavigationSession = ({
   // Place the rider once, from their first fix, after the planned route settles.
   useEffect(() => {
     if (!session || session.isPlaced || !waypoints || !fix || !isPlannedRouteSettled) return;
-    // A late rider is choosing how to join; placing them now would pick for them.
     if (isPlacementBlocked) return;
+    // A late rider is choosing how to join; placing them now would pick for them.
+    if (isJoinChoicePending && !session.isJoinChosen) return;
 
     const canUsePlannedRoute =
       tripGeometry !== null && tripGeometry.waypointAlongMeters.length === waypoints.length;
@@ -128,6 +136,7 @@ export const useNavigationSession = ({
   }, [
     dispatch,
     fix,
+    isJoinChoicePending,
     isPlacementBlocked,
     isPlannedRouteSettled,
     session,
@@ -146,7 +155,7 @@ export const useNavigationSession = ({
 
   const placeAt = useCallback(
     (targetIndex: number) => {
-      dispatch({ type: "PLACE", targetIndex });
+      dispatch({ type: "PLACE", targetIndex, isJoinChoice: true });
       // A rider placed at a waypoint they are already standing on arrives
       // without waiting for the next fix.
       if (fix) dispatch(toLocationEvent(fix));
