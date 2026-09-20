@@ -13,6 +13,7 @@ import notificationRoutes from "./routes/notifications.routes.js";
 import supportRoutes from "./routes/support.routes.js";
 import liveSessionRoutes from "./routes/live-session.routes.js";
 import stopSuggestionRoutes from "./routes/placeSuggestion.routes.js";
+import mapsRoutes from "./routes/maps.routes.js";
 import { createLiveGateway } from "./realtime/gateway.js";
 import cors from "cors";
 import helmet from "helmet";
@@ -183,6 +184,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/support", supportRoutes);
 app.use("/api/live", liveSessionRoutes);
 app.use("/api/stop-suggestions", stopSuggestionRoutes);
+app.use("/api/maps", mapsRoutes);
 
 // Database health check route
 app.get("/db-test", async (req, res) => {

@@ -13,12 +13,13 @@ import {
   projectOntoPolyline,
   type LatLng,
 } from "../utils/polyline.js";
+import { createGoogleMapsProvider } from "./maps/googleMapsProvider.js";
 import {
-  PlacesApiError,
-  searchAlongRoute,
+  MapsApiError,
   type FetchLike,
+  type MapsProvider,
   type PlaceResult,
-} from "./placesClient.js";
+} from "./maps/mapsProvider.js";
 import type { StopSuggestionQueryInput } from "../schemas/placeSuggestion.schemas.js";
 
 export type StopCategory = "fuel" | "rest" | "photo";
@@ -92,6 +93,8 @@ export interface StopSuggestionDeps {
   fetchImpl?: FetchLike | undefined;
   maxDailyCalls?: number | undefined;
   store?: SuggestionStore | undefined;
+  /** Overrides the Google adapter; tests pass a fake rather than a fake fetch. */
+  provider?: MapsProvider | undefined;
 }
 
 const quantize = (value: number, precision: number): string =>
@@ -182,6 +185,9 @@ export const getStopSuggestions = async (
   deps: StopSuggestionDeps,
 ): Promise<StopSuggestionResult> => {
   const store = deps.store ?? postgresSuggestionStore;
+  const provider =
+    deps.provider ??
+    createGoogleMapsProvider({ apiKey: deps.apiKey, fetchImpl: deps.fetchImpl });
   const cacheKey = buildCacheKey(input);
 
   const fresh = await store.readCache(cacheKey, { allowStale: false });
@@ -204,16 +210,12 @@ export const getStopSuggestions = async (
 
   const runSearch = async (encoded: string): Promise<PlaceResult[] | null> => {
     if (!(await store.reserveCall(dailyCallLimit))) return null;
-    return searchAlongRoute(
-      {
-        textQuery: CATEGORY_QUERIES[input.category],
-        encodedPolyline: encoded,
-        openNow: input.openNow,
-        pageSize: input.limit,
-      },
-      deps.apiKey,
-      deps.fetchImpl,
-    );
+    return provider.searchAlongRoute({
+      textQuery: CATEGORY_QUERIES[input.category],
+      encodedPolyline: encoded,
+      openNow: input.openNow,
+      pageSize: input.limit,
+    });
   };
 
   try {
@@ -252,7 +254,7 @@ export const getStopSuggestions = async (
 
     return { suggestions, cached: false, degraded: false };
   } catch (error) {
-    if (error instanceof PlacesApiError) {
+    if (error instanceof MapsApiError) {
       return degradedFallback(
         error.isQuotaFailure ? `quota/permission: ${error.message}` : error.message,
       );

@@ -41,3 +41,25 @@ export const stopSuggestionDailyLimiter = rateLimit({
   legacyHeaders: false,
   message: TOO_MANY_REQUESTS,
 });
+
+const MINUTE_MS = 60 * 1000;
+
+/**
+ * Per-rider ceiling for the /api/maps proxy.
+ *
+ * Sized above what a real session produces — a debounced search is a handful of
+ * calls, and live navigation reroutes are already gated by their own cooldown —
+ * so this only catches a client stuck in a loop. The daily per-API budget in
+ * maps.service is the actual spend ceiling.
+ */
+export const mapsProxyLimiter = rateLimit({
+  windowMs: MINUTE_MS,
+  limit: 30,
+  keyGenerator: riderKey,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "Maps quota reached. Try again shortly.",
+    code: "maps_quota",
+  },
+});
