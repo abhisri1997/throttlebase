@@ -449,7 +449,13 @@ export default function RideNavigationScreen() {
       ? waypoints?.[session.targetIndex] ?? null
       : null;
 
-  const liveLeg = useLiveLeg({ target: targetWaypoint, fix, isActive: isAppActive });
+  // Gated on focus as well as foreground: a ride left open behind another
+  // screen would otherwise keep billing a traffic refresh every five minutes.
+  const liveLeg = useLiveLeg({
+    target: targetWaypoint,
+    fix,
+    isActive: isAppActive && isFocused,
+  });
 
   const progress = useTripProgress({
     waypoints,

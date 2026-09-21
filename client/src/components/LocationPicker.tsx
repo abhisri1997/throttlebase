@@ -1,17 +1,16 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useCallback, useState, useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, Modal, ActivityIndicator, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import MapView, { Marker, PROVIDER_GOOGLE } from './MapWrapper';
 import * as Location from 'expo-location';
 import { X, MapPin, Navigation, Check } from 'lucide-react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { useReverseGeocode } from '../hooks/useReverseGeocode';
 import { formatCoords } from '../utils/reverseGeocode';
-
-const API_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || '';
+import { PlaceSearchInput, type SelectedPlace } from './PlaceSearchInput';
+import { createPlacesSessionToken } from '../api/maps';
 
 /** Shown while a lookup is in flight; never a valid saved location name. */
 const PENDING_ADDRESS_LABEL = 'Locating address...';
@@ -55,7 +54,16 @@ export default function LocationPicker({
   );
   const [selectedName, setSelectedName] = useState(initialName || '');
   const [loadingLocation, setLoadingLocation] = useState(false);
+  const [searchSessionToken, setSearchSessionToken] = useState(createPlacesSessionToken);
   const mapRef = useRef<any>(null);
+
+  /**
+   * Google bills a search-and-pick as one session, so a token covers exactly
+   * one selection. A fresh one starts on every open and after each pick.
+   */
+  const startNewSearchSession = useCallback(() => {
+    setSearchSessionToken(createPlacesSessionToken());
+  }, []);
 
   const {
     resolve: resolveAddress,
@@ -64,6 +72,7 @@ export default function LocationPicker({
   } = useReverseGeocode({ onAddress: setSelectedName });
 
   const handleOpen = () => {
+    startNewSearchSession();
     if (!isControlled) setInternalVisible(true);
   };
 
@@ -71,20 +80,20 @@ export default function LocationPicker({
     // Drop any lookup still pending so it cannot bill a call for a picker
     // the user has already dismissed, or land on the next time it opens.
     cancelAddressLookup();
+    startNewSearchSession();
     if (!isControlled) setInternalVisible(false);
     if (onClose) onClose();
   };
 
-  const handlePlaceSelect = (data: any, details: any) => {
-    if (details?.geometry?.location) {
-      const { lat, lng } = details.geometry.location;
-      setSelectedCoords([lng, lat]);
-      setSelectedName(data.description || details.name || 'Selected Location');
-      mapRef.current?.animateToRegion({
-        latitude: lat, longitude: lng,
-        latitudeDelta: 0.01, longitudeDelta: 0.01,
-      }, 500);
-    }
+  const handlePlaceSelect = ({ lat, lng, name }: SelectedPlace) => {
+    // A pending pin lookup would otherwise land on top of the chosen place.
+    cancelAddressLookup();
+    setSelectedCoords([lng, lat]);
+    setSelectedName(name || 'Selected Location');
+    mapRef.current?.animateToRegion({
+      latitude: lat, longitude: lng,
+      latitudeDelta: 0.01, longitudeDelta: 0.01,
+    }, 500);
   };
 
   const handleUseMyLocation = async () => {
@@ -187,71 +196,11 @@ export default function LocationPicker({
 
           {/* Search Bar */}
           <View className="px-4 pt-3 z-10" style={{ zIndex: 10 }}>
-            <GooglePlacesAutocomplete
+            <PlaceSearchInput
               placeholder={placeholder}
-              fetchDetails
-              onPress={handlePlaceSelect}
-              query={{
-                key: API_KEY,
-                language: 'en',
-                components: 'country:in',
-              }}
-              debounce={300}
-              listViewDisplayed='auto'
-              enablePoweredByContainer={false}
-              keyboardShouldPersistTaps='always'
-              styles={{
-                container: {
-                  flex: 0,
-                  zIndex: 1000,
-                  elevation: 10,
-                },
-                textInputContainer: {
-                  backgroundColor: colors.inputBg,
-                  borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  paddingHorizontal: 4,
-                },
-                textInput: {
-                  backgroundColor: 'transparent',
-                  color: colors.text,
-                  fontSize: 16,
-                  height: 48,
-                },
-                listView: {
-                  position: 'absolute',
-                  top: 56,
-                  left: 0,
-                  right: 0,
-                  backgroundColor: colors.surface,
-                  borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  zIndex: 1000,
-                  elevation: 10,
-                },
-                row: {
-                  backgroundColor: 'transparent',
-                  paddingVertical: 14,
-                  paddingHorizontal: 12,
-                },
-                description: {
-                  color: colors.text,
-                  fontSize: 14,
-                },
-                separator: {
-                  backgroundColor: colors.border,
-                  height: 0.5,
-                },
-                poweredContainer: { display: 'none' },
-              }}
-              textInputProps={{
-                placeholderTextColor: colors.textMuted,
-                underlineColorAndroid: 'transparent',
-                autoCapitalize: 'none',
-                autoCorrect: false,
-              }}
+              sessionToken={searchSessionToken}
+              onSessionConsumed={startNewSearchSession}
+              onSelect={handlePlaceSelect}
             />
 
             {/* Use My Location button */}
