@@ -1,4 +1,4 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import type { Request } from "express";
 
 /**
@@ -14,7 +14,14 @@ import type { Request } from "express";
  */
 const riderKey = (req: Request): string => {
   const rider = (req as Request & { rider?: { riderId?: string } }).rider;
-  return rider?.riderId ?? req.ip ?? "unknown";
+  if (rider?.riderId) {
+    return rider.riderId;
+  }
+
+  // The IP fallback goes through ipKeyGenerator, which normalises IPv6 to its
+  // /56 prefix. Keying on a raw IPv6 address would let one client vary the
+  // low bits and get an unlimited number of fresh buckets.
+  return ipKeyGenerator(req.ip ?? "unknown");
 };
 
 const HOUR_MS = 60 * 60 * 1000;

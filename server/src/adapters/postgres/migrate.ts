@@ -23,12 +23,19 @@ const MIGRATIONS_DIR = join(
 );
 
 /**
- * Everything up to and including this file predates the runner and is already
- * applied to the live database. They are recorded as applied on first run
- * rather than executed. (Two of them share the number 004, which is exactly
- * the ambiguity the ledger exists to remove going forward.)
+ * Everything up to and including this file predates the runner.
+ *
+ * On the existing production database these are already applied, so a first
+ * run there must record them WITHOUT executing them: pass
+ * `--baseline-existing`. On a fresh database (a test container, a new
+ * environment, a different vendor) they must actually run, which is the
+ * default. Getting this backwards on a fresh database yields an empty schema,
+ * so the choice is explicit rather than inferred.
+ *
+ * (Two of them share the number 004 — precisely the ambiguity the ledger
+ * exists to remove from here on.)
  */
-const BASELINE_THROUGH = "021_stop_suggestions.sql";
+const LEGACY_THROUGH = "021_stop_suggestions.sql";
 
 const LEDGER_DDL = `
   CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -54,9 +61,18 @@ export interface MigrationResult {
   skipped: string[];
 }
 
+export interface MigrationOptions {
+  dryRun?: boolean;
+  /**
+   * Record the pre-runner migrations as applied instead of executing them.
+   * Only correct against a database that already has that schema.
+   */
+  baselineExisting?: boolean;
+}
+
 export const runMigrations = async (
   pool: pg.Pool,
-  options: { dryRun?: boolean } = {},
+  options: MigrationOptions = {},
 ): Promise<MigrationResult> => {
   const result: MigrationResult = { applied: [], baselined: [], skipped: [] };
 
@@ -84,7 +100,8 @@ export const runMigrations = async (
       continue;
     }
 
-    const isBaseline = filename <= BASELINE_THROUGH;
+    const isBaseline =
+      options.baselineExisting === true && filename <= LEGACY_THROUGH;
 
     if (options.dryRun) {
       (isBaseline ? result.baselined : result.applied).push(filename);
@@ -132,6 +149,7 @@ const main = async (): Promise<void> => {
   }
 
   const dryRun = process.argv.includes("--dry-run");
+  const baselineExisting = process.argv.includes("--baseline-existing");
   const pool = new pg.Pool({
     connectionString,
     ...(connectionString.includes("localhost") ||
@@ -141,7 +159,7 @@ const main = async (): Promise<void> => {
   });
 
   try {
-    const result = await runMigrations(pool, { dryRun });
+    const result = await runMigrations(pool, { dryRun, baselineExisting });
 
     if (result.baselined.length > 0) {
       console.log(

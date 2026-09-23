@@ -236,7 +236,7 @@ export class FakeSessionRepository implements SessionRepository {
     return next;
   }
 
-  revokeFamily(familyId: string, at: Date): Promise<number> {
+  revokeFamily(familyId: string, _riderId: string, at: Date): Promise<number> {
     let count = 0;
     for (const row of this.rows) {
       if (row.familyId === familyId && row.revokedAt === null) {

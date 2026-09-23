@@ -15,6 +15,10 @@ import liveSessionRoutes from "./routes/live-session.routes.js";
 import stopSuggestionRoutes from "./routes/placeSuggestion.routes.js";
 import mapsRoutes from "./routes/maps.routes.js";
 import { createLiveGateway } from "./realtime/gateway.js";
+import { buildAuthContainer } from "./composition/container.js";
+import { verifyEmailSender } from "./composition/createEmailSender.js";
+import { createAuthRoutes, createJwksRoute } from "./adapters/http/authRoutes.js";
+import { createRiderAccountRoutes } from "./adapters/http/riderAccountRoutes.js";
 import cors from "cors";
 import helmet from "helmet";
 import {
@@ -171,7 +175,21 @@ if (isSwaggerDocsEnabled) {
   });
 }
 
-// --- Auth routes (public) ---
+// --- Auth ---
+// Configuration is validated as this module loads: a missing signing key or a
+// half-configured mailer stops the boot rather than surfacing later as riders
+// unable to sign in.
+const authContainer = await buildAuthContainer(process.env);
+
+// Passwordless routes are mounted FIRST so they win where a path overlaps the
+// legacy router — notably DELETE /api/riders/me, where the new handler also
+// unlinks identities and revokes every session. The legacy mounts below are
+// removed in the next phase.
+app.use("/auth", createAuthRoutes(authContainer));
+app.use("/api/riders", createRiderAccountRoutes(authContainer));
+app.use("/.well-known", createJwksRoute(authContainer));
+
+// --- Legacy password endpoints (removed next phase) ---
 app.use("/auth", authRoutes);
 
 // --- Rider routes (protected) ---
@@ -220,6 +238,10 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 const startServer = async () => {
   // Test DB connection before starting the server
   await testConnection();
+
+  // Proves the SMTP credentials and TLS mode before accepting traffic.
+  // No-op unless EMAIL_DRIVER=smtp.
+  await verifyEmailSender(process.env);
 
   const httpServer = createServer(app);
   createLiveGateway(httpServer);

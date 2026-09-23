@@ -28,6 +28,7 @@ export const logout = async (
 
   const revoked = await deps.sessions.revokeFamily(
     session.familyId,
+    session.riderId,
     deps.clock.now(),
   );
   return { revoked };

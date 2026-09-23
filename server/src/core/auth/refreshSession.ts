@@ -35,7 +35,7 @@ export const refreshSession = async (
   if (session.replacedBy !== null) {
     // This token was already rotated away. Either it leaked, or a client
     // raced itself. Either way the family can no longer be trusted.
-    await deps.sessions.revokeFamily(session.familyId, now);
+    await deps.sessions.revokeFamily(session.familyId, session.riderId, now);
     throw new AuthError(
       "REFRESH_TOKEN_REUSED",
       "Refresh token was already used. All sessions in this family have been revoked.",

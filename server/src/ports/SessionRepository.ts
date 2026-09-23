@@ -36,6 +36,12 @@ export interface SessionRepository {
     next: CreateSessionInput;
     at: Date;
   }): Promise<SessionRecord>;
-  revokeFamily(familyId: string, at: Date): Promise<number>;
+  /**
+   * `riderId` is passed explicitly because revocation happens during reuse
+   * detection, before the caller is authenticated — but the session row the
+   * caller just presented names its owner, so the transaction can act as
+   * them and stay inside the row policy.
+   */
+  revokeFamily(familyId: string, riderId: string, at: Date): Promise<number>;
   revokeAllForRider(riderId: string, at: Date): Promise<number>;
 }
