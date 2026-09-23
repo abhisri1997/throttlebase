@@ -8,7 +8,8 @@ import {
   RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAuthStore } from "../../src/store/authStore";
+import { useCurrentRider } from "../../src/services/useCurrentRider";
+import { authService } from "../../src/services/auth";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
@@ -19,8 +20,8 @@ import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
 
 export default function ProfileScreen() {
   const { colors } = useTheme();
-  const logout = useAuthStore((state) => state.logout);
-  const authRider = useAuthStore((state) => state.rider);
+  const logout = () => authService.signOut();
+  const authRider = useCurrentRider().rider;
 
   const {
     data: profileObj,

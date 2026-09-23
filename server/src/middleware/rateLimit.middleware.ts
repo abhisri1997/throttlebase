@@ -1,4 +1,4 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import type { Request } from "express";
 
 /**
@@ -14,7 +14,14 @@ import type { Request } from "express";
  */
 const riderKey = (req: Request): string => {
   const rider = (req as Request & { rider?: { riderId?: string } }).rider;
-  return rider?.riderId ?? req.ip ?? "unknown";
+  if (rider?.riderId) {
+    return rider.riderId;
+  }
+
+  // The IP fallback goes through ipKeyGenerator, which normalises IPv6 to its
+  // /56 prefix. Keying on a raw IPv6 address would let one client vary the
+  // low bits and get an unlimited number of fresh buckets.
+  return ipKeyGenerator(req.ip ?? "unknown");
 };
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -40,4 +47,26 @@ export const stopSuggestionDailyLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: TOO_MANY_REQUESTS,
+});
+
+const MINUTE_MS = 60 * 1000;
+
+/**
+ * Per-rider ceiling for the /api/maps proxy.
+ *
+ * Sized above what a real session produces — a debounced search is a handful of
+ * calls, and live navigation reroutes are already gated by their own cooldown —
+ * so this only catches a client stuck in a loop. The daily per-API budget in
+ * maps.service is the actual spend ceiling.
+ */
+export const mapsProxyLimiter = rateLimit({
+  windowMs: MINUTE_MS,
+  limit: 30,
+  keyGenerator: riderKey,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "Maps quota reached. Try again shortly.",
+    code: "maps_quota",
+  },
 });

@@ -5,7 +5,7 @@ import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
 import { LocateFixed } from "lucide-react-native";
 import MapView, { PROVIDER_GOOGLE } from "../../../src/components/MapWrapper";
-import { useAuthStore } from "../../../src/store/authStore";
+import { useCurrentRider } from "../../../src/services/useCurrentRider";
 import { useTheme } from "../../../src/theme/ThemeContext";
 import { ManeuverBanner } from "../../../src/features/navigation/components/ManeuverBanner";
 import {
@@ -82,7 +82,7 @@ export default function RideNavigationScreen() {
   const isAppActive = useAppIsActive();
   const { id, simulate } = useLocalSearchParams<{ id: string; simulate?: string }>();
   const isSimulated = __DEV__ && simulate === "1";
-  const currentRiderId = useAuthStore((state: any) => state.rider?.id) as string | undefined;
+  const currentRiderId = useCurrentRider().riderId as string | undefined;
 
   const mapRef = useRef<InstanceType<typeof MapView> | null>(null);
   const sheetCollapsedHeight = navigationSheetCollapsedHeight(insets.bottom);
@@ -449,7 +449,13 @@ export default function RideNavigationScreen() {
       ? waypoints?.[session.targetIndex] ?? null
       : null;
 
-  const liveLeg = useLiveLeg({ target: targetWaypoint, fix, isActive: isAppActive });
+  // Gated on focus as well as foreground: a ride left open behind another
+  // screen would otherwise keep billing a traffic refresh every five minutes.
+  const liveLeg = useLiveLeg({
+    target: targetWaypoint,
+    fix,
+    isActive: isAppActive && isFocused,
+  });
 
   const progress = useTripProgress({
     waypoints,

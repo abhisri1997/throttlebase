@@ -1,5 +1,4 @@
 import axios from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import Constants from "expo-constants";
 
@@ -29,12 +28,21 @@ export const apiClient = axios.create({
   },
 });
 
-import { useAuthStore } from "../store/authStore";
+import { authService } from "../services/auth";
 
+/**
+ * Bridge to the new auth service.
+ *
+ * Screens still using this axios client get tokens from the same place as
+ * everything else, including the refresh and rotation handling. Without this
+ * they would read a storage key nothing writes any more and silently 401.
+ *
+ * This whole module is replaced by adapters/http/apiClient in the next phase.
+ */
 apiClient.interceptors.request.use(async (config) => {
-  const token = await AsyncStorage.getItem("jwt_token");
-  if (token && config.headers) {
-    config.headers.Authorization = `Bearer ${token}`;
+  const session = await authService.getValidSession();
+  if (session && config.headers) {
+    config.headers.Authorization = `Bearer ${session.accessToken}`;
   }
   return config;
 });
@@ -53,16 +61,9 @@ apiClient.interceptors.response.use(
       (status === 401 || status === 403) &&
       errorMessage === "Invalid or expired token."
     ) {
-      await useAuthStore.getState().logout();
-      useAuthStore
-        .getState()
-        .showAuthNotice("Your session expired. Please log in again.");
-    } else if (
-      error.response &&
-      (status === 401 || status === 403) &&
-      !isAuthEndpoint
-    ) {
-      useAuthStore.getState().showAuthNotice("Login required to continue.");
+      // The token could not be refreshed, so the session is genuinely over.
+      // Signing out flips the auth state and the root layout redirects.
+      await authService.signOut();
     }
 
     return Promise.reject(error);

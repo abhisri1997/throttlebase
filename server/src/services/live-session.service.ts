@@ -277,7 +277,7 @@ export const startLiveSession = async (rideId: string, riderId: string) => {
 
     if (!["scheduled", "active"].includes(ctx.ride_status)) {
       throw new LiveSessionError(
-        `Cannot start live session for ride status \"${ctx.ride_status}\"`,
+        `Cannot start live session for ride status "${ctx.ride_status}"`,
         400,
       );
     }

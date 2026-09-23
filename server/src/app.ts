@@ -3,7 +3,6 @@ import { createServer } from "node:http";
 import { testConnection, query } from "./config/db.js";
 import swaggerUi from "swagger-ui-express";
 import { getSwaggerSpec } from "./config/swagger.js";
-import authRoutes from "./routes/auth.routes.js";
 import riderRoutes from "./routes/rider.routes.js";
 import rideRoutes from "./routes/ride.routes.js";
 import routeRoutes from "./routes/route.routes.js";
@@ -11,9 +10,17 @@ import communityRoutes from "./routes/community.routes.js";
 import rewardsRoutes from "./routes/rewards.routes.js";
 import notificationRoutes from "./routes/notifications.routes.js";
 import supportRoutes from "./routes/support.routes.js";
+import securityRoutes from "./routes/security.routes.js";
 import liveSessionRoutes from "./routes/live-session.routes.js";
 import stopSuggestionRoutes from "./routes/placeSuggestion.routes.js";
+import mapsRoutes from "./routes/maps.routes.js";
 import { createLiveGateway } from "./realtime/gateway.js";
+import { buildAuthContainer } from "./composition/container.js";
+import { verifyEmailSender } from "./composition/createEmailSender.js";
+import { createAuthRoutes, createJwksRoute } from "./adapters/http/authRoutes.js";
+import { createRiderAccountRoutes } from "./adapters/http/riderAccountRoutes.js";
+import { initAuthentication } from "./middleware/auth.middleware.js";
+import { initSocketAuthentication } from "./realtime/auth.js";
 import cors from "cors";
 import helmet from "helmet";
 import {
@@ -170,8 +177,23 @@ if (isSwaggerDocsEnabled) {
   });
 }
 
-// --- Auth routes (public) ---
-app.use("/auth", authRoutes);
+// --- Auth ---
+// Configuration is validated as this module loads: a missing signing key or a
+// half-configured mailer stops the boot rather than surfacing later as riders
+// unable to sign in.
+const authContainer = await buildAuthContainer(process.env);
+
+// Route modules import `authenticate` directly, and the socket gateway
+// authenticates handshakes, so both are handed the verifier here.
+initAuthentication(authContainer.tokenVerifier);
+initSocketAuthentication(authContainer.tokenVerifier);
+
+// Auth routes are mounted before the rider router so the passwordless
+// DELETE /api/riders/me wins over the older profile handler, which does not
+// unlink identities or revoke sessions.
+app.use("/auth", createAuthRoutes(authContainer));
+app.use("/api/riders", createRiderAccountRoutes(authContainer));
+app.use("/.well-known", createJwksRoute(authContainer));
 
 // --- Rider routes (protected) ---
 app.use("/api/riders", riderRoutes);
@@ -181,8 +203,12 @@ app.use("/api/community", communityRoutes);
 app.use("/api/rewards", rewardsRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/support", supportRoutes);
+// Active sessions and login history for the settings screen. The router
+// existed but was never mounted, so these endpoints have always returned 404.
+app.use("/api/security", securityRoutes);
 app.use("/api/live", liveSessionRoutes);
 app.use("/api/stop-suggestions", stopSuggestionRoutes);
+app.use("/api/maps", mapsRoutes);
 
 // Database health check route
 app.get("/db-test", async (req, res) => {
@@ -218,6 +244,10 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 const startServer = async () => {
   // Test DB connection before starting the server
   await testConnection();
+
+  // Proves the SMTP credentials and TLS mode before accepting traffic.
+  // No-op unless EMAIL_DRIVER=smtp.
+  await verifyEmailSender(process.env);
 
   const httpServer = createServer(app);
   createLiveGateway(httpServer);

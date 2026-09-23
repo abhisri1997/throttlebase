@@ -12,6 +12,13 @@ import {
   projectOntoPolyline,
 } from "../core/geometry";
 import { parseInstructionHtml } from "../core/instructionText";
+import {
+  fetchDirections,
+  isMapsQuotaError,
+  type MapsDirectionsLeg,
+  type MapsDirectionsResponse,
+  type MapsLatLng,
+} from "../../../api/maps";
 
 // Existing callers import this from here; the implementation lives in core/geometry.
 export { haversineMeters };
@@ -26,7 +33,6 @@ const LEG_MAX_POINTS = 700;
 const LEG_MIN_POINT_SPACING_METERS = 12;
 /** Average speed assumed for straight-line fallback legs when Directions is unavailable. */
 const FALLBACK_SPEED_KMH = 28;
-const DIRECTIONS_URL = "https://maps.googleapis.com/maps/api/directions/json";
 
 export const DEFAULT_ROUTE_DEVIATION_THRESHOLD_METERS = 60;
 /**
@@ -53,7 +59,6 @@ interface RouteRequest {
   destination: LatLng;
   /** Stopovers. Each one adds a leg to the result. */
   waypoints?: LatLng[];
-  apiKey?: string;
   /** Pick the fastest of Google's alternatives. Only possible without stopovers. */
   preferFastest?: boolean;
   /**
@@ -75,14 +80,16 @@ const pointsEqual = (left: LatLng, right: LatLng): boolean => {
 const serializePoint = (point: LatLng): string =>
   `${point.latitude.toFixed(5)},${point.longitude.toFixed(5)}`;
 
-const toRequestParam = (point: LatLng): string => `${point.latitude},${point.longitude}`;
+const toProxyPoint = (point: LatLng): MapsLatLng => ({
+  lat: point.latitude,
+  lng: point.longitude,
+});
 
 const buildRouteRequestKey = (input: RouteRequest): string =>
   [
     serializePoint(input.origin),
     ...(input.waypoints || []).map(serializePoint),
     serializePoint(input.destination),
-    input.apiKey ? "directions" : "fallback",
     input.preferFastest === false ? "first-route" : "fastest-route",
     input.trafficAware ? "traffic" : "no-traffic",
   ].join("|");
@@ -281,39 +288,11 @@ const buildFallbackRoute = (points: readonly LatLng[], errorStatus?: string): Na
   };
 };
 
-type DirectionsLocation = { lat: number; lng: number };
-
-type DirectionsLeg = {
-  start_location?: DirectionsLocation;
-  end_location?: DirectionsLocation;
-  distance?: { value: number };
-  duration?: { value: number };
-  duration_in_traffic?: { value: number };
-  steps?: Array<{
-    html_instructions?: string;
-    distance?: { value: number };
-    duration?: { value: number };
-    start_location?: DirectionsLocation;
-    end_location?: DirectionsLocation;
-    polyline?: { points: string };
-    maneuver?: string;
-  }>;
-};
-
-type DirectionsResponse = {
-  status: string;
-  error_message?: string;
-  routes?: Array<{
-    overview_polyline?: { points: string };
-    legs?: DirectionsLeg[];
-  }>;
-};
-
-const toLatLng = (location?: DirectionsLocation): LatLng | null =>
+const toLatLng = (location?: MapsLatLng): LatLng | null =>
   location ? { latitude: location.lat, longitude: location.lng } : null;
 
 const buildLeg = (
-  leg: DirectionsLeg,
+  leg: MapsDirectionsLeg,
   legIndex: number,
   fallbackStart: LatLng,
   fallbackEnd: LatLng,
@@ -322,23 +301,23 @@ const buildLeg = (
   const steps: NavigationStep[] = [];
 
   for (const step of leg.steps || []) {
-    if (step.polyline?.points) {
-      rawPoints.push(...decodePolyline(step.polyline.points));
+    if (step.polyline) {
+      rawPoints.push(...decodePolyline(step.polyline));
     }
 
-    const start = toLatLng(step.start_location);
-    const end = toLatLng(step.end_location);
+    const start = toLatLng(step.startLocation);
+    const end = toLatLng(step.endLocation);
     if (!start || !end) {
       continue;
     }
 
-    const parsed = parseInstructionHtml(step.html_instructions);
+    const parsed = parseInstructionHtml(step.instructionHtml);
     steps.push({
       instruction: parsed.primary,
       roadName: parsed.roadName,
       note: parsed.note,
-      distanceMeters: step.distance?.value ?? haversineMeters(start, end),
-      durationSeconds: step.duration?.value ?? 30,
+      distanceMeters: step.distanceMeters || haversineMeters(start, end),
+      durationSeconds: step.durationSeconds || 30,
       start,
       end,
       maneuver: step.maneuver,
@@ -346,8 +325,8 @@ const buildLeg = (
     });
   }
 
-  const legStart = toLatLng(leg.start_location) ?? steps[0]?.start ?? fallbackStart;
-  const legEnd = toLatLng(leg.end_location) ?? steps[steps.length - 1]?.end ?? fallbackEnd;
+  const legStart = toLatLng(leg.startLocation) ?? steps[0]?.start ?? fallbackStart;
+  const legEnd = toLatLng(leg.endLocation) ?? steps[steps.length - 1]?.end ?? fallbackEnd;
 
   // Consecutive step polylines share their joint point. Deduping first stops
   // the duplicate reading as a zero-length "turn" that thinning would keep.
@@ -359,16 +338,16 @@ const buildLeg = (
     end: legEnd,
     polyline: simplifyPolyline(points, LEG_MIN_POINT_SPACING_METERS, LEG_MAX_POINTS),
     steps,
-    distanceMeters: leg.distance?.value ?? sumBy(steps, (step) => step.distanceMeters),
-    durationSeconds: leg.duration?.value ?? sumBy(steps, (step) => step.durationSeconds),
-    ...(leg.duration_in_traffic
-      ? { durationInTrafficSeconds: leg.duration_in_traffic.value }
+    distanceMeters: leg.distanceMeters || sumBy(steps, (step) => step.distanceMeters),
+    durationSeconds: leg.durationSeconds || sumBy(steps, (step) => step.durationSeconds),
+    ...(leg.durationInTrafficSeconds !== undefined
+      ? { durationInTrafficSeconds: leg.durationInTrafficSeconds }
       : {}),
   };
 };
 
 const buildDirectionsRoute = (
-  route: NonNullable<DirectionsResponse["routes"]>[number],
+  route: MapsDirectionsResponse["routes"][number],
   routeIndex: number,
   requestPoints: readonly LatLng[],
 ): NavigationRoute | null => {
@@ -398,7 +377,7 @@ const buildDirectionsRoute = (
     // The overview polyline is already simplified by Google, which makes it the
     // right corridor for search-along-route — the per-step polylines used for
     // the legs are far denser than that needs.
-    encodedPolyline: route.overview_polyline?.points,
+    encodedPolyline: route.overviewPolyline,
     steps,
     totalDistanceMeters: sumBy(legs, (leg) => leg.distanceMeters),
     totalDurationSeconds: sumBy(legs, (leg) => leg.durationSeconds),
@@ -456,34 +435,9 @@ export const fetchNavigationRoute = async (input: RouteRequest): Promise<Navigat
       input.destination,
     ]);
 
-    if (!input.apiKey) {
-      return setCachedRoute(requestKey, buildFallbackRoute(requestPoints, "NO_API_KEY"));
-    }
-
     const hasStopovers = waypoints.length > 0;
-    const params = new URLSearchParams({
-      origin: toRequestParam(input.origin),
-      destination: toRequestParam(input.destination),
-      mode: "driving",
-      key: input.apiKey,
-    });
 
-    if (hasStopovers) {
-      params.set("waypoints", waypoints.map(toRequestParam).join("|"));
-    }
-
-    // Google returns traffic and alternatives only for requests without
-    // stopovers, yet still bills `departure_time` at the Directions Advanced
-    // rate. Only ask where the answer can actually come back.
-    if (!hasStopovers && input.trafficAware) {
-      params.set("departure_time", "now");
-    }
-
-    if (!hasStopovers && input.preferFastest !== false) {
-      params.set("alternatives", "true");
-    }
-
-    let payload: DirectionsResponse;
+    let payload: MapsDirectionsResponse;
     try {
       directionsRequestCount += 1;
       if (__DEV__) {
@@ -495,34 +449,27 @@ export const fetchNavigationRoute = async (input: RouteRequest): Promise<Navigat
         );
       }
 
-      const response = await fetch(`${DIRECTIONS_URL}?${params.toString()}`);
-      if (!response.ok) {
-        return setCachedRoute(
-          requestKey,
-          buildFallbackRoute(requestPoints, `HTTP_${response.status}`),
-        );
-      }
-
-      payload = (await response.json()) as DirectionsResponse;
+      payload = await fetchDirections({
+        origin: toProxyPoint(input.origin),
+        destination: toProxyPoint(input.destination),
+        ...(hasStopovers ? { waypoints: waypoints.map(toProxyPoint) } : {}),
+        // The proxy drops both of these when stopovers are present, because
+        // Google returns neither for such a request while still billing for it.
+        preferFastest: input.preferFastest !== false,
+        trafficAware: Boolean(input.trafficAware),
+      });
     } catch (error) {
+      // A quota refusal is reported distinctly so callers can tell "try again
+      // shortly" apart from a route that genuinely cannot be built.
+      const status = isMapsQuotaError(error) ? "QUOTA" : "NETWORK_ERROR";
       if (__DEV__) {
-        console.warn("[navigation-route] directions request failed", error);
+        console.warn("[navigation-route] directions request failed", status, error);
       }
-      return setCachedRoute(requestKey, buildFallbackRoute(requestPoints, "NETWORK_ERROR"));
+      return setCachedRoute(requestKey, buildFallbackRoute(requestPoints, status));
     }
 
-    if (payload.status !== "OK" || !payload.routes?.length) {
-      if (__DEV__) {
-        console.warn(
-          "[navigation-route] directions status",
-          payload.status,
-          payload.error_message ?? "",
-        );
-      }
-      return setCachedRoute(
-        requestKey,
-        buildFallbackRoute(requestPoints, payload.status || "UNKNOWN_STATUS"),
-      );
+    if (!payload.routes.length) {
+      return setCachedRoute(requestKey, buildFallbackRoute(requestPoints, "ZERO_RESULTS"));
     }
 
     const candidates = payload.routes
@@ -560,7 +507,6 @@ export const fetchNavigationRoute = async (input: RouteRequest): Promise<Navigat
  */
 export const fetchPlannedRideRoute = (
   points: readonly LatLng[],
-  apiKey?: string,
 ): Promise<NavigationRoute> => {
   const origin = points[0];
   const destination = points[points.length - 1];
@@ -575,7 +521,6 @@ export const fetchPlannedRideRoute = (
     origin,
     destination,
     waypoints: points.slice(1, -1),
-    apiKey,
     preferFastest: false,
     trafficAware: false,
   });
@@ -589,12 +534,10 @@ export const fetchPlannedRideRoute = (
 export const fetchLiveLeg = (
   origin: LatLng,
   destination: LatLng,
-  apiKey?: string,
 ): Promise<NavigationRoute> =>
   fetchNavigationRoute({
     origin,
     destination,
-    apiKey,
     preferFastest: true,
     trafficAware: true,
   });

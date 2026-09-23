@@ -23,7 +23,6 @@ import { socketCorsOptions } from "../config/security.js";
 
 type RiderPayload = {
   riderId: string;
-  email: string;
 };
 
 const JoinPayloadSchema = z.object({

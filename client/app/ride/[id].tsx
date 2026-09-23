@@ -18,7 +18,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useIsFocused } from "@react-navigation/native";
 import { apiClient } from "../../src/api/client";
-import { useAuthStore } from "../../src/store/authStore";
+import { useCurrentRider } from "../../src/services/useCurrentRider";
+import { useAccessToken } from "../../src/services/useAuthState";
 import { useLiveSessionStore } from "../../src/store/liveSessionStore";
 import MapView, {
   Marker,
@@ -590,8 +591,8 @@ export default function RideDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const currentRider = useAuthStore((state: any) => state.rider);
-  const token = useAuthStore((state: any) => state.token);
+  const currentRider = useCurrentRider().rider;
+  const token = useAccessToken();
   const liveEnabled = process.env.EXPO_PUBLIC_ENABLE_LIVE_SESSION !== "false";
   const [appState, setAppState] = useState<AppStateStatus>(
     AppState.currentState,

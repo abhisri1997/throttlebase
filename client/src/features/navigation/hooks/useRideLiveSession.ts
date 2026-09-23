@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Alert } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../../api/client";
-import { useAuthStore } from "../../../store/authStore";
+import { useAccessToken } from "../../../services/useAuthState";
 import { useLiveSessionStore } from "../../../store/liveSessionStore";
 import type { RideState } from "../core/guidance";
 import type { RideRouteSource } from "../core/tripPlan";
@@ -110,7 +110,7 @@ export const useRideLiveSession = ({
   onRideEnded,
 }: UseRideLiveSessionInput): RideLiveSession => {
   const queryClient = useQueryClient();
-  const token = useAuthStore((state: any) => state.token) as string | null | undefined;
+  const token = useAccessToken();
   const store = useLiveSessionStore();
   const {
     connect,

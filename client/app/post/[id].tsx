@@ -16,7 +16,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Send, MoreVertical, X } from "lucide-react-native";
 import { apiClient } from "../../src/api/client";
-import { useAuthStore } from "../../src/store/authStore";
+import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { PostCard } from "../../src/components/PostCard";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { MentionSuggestions } from "../../src/components/MentionSuggestions";
@@ -45,7 +45,7 @@ export default function PostScreen() {
   }>();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { rider, isAuthenticated } = useAuthStore();
+  const { rider, isSignedIn: isAuthenticated } = useCurrentRider();
   const [commentText, setCommentText] = useState("");
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [selection, setSelection] = useState({ start: 0, end: 0 });

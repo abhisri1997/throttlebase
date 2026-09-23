@@ -12,7 +12,10 @@ import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
-import { syncRiderFromResponse, useAuthStore } from "../../src/store/authStore";
+import {
+  CURRENT_RIDER_KEY,
+  useCurrentRider,
+} from "../../src/services/useCurrentRider";
 import { getApiErrorMessage } from "../../src/utils/apiError";
 import { useTheme } from "../../src/theme/ThemeContext";
 import LocationPicker from "../../src/components/LocationPicker";
@@ -102,7 +105,7 @@ export default function EditProfileModal() {
   const { colors } = useTheme();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const currentRider = useAuthStore((state: any) => state.rider);
+  const currentRider = useCurrentRider().rider;
 
   const { data: profileObj } = useQuery({
     queryKey: ["rider", "me"],
@@ -173,15 +176,16 @@ export default function EditProfileModal() {
           },
         ],
       }),
-    onSuccess: async (data) => {
-      const updatedRider = await syncRiderFromResponse(data, {
-        home_location_name: homeLocationName,
-      });
+    onSuccess: (data) => {
+      // The server's response is the source of truth; invalidating makes the
+      // next read fetch it rather than trusting a locally patched copy, which
+      // is what used to drift out of date.
+      const updatedRider = (data as { rider?: unknown })?.rider ?? null;
       if (updatedRider) {
-        queryClient.setQueryData(["rider", "me"], updatedRider);
         setHomeLocationCoords(extractHomeCoords(updatedRider));
         setHomeLocationName(extractHomeName(updatedRider));
       }
+      queryClient.invalidateQueries({ queryKey: CURRENT_RIDER_KEY });
       queryClient.invalidateQueries({ queryKey: ["rider"] });
       Alert.alert("Success", "Profile updated successfully!");
       closeModal();
