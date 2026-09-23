@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Switch,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -13,15 +14,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { useAuthStore } from "../../src/store/authStore";
-import {
-  Bell,
-  ChevronLeft,
-  LifeBuoy,
-  Shield,
-  UserX,
-  Settings as SettingsIcon,
-  Lock,
-} from "lucide-react-native";
+import { authService } from "../../src/services/auth";
+import { Bell, ChevronLeft, LifeBuoy, Lock, Settings as SettingsIcon, Shield, Trash2, UserX } from "lucide-react-native";
 
 export default function SettingsModal() {
   const router = useRouter();
@@ -143,6 +137,52 @@ export default function SettingsModal() {
       </View>
     );
   }
+
+  /**
+   * Account deletion, which the app stores require to be reachable in-app.
+   *
+   * Two steps on purpose: this revokes every session and unlinks every
+   * sign-in method, and there is no undo from the rider's side.
+   */
+  const handleDeleteAccount = (): void => {
+    Alert.alert(
+      "Delete account?",
+      "Your sign-in methods are removed and every device is signed out. Your rides stay part of other riders' history, but your profile details are erased.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            Alert.alert(
+              "This cannot be undone",
+              "Delete your ThrottleBase account permanently?",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete permanently",
+                  style: "destructive",
+                  onPress: () => {
+                    void (async () => {
+                      try {
+                        await authService.deleteAccount();
+                        router.replace("/(auth)/sign-in");
+                      } catch (error) {
+                        Alert.alert(
+                          "Couldn't delete account",
+                          (error as Error)?.message ?? "Please try again.",
+                        );
+                      }
+                    })();
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <View className='flex-1' style={{ backgroundColor: colors.bg }}>
@@ -413,6 +453,43 @@ export default function SettingsModal() {
                 <Text style={{ color: colors.textMuted }}>➔</Text>
               </TouchableOpacity>
             ) : null}
+          </View>
+        </View>
+
+        <View className='mt-8 mb-10'>
+          <Text
+            className='text-xs font-semibold uppercase mb-2 ml-1'
+            style={{ color: colors.textMuted }}
+          >
+            Account
+          </Text>
+          <View
+            className='rounded-2xl overflow-hidden'
+            style={{ backgroundColor: colors.surface }}
+          >
+            <TouchableOpacity
+              onPress={handleDeleteAccount}
+              className='px-4 py-4 flex-row items-center justify-between'
+            >
+              <View className='flex-row items-center'>
+                <Trash2 color={colors.danger} size={16} />
+                <View className='ml-2'>
+                  <Text
+                    className='text-base font-medium'
+                    style={{ color: colors.danger }}
+                  >
+                    Delete account
+                  </Text>
+                  <Text
+                    className='text-sm mt-0.5'
+                    style={{ color: colors.textMuted }}
+                  >
+                    Removes your sign-in methods and signs out every device.
+                  </Text>
+                </View>
+              </View>
+              <Text style={{ color: colors.textMuted }}>➔</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
