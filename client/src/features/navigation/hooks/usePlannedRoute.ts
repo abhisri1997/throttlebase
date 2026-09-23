@@ -1,11 +1,10 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { buildTripGeometry, type TripGeometry } from "../core/routeProgress";
 import { tripPlanKey, type TripWaypoint } from "../core/tripPlan";
 import { fetchPlannedRideRoute } from "../services/navigationRouteService";
 import type { NavigationRoute, RouteLeg } from "../types/navigation";
 
-const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 /** How long an unused planned route stays cached — e.g. between ride detail and navigation. */
 const PLANNED_ROUTE_GC_MS = 60 * 60 * 1000;
 
@@ -33,14 +32,27 @@ export const usePlannedRoute = (
 ): PlannedRouteState => {
   const planKey = waypoints ? tripPlanKey(waypoints) : "";
   const canFetch = Boolean(waypoints && waypoints.length >= 2);
+  const queryClient = useQueryClient();
 
   const query = useQuery({
     queryKey: plannedRouteQueryKey(planKey),
-    queryFn: () =>
-      fetchPlannedRideRoute(
+    queryFn: async () => {
+      const next = await fetchPlannedRideRoute(
         (waypoints ?? []).map((waypoint) => waypoint.coordinate),
-        GOOGLE_MAPS_API_KEY,
-      ),
+      );
+
+      // A fallback means the proxy refused or was unreachable, not that the
+      // plan changed. Replacing a real route with straight lines would redraw
+      // the whole ride as a wrong-looking shortcut, so keep what we had.
+      if (next.source === "fallback") {
+        const previous = queryClient.getQueryData<NavigationRoute>(
+          plannedRouteQueryKey(planKey),
+        );
+        if (previous && previous.source !== "fallback") return previous;
+      }
+
+      return next;
+    },
     enabled: canFetch,
     staleTime: Infinity,
     gcTime: PLANNED_ROUTE_GC_MS,

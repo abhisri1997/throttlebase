@@ -5,11 +5,12 @@ import {
   resolveMaxDailyCalls,
   writePlaceCache,
 } from "./placeCache.js";
+import { createGoogleMapsProvider } from "./maps/googleMapsProvider.js";
 import {
-  PlacesApiError,
-  searchNearby,
+  MapsApiError,
   type FetchLike,
-} from "./placesClient.js";
+  type MapsProvider,
+} from "./maps/mapsProvider.js";
 
 export interface MeetingPoint {
   lat: number;
@@ -61,6 +62,8 @@ export interface SnapDeps {
   fetchImpl?: FetchLike | undefined;
   maxDailyCalls?: number | undefined;
   store?: MeetingPointStore | undefined;
+  /** Overrides the Google adapter; tests pass a fake rather than a fake fetch. */
+  provider?: MapsProvider | undefined;
 }
 
 const buildCacheKey = (lat: number, lng: number): string =>
@@ -96,6 +99,8 @@ export const snapToNearestPlace = async (
 ): Promise<MeetingPoint> => {
   const { lat, lng } = centroid;
   const store = deps.store ?? postgresMeetingPointStore;
+  const provider =
+    deps.provider ?? createGoogleMapsProvider({ apiKey, fetchImpl: deps.fetchImpl });
   const cacheKey = buildCacheKey(lat, lng);
 
   const cached = await store.read(cacheKey, { allowStale: false });
@@ -112,17 +117,13 @@ export const snapToNearestPlace = async (
   }
 
   try {
-    const places = await searchNearby(
-      {
-        lat,
-        lng,
-        radiusMeters: SEARCH_RADIUS_METERS,
-        includedTypes: MEETUP_PLACE_TYPES,
-        maxResultCount: 1,
-      },
-      apiKey,
-      deps.fetchImpl,
-    );
+    const places = await provider.searchNearby({
+      lat,
+      lng,
+      radiusMeters: SEARCH_RADIUS_METERS,
+      includedTypes: MEETUP_PLACE_TYPES,
+      maxResultCount: 1,
+    });
 
     const nearest = places[0];
     const result: MeetingPoint = nearest
@@ -139,7 +140,7 @@ export const snapToNearestPlace = async (
   } catch (error) {
     // Surface the reason rather than letting a quota refusal look like an
     // empty neighbourhood, which is what the previous implementation did.
-    if (error instanceof PlacesApiError) {
+    if (error instanceof MapsApiError) {
       console.error(
         `Meeting-point snap failed${error.isQuotaFailure ? " (quota/permission)" : ""}: ${error.message}`,
       );

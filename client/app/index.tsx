@@ -1,30 +1,33 @@
-import { Redirect } from 'expo-router';
-import { useAuthStore } from '../src/store/authStore';
-import { useEffect, useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
-import { useTheme } from '../src/theme/ThemeContext';
+import { Redirect } from "expo-router";
+import { ActivityIndicator, View } from "react-native";
+import { useTheme } from "../src/theme/ThemeContext";
+import { useAuthState, useResolvedSession } from "../src/services/useAuthState";
 
 export default function Index() {
   const { colors } = useTheme();
-  const [isReady, setIsReady] = useState(false);
-  const checkAuth = useAuthStore((state) => state.checkAuth);
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const resolved = useResolvedSession();
+  const auth = useAuthState();
 
-  useEffect(() => {
-    checkAuth().then(() => setIsReady(true));
-  }, []);
-
-  if (!isReady) {
+  if (!resolved) {
     return (
-      <View className="flex-1 items-center justify-center" style={{ backgroundColor: colors.bg }}>
+      <View
+        className="flex-1 items-center justify-center"
+        style={{ backgroundColor: colors.bg }}
+      >
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
-  if (isAuthenticated) {
-    return <Redirect href="/(tabs)/feed" />;
+  if (auth.status !== "signed-in") {
+    return <Redirect href="/(auth)/sign-in" />;
   }
 
-  return <Redirect href="/(auth)/login" />;
+  // A rider without a username has not finished setting up, whichever
+  // provider they arrived through.
+  if (auth.session.needsOnboarding) {
+    return <Redirect href="/(auth)/onboarding" />;
+  }
+
+  return <Redirect href="/(tabs)/feed" />;
 }

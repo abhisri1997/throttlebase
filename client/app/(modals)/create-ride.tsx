@@ -155,7 +155,6 @@ export default function CreateRideModal() {
           origin,
           destination,
           waypoints,
-          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
         });
 
         if (!cancelled && route) {

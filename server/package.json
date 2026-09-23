@@ -10,7 +10,14 @@
     "dev": "nodemon --exec tsx src/app.ts",
     "worker": "tsx src/workers/worker.ts",
     "dev:all": "concurrently --names api,worker \"npm run dev\" \"npm run worker\"",
-    "test:unit": "tsx --test src/**/*.test.ts"
+    "test:unit": "tsx --test \"src/**/*.test.ts\"",
+    "lint": "eslint .",
+    "lint:boundaries": "eslint . --config eslint.boundaries.config.js --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "migrate": "tsx src/adapters/postgres/migrate.ts",
+    "migrate:dry-run": "tsx src/adapters/postgres/migrate.ts --dry-run",
+    "migrate:baseline": "tsx src/adapters/postgres/migrate.ts --baseline-existing",
+    "test:integration": "tsx --test \"src/adapters/postgres/*.integration.test.ts\""
   },
   "keywords": [],
   "author": "",
@@ -23,8 +30,10 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
     "helmet": "^8.1.0",
+    "jose": "^6.2.12",
     "jsonwebtoken": "^9.0.3",
     "node-cron": "^4.2.1",
+    "nodemailer": "^10.0.10",
     "otplib": "^13.4.0",
     "pg": "^8.20.0",
     "socket.io": "^4.8.3",
@@ -33,20 +42,24 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.3.5",
     "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.18.0",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
     "concurrently": "^9.2.1",
+    "eslint": "^9.39.5",
     "nodemon": "^3.1.14",
     "socket.io-client": "^4.8.3",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.0"
   }
 }
