@@ -1,5 +1,5 @@
-import { ApiError, type ApiClient, type ApiRequest } from "../../ports/ApiClient.js";
-import { resolveBaseUrl } from "./baseUrl.js";
+import { ApiError, type ApiClient, type ApiRequest } from "../../ports/ApiClient";
+import { resolveBaseUrl } from "./baseUrl";
 
 export interface ApiClientOptions {
   baseUrl?: string;

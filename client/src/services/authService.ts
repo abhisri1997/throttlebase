@@ -134,27 +134,22 @@ export const createAuthService = (deps: AuthServiceDeps): AuthService => {
    */
   const refreshOnce = createSingleFlight<Session | null>();
 
-  const buildApi =
-    deps.createApi ??
-    (() => {
-      throw new Error("createAuthService needs either apiClient or createApi");
-    });
+  if (!deps.apiClient && !deps.createApi) {
+    throw new Error("createAuthService needs either apiClient or createApi");
+  }
 
-  const api: ApiClient =
-    deps.apiClient ??
-    buildApi({
-      getAccessToken: async () => {
-        const session = await load();
-        return session?.accessToken ?? null;
-      },
-      refreshAccessToken: async () => {
-        const session = await refresh();
-        return session?.accessToken ?? null;
-      },
-    });
-
-  const refresh = async (): Promise<Session | null> =>
-    await refreshOnce(async () => {
+  /**
+   * Declared before `api` on purpose.
+   *
+   * `refresh` calls `api`, and `api` is built with a callback that calls
+   * `refresh` — a genuine cycle. A function declaration is hoisted and
+   * explicitly typed, which lets each side see the other without TypeScript
+   * having to infer one from the other. Written as two `const` arrows it
+   * type-checks, but only by recursing deeply enough to exhaust the stack on
+   * a project this size.
+   */
+  async function refresh(): Promise<Session | null> {
+    return await refreshOnce(async (): Promise<Session | null> => {
       const current = await load();
       if (!current) {
         return null;
@@ -177,6 +172,20 @@ export const createAuthService = (deps: AuthServiceDeps): AuthService => {
         await persist(null);
         return null;
       }
+    });
+  }
+
+  const api: ApiClient =
+    deps.apiClient ??
+    (deps.createApi as NonNullable<AuthServiceDeps["createApi"]>)({
+      getAccessToken: async (): Promise<string | null> => {
+        const session = await load();
+        return session?.accessToken ?? null;
+      },
+      refreshAccessToken: async (): Promise<string | null> => {
+        const session = await refresh();
+        return session?.accessToken ?? null;
+      },
     });
 
   const adopt = async (response: SessionResponse): Promise<Session> => {

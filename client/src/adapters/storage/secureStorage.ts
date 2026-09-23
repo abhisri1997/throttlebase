@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
-import type { SecureStorage } from "../../ports/SecureStorage.js";
+import type { SecureStorage } from "../../ports/SecureStorage";
 
 /**
  * Keychain / Keystore storage, with an escape hatch for large values.
