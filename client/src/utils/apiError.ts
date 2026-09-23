@@ -5,7 +5,6 @@ type ValidationIssue = {
 
 const FIELD_LABELS: Record<string, string> = {
   email: "Email",
-  password: "Password",
   display_name: "Display name",
   username: "Username",
   rider_id: "Rider",

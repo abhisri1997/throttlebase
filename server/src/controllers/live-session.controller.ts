@@ -23,7 +23,6 @@ import {
 
 interface RiderPayload {
   riderId: string;
-  email: string;
 }
 
 const rid = (req: Request) => (req.rider as unknown as RiderPayload).riderId;

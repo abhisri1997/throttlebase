@@ -13,7 +13,7 @@ import { useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
 import { useTheme } from "../../src/theme/ThemeContext";
-import { useAuthStore } from "../../src/store/authStore";
+import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { authService } from "../../src/services/auth";
 import { Bell, ChevronLeft, LifeBuoy, Lock, Settings as SettingsIcon, Shield, Trash2, UserX } from "lucide-react-native";
 
@@ -21,7 +21,7 @@ export default function SettingsModal() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { colors, isDark, setTheme } = useTheme();
-  const rider = useAuthStore((s) => s.rider);
+  const rider = useCurrentRider().rider;
 
   const { data: general, isLoading: gLoading } = useQuery({
     queryKey: ["settings", "general"],
@@ -314,7 +314,7 @@ export default function SettingsModal() {
                   className='ml-2 text-base font-medium'
                   style={{ color: colors.text }}
                 >
-                  2FA &amp; Session Security
+                  Devices &amp; Sign-in Activity
                 </Text>
               </View>
               <Text style={{ color: colors.textMuted }}>➔</Text>

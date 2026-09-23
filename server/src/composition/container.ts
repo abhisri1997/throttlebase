@@ -14,7 +14,7 @@ import {
   loadVerificationKey,
   type PublicKeySet,
 } from "../adapters/tokens/keys.js";
-import { createPool } from "../adapters/postgres/pool.js";
+import pool from "../config/db.js";
 import { createEmailSender } from "./createEmailSender.js";
 import { readAuthConfig, type Env } from "./env.js";
 
@@ -31,20 +31,6 @@ export type AuthContainer = Awaited<ReturnType<typeof buildAuthContainer>>;
 
 export const buildAuthContainer = async (env: Env) => {
   const config = readAuthConfig(env);
-
-  // The auth stack has its own pool rather than sharing config/db.ts, which
-  // forces TLS on for any DATABASE_URL — a workaround for one managed host
-  // that breaks against a local container or any server without TLS. The
-  // legacy pool is retired in the next phase and this becomes the only one.
-  const connectionString = env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error("DATABASE_URL is required");
-  }
-
-  const pool = createPool({
-    connectionString,
-    rejectUnauthorized: env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false",
-  });
 
   const signingKey = await loadSigningKey({
     pem: config.jwt.privateKeyPem,
@@ -87,6 +73,12 @@ export const buildAuthContainer = async (env: Env) => {
       audience: config.jwt.audience,
     }),
     google: createGoogleIdentityVerifier(config.google),
-    apple: createAppleIdentityVerifier(config.apple),
+    // Null until APPLE_CLIENT_IDS is set. The endpoint reports that plainly
+    // rather than the server refusing to start over a provider we have not
+    // enabled yet.
+    apple:
+      config.apple.allowedAudiences.length > 0
+        ? createAppleIdentityVerifier(config.apple)
+        : null,
   };
 };

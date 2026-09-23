@@ -85,6 +85,18 @@ export const createAuthRoutes = (container: AuthContainer): Router => {
   });
 
   router.post("/apple", async (req, res) => {
+    // Apple sign-in ships once the developer account exists. Until
+    // APPLE_CLIENT_IDS is configured this reports honestly rather than
+    // failing somewhere less obvious.
+    const appleVerifier = container.apple;
+    if (!appleVerifier) {
+      res.status(501).json({
+        error: "Apple sign-in is not enabled yet.",
+        code: "APPLE_SIGN_IN_UNAVAILABLE",
+      });
+      return;
+    }
+
     const parsed = AppleSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
@@ -92,7 +104,9 @@ export const createAuthRoutes = (container: AuthContainer): Router => {
     }
 
     try {
-      const result = await signInWithApple(container, {
+      const result = await signInWithApple(
+        { ...container, apple: appleVerifier },
+        {
         credential: {
           identityToken: parsed.data.identityToken,
           rawNonce: parsed.data.rawNonce,
@@ -107,7 +121,8 @@ export const createAuthRoutes = (container: AuthContainer): Router => {
           ...requestContextFrom(req),
           acceptedTermsVersion: parsed.data.acceptedTermsVersion ?? null,
         },
-      });
+        },
+      );
       res.status(200).json(toSessionResponse(result));
     } catch (error) {
       sendAuthError(res, error);

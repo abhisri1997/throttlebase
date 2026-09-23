@@ -35,7 +35,6 @@ const config: ExpoConfig = {
     ios: {
         supportsTablet: true,
         bundleIdentifier: 'in.throttlebase.rider',
-        usesAppleSignIn: true,
         config: {
             googleMapsApiKey: required('GOOGLE_MAPS_IOS_API_KEY'),
         },
@@ -90,7 +89,12 @@ const config: ExpoConfig = {
         ],
         'expo-task-manager',
         // --- auth ---
-        'expo-apple-authentication',
+        // 'expo-apple-authentication' and ios.usesAppleSignIn are enabled
+        // together once the Apple Developer membership exists and the
+        // "Sign In with Apple" capability is added to in.throttlebase.rider.
+        // The entitlement fails the iOS build without that capability, so
+        // both stay off until then. The app code already handles Apple being
+        // unavailable; see services/platformCapabilities.ts.
         'expo-secure-store',
         [
             '@react-native-google-signin/google-signin',

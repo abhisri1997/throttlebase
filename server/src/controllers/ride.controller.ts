@@ -14,7 +14,6 @@ import { getLiveSession } from "../services/live-session.service.js";
 
 interface RiderPayload {
   riderId: string;
-  email: string;
 }
 
 export const createRide = async (

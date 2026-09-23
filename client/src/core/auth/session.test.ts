@@ -5,7 +5,7 @@ import {
   REFRESH_SKEW_MS,
   sessionFromResponse,
   type Session,
-} from "./session.js";
+} from "./session";
 
 const NOW = Date.parse("2026-01-01T12:00:00.000Z");
 

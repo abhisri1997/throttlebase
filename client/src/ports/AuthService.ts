@@ -1,4 +1,4 @@
-import type { Session } from "../core/auth/session.js";
+import type { Session } from "../core/auth/session";
 
 export type AuthState =
   | { status: "loading" }

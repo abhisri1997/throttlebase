@@ -12,7 +12,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../src/api/client";
 import { ChevronLeft, UserPlus, UserMinus } from "lucide-react-native";
-import { useAuthStore } from "../src/store/authStore";
+import { useCurrentRider } from "../src/services/useCurrentRider";
 import { useTheme } from "../src/theme/ThemeContext";
 import { usePullToRefresh } from "../src/hooks/usePullToRefresh";
 
@@ -47,7 +47,7 @@ export default function FollowListScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const currentRider = useAuthStore((state: any) => state.rider);
+  const currentRider = useCurrentRider().rider;
 
   const { riderId, mode } = useLocalSearchParams<{
     riderId: string;

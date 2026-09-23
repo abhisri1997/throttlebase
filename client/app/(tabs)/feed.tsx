@@ -13,7 +13,7 @@ import { apiClient } from "../../src/api/client";
 import { PostCard } from "../../src/components/PostCard";
 import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
 import { useRouter } from "expo-router";
-import { useAuthStore } from "../../src/store/authStore";
+import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { Plus } from "lucide-react-native";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { NotificationBell } from "../../src/components/NotificationBell";
@@ -27,7 +27,7 @@ export default function FeedScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { rider } = useAuthStore();
+  const { rider } = useCurrentRider();
 
   const {
     data: posts,

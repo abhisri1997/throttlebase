@@ -38,3 +38,37 @@ export const useResolvedSession = (): boolean => {
 
   return resolved;
 };
+
+/**
+ * A currently-valid access token, refreshed if needed.
+ *
+ * Sockets and anything else that needs a raw token should use this rather
+ * than holding one: access tokens last 15 minutes, so a value captured at
+ * sign-in is stale long before the screen closes. Re-resolves whenever the
+ * auth state changes, which covers refresh and sign-out.
+ */
+export const useAccessToken = (): string | null => {
+  const state = useAuthState();
+  const [token, setToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (state.status !== "signed-in") {
+      setToken(null);
+      return;
+    }
+
+    void authService.getValidSession().then((session) => {
+      if (!cancelled) {
+        setToken(session?.accessToken ?? null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [state.status, state.status === "signed-in" ? state.session.accessToken : null]);
+
+  return token;
+};

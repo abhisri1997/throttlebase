@@ -45,7 +45,6 @@ export const LEGACY_VENDOR_ZONE = [
   "src/features/navigation/hooks/useNavigationSession.ts",
   "src/services/liveSessionSocket.ts",
   "src/services/rideSocket.ts",
-  "src/store/authStore.ts",
 ];
 
 export const boundaryConfigs = tseslint.config(
