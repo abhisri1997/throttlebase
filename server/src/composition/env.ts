@@ -41,6 +41,23 @@ const integer = (env: Env, name: string, fallback: number): number => {
   return value;
 };
 
+/**
+ * Comma-separated list that may be absent.
+ *
+ * An unconfigured provider is a supported state — Apple sign-in ships after
+ * the developer account exists — so this returns an empty list rather than
+ * refusing to boot.
+ */
+const optionalList = (env: Env, name: string): string[] => {
+  const raw = optional(env, name);
+  if (!raw) return [];
+
+  return raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+};
+
 /** Comma-separated list, e.g. the set of OAuth client ids. */
 const list = (env: Env, name: string): string[] => {
   const raw = required(env, name);
@@ -68,6 +85,7 @@ export interface AuthConfig {
     retiredPublicKeys: Array<{ kid: string; pem: string }>;
   };
   google: { allowedAudiences: string[] };
+  /** Empty when Apple sign-in is not configured yet. */
   apple: { allowedAudiences: string[] };
   policy: AuthPolicy;
 }
@@ -107,7 +125,7 @@ export const readAuthConfig = (env: Env): AuthConfig => ({
     retiredPublicKeys: parseRetiredKeys(env),
   },
   google: { allowedAudiences: list(env, "GOOGLE_CLIENT_IDS") },
-  apple: { allowedAudiences: list(env, "APPLE_CLIENT_IDS") },
+  apple: { allowedAudiences: optionalList(env, "APPLE_CLIENT_IDS") },
   policy: {
     accessTokenTtlSeconds: integer(env, "AUTH_ACCESS_TOKEN_TTL_SECONDS", 900),
     refreshTokenTtlSeconds: integer(

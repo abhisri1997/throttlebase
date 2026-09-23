@@ -4,7 +4,6 @@ import * as RouteService from '../services/route.service.js';
 
 interface RiderPayload {
   riderId: string;
-  email: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,88 +1,78 @@
-import type { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import { query } from '../config/db.js';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_dev_secret';
+import type { Request, Response, NextFunction } from "express";
+import type { TokenVerifier } from "../ports/TokenVerifier.js";
 
 /**
- * JWT Payload shape — what we encode inside the token.
+ * Access-token verification for every protected route.
  *
- * Learning Note:
- * We extend the Express Request type to include `rider` so that
- * downstream route handlers can access the authenticated user's info.
+ * The verifier is injected at boot rather than constructed here, because the
+ * signing keys live in the composition root. Route modules import
+ * `authenticate` directly, so this module holds the instance for them.
+ */
+let verifier: TokenVerifier | null = null;
+
+export const initAuthentication = (tokenVerifier: TokenVerifier): void => {
+  verifier = tokenVerifier;
+};
+
+/**
+ * What downstream handlers see.
+ *
+ * `riderId` keeps the name the existing controllers already use. There is no
+ * longer a sessionId: access tokens are verified by signature alone, with no
+ * database round trip, and revocation happens when the refresh token is
+ * rotated.
  */
 export interface JwtPayload {
   riderId: string;
-  email: string;
-  sessionId?: string;
+  roles: readonly string[];
 }
 
-// Extend Express Request to include rider info from the JWT
 declare global {
   namespace Express {
     interface Request {
       rider?: JwtPayload;
+      auth?: JwtPayload;
     }
   }
 }
 
-/**
- * authenticate middleware
- *
- * 1. Extract the Bearer token from the Authorization header
- * 2. Verify and decode it using jsonwebtoken
- * 3. Attach the decoded payload to req.rider
- * 4. Return 401 if token is missing or invalid
- *
- * Learning Note:
- * This is the "gatekeeper" pattern. Any route that uses this middleware
- * can trust that req.rider is always populated with a valid user.
- */
 export const authenticate = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Access denied. No token provided.' });
+  // Header checks run first, deliberately. A request with no token is a
+  // client error whatever the server's state, and answering 500 to it would
+  // both mislead the caller and hide the real failure among routine noise.
+  const header = req.headers.authorization;
+  if (!header?.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Access denied. No token provided." });
     return;
   }
 
-  const token = authHeader.split(' ')[1];
-
+  const token = header.slice("Bearer ".length).trim();
   if (!token) {
-    res.status(401).json({ error: 'Access denied. No token provided.' });
+    res.status(401).json({ error: "Access denied. No token provided." });
+    return;
+  }
+
+  if (!verifier) {
+    // Reaching here with a token in hand means the route was mounted before
+    // the composition root ran — a deployment fault, not a bad request.
+    console.error(
+      "[auth] authenticate() called before initAuthentication(); rejecting.",
+    );
+    res.status(401).json({ error: "Invalid or expired token." });
     return;
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-
-    if (!decoded.sessionId) {
-      res.status(401).json({ error: 'Invalid or expired token.' });
-      return;
-    }
-
-    const sessionResult = await query(
-      `SELECT id
-       FROM sessions
-       WHERE id = $1
-         AND rider_id = $2
-         AND revoked_at IS NULL
-         AND expires_at > now()`,
-      [decoded.sessionId, decoded.riderId],
-    );
-
-    if (sessionResult.rows.length === 0) {
-      res.status(401).json({ error: 'Invalid or expired token.' });
-      return;
-    }
-
-    req.rider = decoded;
+    const claims = await verifier.verifyAccessToken(token);
+    const payload: JwtPayload = { riderId: claims.sub, roles: claims.roles };
+    req.rider = payload;
+    req.auth = payload;
     next();
-  } catch (err) {
-    res.status(401).json({ error: 'Invalid or expired token.' });
+  } catch {
+    res.status(401).json({ error: "Invalid or expired token." });
   }
 };
