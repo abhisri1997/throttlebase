@@ -10,7 +10,8 @@ import { useEffect, useRef } from "react";
 import { AppState, type AppStateStatus, Platform } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
-import { useAuthStore } from "../store/authStore";
+import { useAccessToken, useAuthState } from "../services/useAuthState";
+import { useCurrentRider } from "../services/useCurrentRider";
 import {
   startTracking,
   stopTracking,
@@ -41,9 +42,9 @@ const fetchMyActiveRides = async (): Promise<RideSummary[]> => {
 };
 
 export function useBackgroundLocationTracker() {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const token = useAuthStore((state) => state.token);
-  const rider = useAuthStore((state) => state.rider);
+  const isAuthenticated = useAuthState().status === "signed-in";
+  const token = useAccessToken();
+  const rider = useCurrentRider().rider;
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   // Poll for active rides every 30s (lightweight query)

@@ -28,7 +28,6 @@ export const apiClient = axios.create({
   },
 });
 
-import { useAuthStore } from "../store/authStore";
 import { authService } from "../services/auth";
 
 /**
@@ -62,17 +61,9 @@ apiClient.interceptors.response.use(
       (status === 401 || status === 403) &&
       errorMessage === "Invalid or expired token."
     ) {
+      // The token could not be refreshed, so the session is genuinely over.
+      // Signing out flips the auth state and the root layout redirects.
       await authService.signOut();
-      await useAuthStore.getState().logout();
-      useAuthStore
-        .getState()
-        .showAuthNotice("Your session expired. Please log in again.");
-    } else if (
-      error.response &&
-      (status === 401 || status === 403) &&
-      !isAuthEndpoint
-    ) {
-      useAuthStore.getState().showAuthNotice("Login required to continue.");
     }
 
     return Promise.reject(error);

@@ -11,7 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
 import { ChevronLeft, UserPlus, UserMinus } from "lucide-react-native";
-import { useAuthStore } from "../../src/store/authStore";
+import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { useTheme } from "../../src/theme/ThemeContext";
 
 const fetchRiderProfile = async (id: string) => {
@@ -34,7 +34,7 @@ export default function RiderProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const currentRider = useAuthStore((state: any) => state.rider);
+  const currentRider = useCurrentRider().rider;
 
   const {
     data: rider,

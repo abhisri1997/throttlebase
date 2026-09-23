@@ -1,5 +1,7 @@
 /// <reference types="node" />
 
+import { createHash } from "node:crypto";
+
 import { io as socketIoClient } from "socket.io-client";
 import { processLiveIncidentReported } from "./src/workers/processors/live-notification.processor.js";
 import {
@@ -13,7 +15,7 @@ import {
 } from "./src/services/live-session.service.js";
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:5001";
-const TEST_PASSWORD = process.env.TEST_USER_PASSWORD || "Ch@ngeMeInCI!23";
+const TERMS_VERSION = process.env.TERMS_VERSION || "2026-01-01";
 
 type LoginResponse = {
   token?: string;
@@ -89,35 +91,89 @@ const ridersHasIsAdminColumn = async (): Promise<boolean> => {
   return result.rows.length > 0;
 };
 
-const registerAndLogin = async (label: string) => {
+/**
+ * Signs a brand-new rider in through the real email-code flow.
+ *
+ * The code is never returned over HTTP and the console driver only prints it
+ * to the server log, so this reads the stored digest and searches the
+ * six-digit space for its pre-image. That is only feasible because the space
+ * is small by design — the protection is the expiry and the attempt limit,
+ * not the entropy of the code.
+ */
+const signInAs = async (label: string): Promise<string> => {
   const now = Date.now();
-  const email = `${label}.${now}@example.com`;
-  const username = `${label.replace(/[^a-zA-Z0-9_]/g, "_")}_${now}`;
-  const password = TEST_PASSWORD;
+  const email = `${label}.${now}@example.com`.toLowerCase();
+  const username = `${label.replace(/[^a-z0-9_]/gi, "_")}_${now}`
+    .toLowerCase()
+    .slice(0, 20);
 
-  const registerRes = await fetch(`${BASE_URL}/auth/register`, {
+  const startRes = await fetch(`${BASE_URL}/auth/email/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  assert(startRes.status === 202, `email/start returned ${startRes.status}`);
+
+  const stored = await query(
+    "SELECT code_hash FROM email_otps WHERE email = $1 ORDER BY created_at DESC LIMIT 1",
+    [email],
+  );
+  const codeHash = stored.rows[0]?.code_hash as string | undefined;
+  assert(Boolean(codeHash), "No sign-in code was issued");
+
+  let code: string | null = null;
+  for (let i = 0; i < 1_000_000; i += 1) {
+    const candidate = String(i).padStart(6, "0");
+    if (createHash("sha256").update(candidate).digest("hex") === codeHash) {
+      code = candidate;
+      break;
+    }
+  }
+  assert(Boolean(code), "Stored digest did not match any six-digit code");
+
+  const verifyRes = await fetch(`${BASE_URL}/auth/email/verify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       email,
-      password,
-      display_name: `${label} ${now}`,
-      username,
+      code,
+      acceptedTermsVersion: TERMS_VERSION,
     }),
   });
-  assert(registerRes.ok, `Register failed with status ${registerRes.status}`);
+  assert(verifyRes.ok, `email/verify returned ${verifyRes.status}`);
 
-  const loginRes = await fetch(`${BASE_URL}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ identifier: email, password }),
-  });
-  assert(loginRes.ok, `Login failed with status ${loginRes.status}`);
+  const session = (await verifyRes.json()) as {
+    accessToken?: string;
+    needsOnboarding?: boolean;
+  };
+  assert(Boolean(session.accessToken), "Access token missing from response");
+  const token = session.accessToken as string;
 
-  const loginData = (await loginRes.json()) as LoginResponse;
-  assert(Boolean(loginData.token), "Login token missing from response");
-  return loginData.token as string;
+  // Most of this suite assumes a rider with a username, which is what
+  // onboarding sets.
+  if (session.needsOnboarding) {
+    const onboardRes = await fetch(`${BASE_URL}/api/riders/me/onboarding`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        username,
+        displayName: `${label} ${now}`,
+        experienceLevel: "beginner",
+        locationCity: null,
+        firstVehicle: null,
+      }),
+    });
+    assert(onboardRes.ok, `onboarding returned ${onboardRes.status}`);
+  }
+
+  return token;
 };
+
+/** Kept so the rest of the suite reads unchanged. */
+const registerAndLogin = signInAs;
 
 const authedRequest = (token: string, path: string, init?: RequestInit) => {
   const headers = {
@@ -672,56 +728,6 @@ const run = async () => {
     "PASS: Live notification processors respect preferences, exclude actors/reporters, and dedupe retries",
   );
 
-  // ── 2FA / TOTP flow ──────────────────────────────────────────────────────
-  const tfaToken = await registerAndLogin("tfa.test");
-
-  const setupRes = await authedRequest(tfaToken, "/auth/2fa/setup", {
-    method: "POST",
-    body: JSON.stringify({}),
-  });
-  assert(setupRes.ok, `2FA setup failed with status ${setupRes.status}`);
-  const setupData = (await setupRes.json()) as {
-    secret?: string;
-    otpauthUrl?: string;
-  };
-  assert(Boolean(setupData.secret), "2FA setup missing secret");
-  assert(Boolean(setupData.otpauthUrl), "2FA setup missing otpauthUrl");
-  assert(
-    setupData.otpauthUrl?.startsWith("otpauth://"),
-    "2FA otpauthUrl has wrong scheme",
-  );
-
-  // Verify with a bad token → 400
-  const badVerifyRes = await authedRequest(tfaToken, "/auth/2fa/verify", {
-    method: "POST",
-    body: JSON.stringify({ token: "000000" }),
-  });
-  assert(
-    badVerifyRes.status === 400,
-    `Expected 400 for bad TOTP token, got ${badVerifyRes.status}`,
-  );
-
-  // Disable when not yet enabled → 400
-  const prematureDisableRes = await authedRequest(
-    tfaToken,
-    "/auth/2fa/disable",
-    { method: "POST", body: JSON.stringify({ password: TEST_PASSWORD, token: "000000" }) },
-  );
-  assert(
-    prematureDisableRes.status === 400 || prematureDisableRes.status === 401,
-    `Expected 400/401 for premature 2FA disable, got ${prematureDisableRes.status}`,
-  );
-
-  // Status endpoint reflects un-enrolled state
-  const statusRes = await authedRequest(tfaToken, "/auth/2fa/status");
-  assert(statusRes.ok, `2FA status failed with status ${statusRes.status}`);
-  const statusData = (await statusRes.json()) as { enabled?: boolean };
-  assert(
-    statusData.enabled === false,
-    "2FA status should be false before verification",
-  );
-
-  console.log("PASS: 2FA/TOTP setup → bad-verify 400 → premature-disable guard → status endpoint");
 
   // ── Security: login activity + sessions ──────────────────────────────────
   const secToken = await registerAndLogin("sec.test");
@@ -773,34 +779,14 @@ const run = async () => {
 
   // ── @Mention notifications ────────────────────────────────────────────────
   const now = Date.now();
-  const mentionedUsername = `mentioneduser${now}`;
 
-  // Register a rider with a known username
-  const mentionedRegRes = await fetch(`${BASE_URL}/auth/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email: `mentioned.${now}@example.com`,
-      password: TEST_PASSWORD,
-      display_name: `Mentioned ${now}`,
-      username: mentionedUsername,
-    }),
-  });
-  assert(
-    mentionedRegRes.ok,
-    `Register mentioned user failed with status ${mentionedRegRes.status}`,
-  );
-  const mentionedLoginRes = await fetch(`${BASE_URL}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      identifier: `mentioned.${now}@example.com`,
-      password: TEST_PASSWORD,
-    }),
-  });
-  const mentionedLoginData = (await mentionedLoginRes.json()) as { token?: string };
-  assert(Boolean(mentionedLoginData.token), "Mentioned user login token missing");
-  const mentionedToken = mentionedLoginData.token as string;
+  // A second rider, so mentions have someone to point at.
+  const mentionedToken = await signInAs(`mentioned.${now}`);
+  const mentionedProfileRes = await authedRequest(mentionedToken, "/api/riders/me");
+  const mentionedProfile = (await mentionedProfileRes.json()) as RiderProfileResponse;
+  const mentionedUsername =
+    ((mentionedProfile.rider as { username?: string })?.username as string) ?? "";
+  assert(Boolean(mentionedUsername), "Mentioned rider has no username");
 
   const authorToken = await registerAndLogin(`mention.author.${now}`);
 

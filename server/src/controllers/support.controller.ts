@@ -10,7 +10,6 @@ import * as SupportService from "../services/support.service.js";
 
 interface RiderPayload {
   riderId: string;
-  email: string;
 }
 
 const rid = (req: Request) => (req.rider as RiderPayload).riderId;
