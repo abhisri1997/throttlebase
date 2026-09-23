@@ -10,7 +10,12 @@
     "dev": "nodemon --exec tsx src/app.ts",
     "worker": "tsx src/workers/worker.ts",
     "dev:all": "concurrently --names api,worker \"npm run dev\" \"npm run worker\"",
-    "test:unit": "tsx --test src/**/*.test.ts"
+    "test:unit": "tsx --test \"src/**/*.test.ts\"",
+    "lint": "eslint .",
+    "lint:boundaries": "eslint . --config eslint.boundaries.config.js --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "migrate": "tsx src/adapters/postgres/migrate.ts",
+    "migrate:dry-run": "tsx src/adapters/postgres/migrate.ts --dry-run"
   },
   "keywords": [],
   "author": "",
@@ -33,6 +38,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
@@ -43,10 +49,12 @@
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
     "concurrently": "^9.2.1",
+    "eslint": "^9.39.5",
     "nodemon": "^3.1.14",
     "socket.io-client": "^4.8.3",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.0"
   }
 }
