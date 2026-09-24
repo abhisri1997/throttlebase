@@ -1,30 +1,7 @@
 import { io, type Socket } from "socket.io-client";
-import { Platform } from "react-native";
-import Constants from "expo-constants";
+import { resolveBaseUrl } from "../adapters/http/baseUrl";
 
-const PRODUCTION_API_URL = "https://api.throttlebase.in";
-
-const getBaseUrl = (): string => {
-  const envUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
-  if (envUrl) return envUrl;
-
-  if (!__DEV__) {
-    return PRODUCTION_API_URL;
-  }
-
-  const debuggerHost = Constants.expoConfig?.hostUri;
-  const localIp = debuggerHost?.split(":")[0];
-
-  if (Platform.OS === "android" && !debuggerHost) {
-    return "http://10.0.2.2:5001";
-  }
-
-  if (localIp) {
-    return `http://${localIp}:5001`;
-  }
-
-  return "http://localhost:5001";
-};
+const getBaseUrl = resolveBaseUrl;
 
 export type RideJoinedEvent = {
   rideId: string;

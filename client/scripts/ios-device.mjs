@@ -50,8 +50,14 @@ const findWorkspace = () => {
 };
 
 /**
- * The one connected iPhone/iPad. `devicectl` also lists simulators and
- * previously-paired devices, so filter to physical + connected.
+ * The one usable iPhone/iPad. `devicectl` lists simulators and previously
+ * paired devices too, so filter to physical hardware first.
+ *
+ * A plugged-in, paired iPhone reports "available (paired)", NOT "connected" --
+ * "connected" is what a booted *simulator* shows. Matching only on "connected"
+ * finds nothing. Anything not plainly unusable is accepted, and xcodebuild is
+ * left to report the specific reason (locked device, untrusted host), which it
+ * words better than a guess here could.
  */
 const findDevice = () => {
   if (process.env.IOS_DEVICE_UDID) return process.env.IOS_DEVICE_UDID;
@@ -63,30 +69,38 @@ const findDevice = () => {
     fail("could not run `xcrun devicectl`. Is Xcode installed and selected?");
   }
 
-  const devices = listing
+  const physical = listing
     .split("\n")
-    .filter((line) => /\bphysical\b/.test(line) && /\bconnected\b/.test(line))
+    .filter((line) => /\bphysical\b/.test(line))
     .map((line) => {
       const udid = line.match(/([0-9A-F]{8}-[0-9A-F]{16}|[0-9a-f]{40})/i)?.[1];
-      return udid ? { udid, label: line.trim().split(/\s{2,}/)[0] } : null;
+      if (!udid) return null;
+      const columns = line.trim().split(/\s{2,}/);
+      return { udid, label: columns[0], state: columns[2] ?? "unknown" };
     })
     .filter(Boolean);
 
-  if (devices.length === 0) {
+  const usable = physical.filter((d) => /connected|available/i.test(d.state));
+
+  if (physical.length === 0) {
     fail(
-      "no connected iPhone found.\n" +
+      "no iPhone found.\n" +
         "  - plug it in and unlock it (a locked device cannot start development services)\n" +
         "  - accept the 'Trust This Computer?' prompt\n" +
         "  - enable Settings > Privacy & Security > Developer Mode",
     );
   }
-  if (devices.length > 1) {
-    const list = devices.map((d) => `      ${d.udid}  ${d.label}`).join("\n");
-    fail(`several devices connected. Pick one with IOS_DEVICE_UDID=<udid>:\n${list}`);
+  if (usable.length === 0) {
+    const list = physical.map((d) => `      ${d.label} — ${d.state}`).join("\n");
+    fail(`an iPhone is paired but not usable right now:\n${list}\n  Unlock it and check the cable.`);
+  }
+  if (usable.length > 1) {
+    const list = usable.map((d) => `      ${d.udid}  ${d.label} (${d.state})`).join("\n");
+    fail(`several devices attached. Pick one with IOS_DEVICE_UDID=<udid>:\n${list}`);
   }
 
-  console.log(`device:  ${devices[0].label} (${devices[0].udid})`);
-  return devices[0].udid;
+  console.log(`device:  ${usable[0].label} (${usable[0].udid}) — ${usable[0].state}`);
+  return usable[0].udid;
 };
 
 /**

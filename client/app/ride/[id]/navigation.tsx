@@ -694,7 +694,6 @@ export default function RideNavigationScreen() {
         <PeerMarkers
           peers={peers}
           focusedRiderId={focusedParticipantId}
-          color={mapTheme.colors.peer}
           focusedColor={colors.primary}
         />
 
