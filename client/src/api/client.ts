@@ -1,25 +1,7 @@
 import axios from "axios";
-import { Platform } from "react-native";
-import Constants from "expo-constants";
+import { resolveBaseUrl } from "../adapters/http/baseUrl";
 
-const PRODUCTION_API_URL = "https://api.throttlebase.in";
-const debuggerHost = Constants.expoConfig?.hostUri;
-const localIp = debuggerHost?.split(":")[0];
-
-let BASE_URL = process.env.EXPO_PUBLIC_API_URL?.trim();
-
-if (!BASE_URL) {
-  if (__DEV__) {
-    BASE_URL = "http://localhost:5001";
-    if (Platform.OS === "android" && !debuggerHost) {
-      BASE_URL = "http://10.0.2.2:5001"; // Android emulator
-    } else if (localIp) {
-      BASE_URL = `http://${localIp}:5001`; // Physical device on LAN
-    }
-  } else {
-    BASE_URL = PRODUCTION_API_URL;
-  }
-}
+const BASE_URL = resolveBaseUrl();
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,

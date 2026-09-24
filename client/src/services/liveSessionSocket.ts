@@ -1,8 +1,5 @@
 import { io, type Socket } from "socket.io-client";
-import { Platform } from "react-native";
-import Constants from "expo-constants";
-
-const PRODUCTION_API_URL = "https://api.throttlebase.in";
+import { resolveBaseUrl } from "../adapters/http/baseUrl";
 
 export type LiveSessionStateEvent = {
   id: string;
@@ -122,29 +119,7 @@ export type LiveSocketClientEvents = {
 
 type LiveSocket = Socket<LiveSocketServerEvents, LiveSocketClientEvents>;
 
-const getBaseUrl = (): string => {
-  const envUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
-  if (envUrl) {
-    return envUrl;
-  }
-
-  if (!__DEV__) {
-    return PRODUCTION_API_URL;
-  }
-
-  const debuggerHost = Constants.expoConfig?.hostUri;
-  const localIp = debuggerHost?.split(":")[0];
-
-  if (Platform.OS === "android" && !debuggerHost) {
-    return "http://10.0.2.2:5001";
-  }
-
-  if (localIp) {
-    return `http://${localIp}:5001`;
-  }
-
-  return "http://localhost:5001";
-};
+const getBaseUrl = resolveBaseUrl;
 
 class LiveSessionSocketService {
   private socket: LiveSocket | null = null;
