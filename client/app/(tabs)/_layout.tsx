@@ -7,38 +7,49 @@ import {
   Trophy,
   Users,
 } from "lucide-react-native";
+import type { ComponentType } from "react";
+import type { ColorValue } from "react-native";
 import { useTheme } from "../../src/theme/ThemeContext";
-import { size } from "zod";
+
+/**
+ * expo-router types `tabBarIcon`'s color as RN's ColorValue, which widens to
+ * OpaqueColorValue (PlatformColor). Lucide icons take a plain string, and the
+ * theme only ever supplies string colours, so the narrowing happens once here
+ * rather than as a cast at every tab.
+ */
+const tabIcon =
+  (Icon: ComponentType<{ size?: number; color?: string }>) =>
+  ({ color }: { color: ColorValue }) => <Icon size={24} color={color as string} />;
 
 const TABS_DETAILS = [
   { name: "feed",
     title: "Feed",
-    tabBarIcon: ({ color }: { color: string }) => <Activity size={24} color={color} />
+    tabBarIcon: tabIcon(Activity)
   },
   {
     name: "rides",
     title: "Discover",
-    tabBarIcon: ({ color }: { color: string }) => <Compass size={24} color={color} />
+    tabBarIcon: tabIcon(Compass)
   },
   {
     name: "routes",
     title: "Routes",
-    tabBarIcon: ({ color }: { color: string }) => <Map size={24} color={color} />
+    tabBarIcon: tabIcon(Map)
   },
   {
     name: "groups",
     title: "Groups",
-    tabBarIcon: ({ color }: { color: string }) => <Users size={24} color={color} />
+    tabBarIcon: tabIcon(Users)
   },
   {
     name: "rewards",
     title: "Rank",
-    tabBarIcon: ({ color }: { color: string }) => <Trophy size={24} color={color} />
+    tabBarIcon: tabIcon(Trophy)
   },
   {
     name: "profile",
     title: "Profile",
-    tabBarIcon: ({ color }: { color: string }) => <User size={24} color={color} />
+    tabBarIcon: tabIcon(User)
   },
 ]
 
