@@ -27,26 +27,15 @@ const config: ExpoConfig = {
         // Not a secret; must be static so EAS CLI can resolve the project before any env vars exist.
         eas: { projectId: 'ee15bbec-df80-4454-ad03-2f87e3bff889' },
     },
-    splash: {
-        image: './assets/splash-icon.png',
-        resizeMode: 'contain',
-        backgroundColor: '#0B1220',
-    },
     ios: {
         supportsTablet: true,
         bundleIdentifier: 'in.throttlebase.rider',
-        config: {
-            googleMapsApiKey: required('GOOGLE_MAPS_IOS_API_KEY'),
-        },
         infoPlist: {
             UIBackgroundModes: ['location', 'fetch'],
         },
     },
     android: {
         package: 'in.throttlebase.rider',
-        config: {
-            googleMaps: { apiKey: required('GOOGLE_MAPS_ANDROID_API_KEY') },
-        },
         adaptiveIcon: {
             backgroundColor: '#E6F4FE',
             foregroundImage: './assets/android-icon-foreground.png',
@@ -70,10 +59,41 @@ const config: ExpoConfig = {
     },
     plugins: [
         'expo-router',
+        [
+            // SDK 57 removed the top-level `splash` key; the splash screen is
+            // configured through this plugin instead.
+            'expo-splash-screen',
+            {
+                image: './assets/splash-icon.png',
+                resizeMode: 'contain',
+                backgroundColor: '#0B1220',
+            },
+        ],
         'expo-audio',
         './plugins/with-android-jdk17',
         './plugins/with-ios-deployment-target',
         './plugins/with-no-apple-signin',
+        [
+            // iOS 27 terminates any app built with the Xcode 27 SDK that still
+            // uses the application-based life cycle. This makes prebuild emit a
+            // UIApplicationSceneManifest pointing at Expo's EXExpoAppSceneDelegate
+            // and drop the legacy startup block from AppDelegate.
+            // Opt-in on SDK 57; the default from SDK 58.
+            'expo-build-properties',
+            { ios: { enableSceneSupport: true } },
+        ],
+        [
+            // react-native-maps 1.27 dropped the standalone react-native-google-maps
+            // podspec in favour of a `react-native-maps/Google` subspec. Its own
+            // plugin emits the right pod and sets GMSApiKey; the legacy
+            // ios.config.googleMapsApiKey path in @expo/config-plugins still emits
+            // the old pod name and fails `pod install`.
+            'react-native-maps',
+            {
+                iosGoogleMapsApiKey: required('GOOGLE_MAPS_IOS_API_KEY'),
+                androidGoogleMapsApiKey: required('GOOGLE_MAPS_ANDROID_API_KEY'),
+            },
+        ],
         'react-native-map-link',
         '@react-native-community/datetimepicker',
         [

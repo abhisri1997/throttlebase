@@ -13,10 +13,9 @@ import {
   type AppStateStatus,
   Platform,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useIsFocused } from "@react-navigation/native";
 import { apiClient } from "../../src/api/client";
 import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { useAccessToken } from "../../src/services/useAuthState";

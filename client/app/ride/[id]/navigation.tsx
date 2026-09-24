@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { type Href, useLocalSearchParams, useRouter } from "expo-router";
-import { useIsFocused } from "@react-navigation/native";
+import { type Href, useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { LocateFixed } from "lucide-react-native";
 import MapView, { PROVIDER_GOOGLE } from "../../../src/components/MapWrapper";
 import { useCurrentRider } from "../../../src/services/useCurrentRider";

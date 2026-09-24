@@ -46,7 +46,7 @@ module.exports = function withIosDeploymentTarget(config, { minimum = '15.1' } =
 
       // Append inside the existing post_install block, after the closing
       // paren of react_native_post_install(...).
-      const anchor = /(post_install do \|installer\|[\s\S]*?\n    \)\n)/;
+      const anchor = /(post_install do \|installer\|[\s\S]*?\n {4}\)\n)/;
       if (!anchor.test(contents)) {
         throw new Error(
           'with-ios-deployment-target: could not find the post_install block in ios/Podfile. ' +
