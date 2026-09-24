@@ -58,6 +58,22 @@ import type {
 const KEEP_AWAKE_TAG = "ride-navigation-fullscreen";
 /** Banner height assumed for the map padding until the real one is measured. */
 const ESTIMATED_BANNER_HEIGHT = 120;
+/**
+ * Applied until the map reports ready.
+ *
+ * react-native-maps' applyBaseMapPadding defers while the view has no layout,
+ * but never null-checks the GoogleMap itself, so a padding update that lands
+ * after layout and before the map finishes initialising crashes the app:
+ *
+ *   NullPointerException: GoogleMap.setPadding(...) on a null object reference
+ *     at com.rnmaps.maps.MapView.applyBaseMapPadding
+ *
+ * Holding one stable object until onMapReady means no prop update is
+ * dispatched during that window, so the setter is never reached with a null
+ * map. Fixed upstream only in the 2.x betas.
+ */
+const MAP_PADDING_BEFORE_READY = { top: 0, right: 0, bottom: 0, left: 0 } as const;
+
 const INITIAL_REGION_DELTA = 0.08;
 const RECENTER_GAP = 12;
 const KMH_PER_MPS = 3.6;
@@ -84,6 +100,9 @@ export default function RideNavigationScreen() {
   const currentRiderId = useCurrentRider().riderId as string | undefined;
 
   const mapRef = useRef<InstanceType<typeof MapView> | null>(null);
+  /** False until the native GoogleMap exists; see MAP_PADDING_BEFORE_READY. */
+  const [isMapReady, setIsMapReady] = useState(false);
+  const handleMapReady = useCallback(() => setIsMapReady(true), []);
   const sheetCollapsedHeight = navigationSheetCollapsedHeight(insets.bottom);
   const [bannerBottom, setBannerBottom] = useState(insets.top + ESTIMATED_BANNER_HEIGHT);
   const [sheetHeight, setSheetHeight] = useState(sheetCollapsedHeight);
@@ -663,7 +682,8 @@ export default function RideNavigationScreen() {
         provider={PROVIDER_GOOGLE}
         userInterfaceStyle={mapTheme.isNight ? "dark" : "light"}
         customMapStyle={mapTheme.mapStyle}
-        mapPadding={camera.mapPadding}
+        mapPadding={isMapReady ? camera.mapPadding : MAP_PADDING_BEFORE_READY}
+        onMapReady={handleMapReady}
         rotateEnabled
         pitchEnabled
         toolbarEnabled={false}
