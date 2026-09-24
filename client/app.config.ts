@@ -72,6 +72,8 @@ const config: ExpoConfig = {
         'expo-router',
         'expo-audio',
         './plugins/with-android-jdk17',
+        './plugins/with-ios-deployment-target',
+        './plugins/with-no-apple-signin',
         'react-native-map-link',
         '@react-native-community/datetimepicker',
         [
