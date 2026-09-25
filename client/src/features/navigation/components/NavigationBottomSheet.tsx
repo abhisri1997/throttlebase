@@ -18,7 +18,12 @@ import type { TripWaypoint } from "../core/tripPlan";
 import type { RideParticipantView } from "../types/navigation";
 import { formatClockTime } from "../core/format";
 import { crewRoleLabel } from "../core/crewRole";
-import { isFinishedProgress, progressLabel } from "../../rides/core/riderProgress";
+import { splitCrew } from "../core/crewList";
+import { progressLabel } from "../../rides/core/riderProgress";
+import { CrewSelfCard, type MyRideControls } from "./CrewSelfCard";
+import { crewStatusColor } from "./crewStatusColor";
+
+export type { MyRideControls } from "./CrewSelfCard";
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -64,16 +69,8 @@ interface NavigationBottomSheetProps {
   action: TripBarAction | null;
   /** This rider's own ride: finish it, or take a finish back while the group rides on. */
   myRide?: MyRideControls;
-}
-
-export interface MyRideControls {
-  isRiding: boolean;
-  isFinished: boolean;
-  /** The group ride is still live, so a finish can be taken back. */
-  canResume: boolean;
-  onFinish: () => void;
-  onResume: () => void;
-  isBusy: boolean;
+  /** Shown apart as the "You" card rather than as a crew row. */
+  currentRiderId?: string;
 }
 interface RoundButtonProps {
   label: string;
@@ -127,6 +124,7 @@ export function NavigationBottomSheet({
   isOverview,
   action,
   myRide,
+  currentRiderId,
 }: NavigationBottomSheetProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -158,6 +156,21 @@ export function NavigationBottomSheet({
       }).start();
     },
     [collapsedHeight, heightValue],
+  );
+
+  // Anything done from the sheet — focusing a rider or stop, finishing,
+  // ending — puts the map back in view.
+  const withCollapse = useCallback(
+    (onPress: () => void) => () => {
+      snapToHeight(collapsedHeight);
+      onPress();
+    },
+    [collapsedHeight, snapToHeight],
+  );
+
+  const crew = useMemo(
+    () => splitCrew(participants, currentRiderId),
+    [currentRiderId, participants],
   );
 
   const toggle = useCallback(() => {
@@ -266,7 +279,7 @@ export function NavigationBottomSheet({
 
             <RoundButton
               label={isOverview ? "Back to your position" : "Show route overview"}
-              onPress={onOverview}
+              onPress={withCollapse(onOverview)}
               isActive={isOverview}
             >
               <Route color={isOverview ? "white" : colors.text} size={20} />
@@ -290,7 +303,7 @@ export function NavigationBottomSheet({
               <TouchableOpacity
                 accessibilityRole='button'
                 accessibilityState={{ disabled: Boolean(action.isBusy) }}
-                onPress={action.onPress}
+                onPress={withCollapse(action.onPress)}
                 disabled={action.isBusy}
                 style={[
                   styles.chip,
@@ -341,7 +354,7 @@ export function NavigationBottomSheet({
                   key={waypoint.id}
                   accessibilityRole='button'
                   accessibilityLabel={`Show ${waypoint.name} on the map`}
-                  onPress={() => onWaypointPress?.(waypoint)}
+                  onPress={withCollapse(() => onWaypointPress?.(waypoint))}
                   className='flex-row items-center justify-between p-3 rounded-xl mb-2'
                   style={{
                     backgroundColor: colors.bg,
@@ -392,7 +405,20 @@ export function NavigationBottomSheet({
           </View>
         ) : null}
 
-        {participants.map((participant) => {
+        {crew.self ? (
+          <CrewSelfCard
+            self={crew.self}
+            myRide={
+              myRide && {
+                ...myRide,
+                onFinish: withCollapse(myRide.onFinish),
+                onResume: withCollapse(myRide.onResume),
+              }
+            }
+          />
+        ) : null}
+
+        {crew.others.map((participant) => {
           const isFocused = focusedParticipantId === participant.riderId;
 
           return (
@@ -400,31 +426,28 @@ export function NavigationBottomSheet({
               key={participant.riderId}
               accessibilityRole='button'
               accessibilityLabel={`Show ${participant.displayName} on the map`}
-              onPress={() => onParticipantPress?.(participant)}
+              onPress={withCollapse(() => onParticipantPress?.(participant))}
               className='flex-row items-center justify-between p-3 rounded-xl mb-2'
               style={{ backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border }}
             >
-              <View className='flex-row items-center'>
+              <View className='flex-row items-center flex-1 pr-2'>
                 <View
                   style={[
                     styles.presenceDot,
                     { backgroundColor: participant.isOnline ? colors.primary : colors.textMuted },
                   ]}
                 />
-                <Text style={{ color: colors.text, fontWeight: isFocused ? "700" : "400" }}>
+                <Text
+                  numberOfLines={1}
+                  style={{ color: colors.text, fontWeight: isFocused ? "700" : "400", flexShrink: 1 }}
+                >
                   {participant.displayName}
                 </Text>
               </View>
               <Text
                 className='text-xs'
                 style={{
-                  color: isFocused
-                    ? colors.primary
-                    : participant.progress === "left_early"
-                      ? colors.danger
-                      : isFinishedProgress(participant.progress)
-                        ? colors.primary
-                        : colors.textMuted,
+                  color: isFocused ? colors.primary : crewStatusColor(participant.progress, colors),
                 }}
               >
                 {isFocused
@@ -442,46 +465,6 @@ export function NavigationBottomSheet({
           );
         })}
 
-        {myRide?.isRiding ? (
-          <TouchableOpacity
-            accessibilityRole='button'
-            accessibilityLabel='Finish my ride'
-            onPress={myRide.onFinish}
-            disabled={myRide.isBusy}
-            className='rounded-xl items-center py-3 mt-3'
-            style={{
-              backgroundColor: colors.bg,
-              borderWidth: 1,
-              borderColor: colors.primary,
-              opacity: myRide.isBusy ? 0.7 : 1,
-            }}
-          >
-            <Text className='font-bold' style={{ color: colors.primary }}>
-              {myRide.isBusy ? "Finishing…" : "Finish my ride"}
-            </Text>
-          </TouchableOpacity>
-        ) : null}
-
-        {myRide?.isFinished && myRide.canResume ? (
-          <TouchableOpacity
-            accessibilityRole='button'
-            accessibilityLabel='Resume my ride'
-            onPress={myRide.onResume}
-            disabled={myRide.isBusy}
-            className='rounded-xl items-center py-3 mt-3'
-            style={{
-              backgroundColor: colors.bg,
-              borderWidth: 1,
-              borderColor: colors.border,
-              opacity: myRide.isBusy ? 0.7 : 1,
-            }}
-          >
-            <Text className='font-semibold' style={{ color: colors.text }}>
-              {myRide.isBusy ? "Resuming…" : "Resume my ride"}
-            </Text>
-          </TouchableOpacity>
-        ) : null}
-
         {participants.length === 0 ? (
           <View
             className='rounded-2xl px-4 py-5'
@@ -496,7 +479,7 @@ export function NavigationBottomSheet({
         {isHost && canEndRide ? (
           <TouchableOpacity
             accessibilityRole='button'
-            onPress={onEndRide}
+            onPress={withCollapse(onEndRide)}
             disabled={ending}
             className='rounded-xl items-center py-3 mt-3'
             style={{ backgroundColor: colors.danger, opacity: ending ? 0.7 : 1 }}

@@ -564,18 +564,9 @@ export default function RideNavigationScreen() {
     else camera.showOverview(overviewCoordinates());
   };
 
+  // Only other riders are tappable in the crew sheet; re-center shows yourself.
   const focusParticipant = (participant: RideParticipantView) => {
     setFocusedWaypointId(null);
-    if (participant.riderId === currentRiderId) {
-      if (!fix) {
-        Alert.alert("Location unavailable", "Your live location is not available yet.");
-        return;
-      }
-      setFocusedParticipantId(participant.riderId);
-      camera.focusOn(fix.coordinate, headingDegrees ?? 0);
-      return;
-    }
-
     const location = live.locations[participant.riderId];
     if (!location) {
       Alert.alert(
@@ -893,6 +884,7 @@ export default function RideNavigationScreen() {
         onOverview={toggleOverview}
         isOverview={camera.mode === "overview"}
         action={tripAction}
+        currentRiderId={currentRiderId}
         myRide={{
           isRiding: myRide.isRiding,
           isFinished: myRide.isFinished,
