@@ -33,6 +33,7 @@ Swagger docs are disabled by default in every environment and should only be ena
 
 - `GET /api/rides`
 - `POST /api/rides`
+- `GET /api/rides/riding` — rides the caller is riding right now (started, not finished); what the device's background tracker follows
 - `GET /api/rides/:id`
 - `PATCH /api/rides/:id`
 - `POST /api/rides/:id/join`
@@ -115,8 +116,11 @@ Swagger docs are disabled by default in every environment and should only be ena
 
 - `GET /api/live/health`
 - `POST /api/rides/:id/live/start`
-- `POST /api/rides/:id/live/end`
-- `GET /api/rides/:id/live/session`
+- `POST /api/rides/:id/live/end` — `409 UNFINISHED_RIDERS` with the riders still out unless `confirm_unfinished: true`
+- `POST /api/rides/:id/live/me/start` — start your own ride, up to 60 min early; opens the session if nobody has
+- `POST /api/rides/:id/live/me/finish` — finish your own ride: `arrived` near the destination, `left_early` elsewhere
+- `POST /api/rides/:id/live/me/resume` — take back a finish while the group ride is live
+- `GET /api/rides/:id/live/session` — participants include `progress`, `finished_at`, `finish_reason`, `arrived_at`, `distance_to_destination_m`
 - `POST /api/rides/:id/live/incident`
 - `POST /api/rides/:id/live/incident/:incidentId/ack`
 - `GET /api/rides/:id/live/timeline`
@@ -127,7 +131,7 @@ Swagger docs are disabled by default in every environment and should only be ena
 ### `/live` namespace
 
 - Client -> server: `session:join`, `session:leave`, `presence:heartbeat`, `location:update`, `incident:create`
-- Server -> client: `session:state`, `presence:update`, `location:broadcast`, `incident:created`, `session:ended`, `session:error`
+- Server -> client: `session:state`, `presence:update`, `location:broadcast`, `incident:created`, `session:ended`, `session:error`, `rider:progress` (a rider started, finished or resumed), `ride:arrival` (to the arriving rider only: `arrived` / `left`, with `autoFinishAfterMs`)
 
 ### `/rides` namespace
 
