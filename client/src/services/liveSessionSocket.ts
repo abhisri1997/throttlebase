@@ -1,5 +1,23 @@
 import { io, type Socket } from "socket.io-client";
 import { resolveBaseUrl } from "../adapters/http/baseUrl";
+import type { FinishReason, RiderProgress } from "../features/rides/core/riderProgress";
+
+export type LiveSessionParticipant = {
+  rider_id: string;
+  display_name: string;
+  role: "captain" | "co_captain" | "member";
+  is_online: boolean;
+  last_heartbeat_at: string | null;
+  /** This rider's own ride: not started, riding, or how it finished. */
+  progress?: RiderProgress;
+  ride_started_at?: string | null;
+  finished_at?: string | null;
+  finish_reason?: FinishReason | null;
+  /** Set while the rider is at the destination and not yet finished. */
+  arrived_at?: string | null;
+  /** From where they finished, or their last known position while riding. */
+  distance_to_destination_m?: number | null;
+};
 
 export type LiveSessionStateEvent = {
   id: string;
@@ -7,13 +25,22 @@ export type LiveSessionStateEvent = {
   status: "starting" | "active" | "paused" | "ended";
   started_at: string | null;
   ended_at: string | null;
-  participants: Array<{
-    rider_id: string;
-    display_name: string;
-    role: "captain" | "co_captain" | "member";
-    is_online: boolean;
-    last_heartbeat_at: string | null;
-  }>;
+  participants: LiveSessionParticipant[];
+};
+
+/** A rider started, finished or resumed their own ride; the roster needs refreshing. */
+export type RiderProgressEvent = {
+  rideId: string;
+  riderId: string;
+  progress: RiderProgress;
+};
+
+/** This rider reached the destination, or rode away from it again. */
+export type RideArrivalEvent = {
+  rideId: string;
+  state: "arrived" | "left";
+  /** The server finishes the ride itself if the rider stays this long. */
+  autoFinishAfterMs: number;
 };
 
 export type PresenceUpdateEvent = {
@@ -86,6 +113,8 @@ export type LiveSocketServerEvents = {
   "regroup:decided": (event: RegroupDecidedEvent) => void;
   "session:error": (event: SessionErrorEvent) => void;
   "session:ended": (event: SessionEndedEvent) => void;
+  "rider:progress": (event: RiderProgressEvent) => void;
+  "ride:arrival": (event: RideArrivalEvent) => void;
 };
 
 export type LiveSocketClientEvents = {

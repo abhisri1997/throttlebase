@@ -32,7 +32,12 @@ import {
   type RegroupCandidate,
   type RegroupSuggestion,
 } from "../../../src/features/navigation/core/regroup";
-import { projectOntoPolyline } from "../../../src/features/navigation/core/geometry";
+import { haversineMeters, projectOntoPolyline } from "../../../src/features/navigation/core/geometry";
+import { ArrivalPrompt } from "../../../src/features/navigation/components/ArrivalPrompt";
+import { useMyRideProgress } from "../../../src/features/rides/hooks/useMyRideProgress";
+
+/** The server's default wait at the destination before finishing a rider's ride itself. */
+const DEFAULT_AUTO_FINISH_AFTER_MS = 10 * 60 * 1000;
 import { fetchStopSuggestions } from "../../../src/features/rides/api/stopSuggestions";
 import type { StopSuggestion } from "../../../src/features/rides/types/stops";
 import { apiClient } from "../../../src/api/client";
@@ -117,6 +122,7 @@ export default function RideNavigationScreen() {
 
   const live = useRideLiveSession({
     rideId: id,
+    currentRiderId,
     isAppActive,
     onRideEnded: () => router.replace(rideDetailHref),
   });
@@ -497,7 +503,29 @@ export default function RideNavigationScreen() {
     presence: live.presence,
     locations: live.locations,
     currentRiderId,
+    sessionParticipants: live.sessionParticipants,
   });
+
+  // This rider's own ride: finish when they are done, even while the group rides on.
+  const destination = waypoints?.[waypoints.length - 1];
+  const myRide = useMyRideProgress({
+    rideId: id,
+    me: live.me,
+    liveDistanceToDestinationMeters:
+      fix && destination ? haversineMeters(fix.coordinate, destination.coordinate) : null,
+  });
+  const [dismissedArrivalAtMs, setDismissedArrivalAtMs] = useState<number | null>(null);
+  // The socket says so the moment they arrive; the session says so if the app
+  // was closed at the time.
+  const arrivedAtMs = live.me?.arrived_at
+    ? Date.parse(live.me.arrived_at)
+    : live.arrival?.receivedAtMs ?? null;
+  const showArrivalPrompt =
+    myRide.isRiding && arrivedAtMs !== null && arrivedAtMs !== dismissedArrivalAtMs;
+  const dismissArrivalPrompt = () => {
+    setDismissedArrivalAtMs(arrivedAtMs);
+    live.dismissArrival();
+  };
 
   const overviewCoordinates = (): LatLng[] => {
     const route = [
@@ -670,7 +698,9 @@ export default function RideNavigationScreen() {
     ? "SIMULATED GPS — dev only"
     : live.sessionEndedReason && live.rideState === "COMPLETED"
       ? `Ended: ${live.sessionEndedReason}`
-      : null;
+      : myRide.isFinished && live.rideState !== "COMPLETED"
+        ? "You finished · following the group"
+        : null;
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.bg }]}>
@@ -863,7 +893,26 @@ export default function RideNavigationScreen() {
         onOverview={toggleOverview}
         isOverview={camera.mode === "overview"}
         action={tripAction}
+        myRide={{
+          isRiding: myRide.isRiding,
+          isFinished: myRide.isFinished,
+          canResume: live.rideState !== "COMPLETED",
+          onFinish: myRide.confirmFinishMyRide,
+          onResume: myRide.resumeMyRide,
+          isBusy: myRide.isFinishingMyRide || myRide.isResumingMyRide,
+        }}
       />
+
+      {showArrivalPrompt && arrivedAtMs !== null ? (
+        <ArrivalPrompt
+          destinationName={destination ? waypointLabel(destination) : "the destination"}
+          arrivedAtMs={arrivedAtMs}
+          autoFinishAfterMs={live.arrival?.autoFinishAfterMs ?? DEFAULT_AUTO_FINISH_AFTER_MS}
+          onFinish={myRide.finishMyRideNow}
+          onDismiss={dismissArrivalPrompt}
+          isFinishing={myRide.isFinishingMyRide}
+        />
+      ) : null}
     </View>
   );
 }

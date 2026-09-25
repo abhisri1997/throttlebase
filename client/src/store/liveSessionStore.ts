@@ -9,6 +9,8 @@ import {
   type SessionErrorEvent,
   type RegroupRequestEvent,
   type RegroupDecidedEvent,
+  type RideArrivalEvent,
+  type RiderProgressEvent,
 } from "../services/liveSessionSocket";
 
 type LiveIncident = IncidentCreatedEvent;
@@ -41,6 +43,11 @@ type LiveSessionState = {
   regroupDecision: RegroupDecidedEvent | null;
   lastError: string | null;
   sessionEndedReason: string | null;
+  /** Bumped whenever a rider starts, finishes or resumes; the roster refetches on change. */
+  progressVersion: number;
+  /** This rider reached the destination; drives the "finish your ride?" prompt. */
+  arrival: (RideArrivalEvent & { receivedAtMs: number }) | null;
+  dismissArrival: () => void;
   connect: (token: string) => void;
   joinRoom: (rideId: string) => void;
   leaveRoom: () => void;
@@ -152,6 +159,22 @@ const attachSocketListeners = () => {
     }));
   });
 
+  liveSessionSocket.off("rider:progress");
+  liveSessionSocket.on("rider:progress", (_event: RiderProgressEvent) => {
+    useLiveSessionStore.setState((state) => ({
+      ...state,
+      progressVersion: state.progressVersion + 1,
+    }));
+  });
+
+  liveSessionSocket.off("ride:arrival");
+  liveSessionSocket.on("ride:arrival", (event: RideArrivalEvent) => {
+    useLiveSessionStore.setState((state) => ({
+      ...state,
+      arrival: event.state === "arrived" ? { ...event, receivedAtMs: Date.now() } : null,
+    }));
+  });
+
   liveSessionSocket.on("session:error", (event: SessionErrorEvent) => {
     useLiveSessionStore.setState((state) => ({
       ...state,
@@ -204,6 +227,10 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
   regroupDecision: null,
   lastError: null,
   sessionEndedReason: null,
+  progressVersion: 0,
+  arrival: null,
+
+  dismissArrival: () => set((state) => ({ ...state, arrival: null })),
 
   connect: (token: string) => {
     const socket = liveSessionSocket.connect(token);
@@ -395,6 +422,7 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
       regroupDecision: null,
       lastError: null,
       sessionEndedReason: null,
+      arrival: null,
     }));
   },
 }));
