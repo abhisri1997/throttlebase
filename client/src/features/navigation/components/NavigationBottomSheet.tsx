@@ -17,6 +17,7 @@ import type { WaypointStatus } from "../core/navigationSession";
 import type { TripWaypoint } from "../core/tripPlan";
 import type { RideParticipantView } from "../types/navigation";
 import { formatClockTime } from "../core/format";
+import { crewRoleLabel } from "../core/crewRole";
 import { isFinishedProgress, progressLabel } from "../../rides/core/riderProgress";
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -74,13 +75,6 @@ export interface MyRideControls {
   onResume: () => void;
   isBusy: boolean;
 }
-
-const ROLE_LABELS: Record<RideParticipantView["role"], string> = {
-  captain: "Captain",
-  co_captain: "Co-Captain",
-  member: "Rider",
-};
-
 interface RoundButtonProps {
   label: string;
   onPress: () => void;
@@ -435,7 +429,7 @@ export function NavigationBottomSheet({
               >
                 {isFocused
                   ? "On map"
-                  : `${ROLE_LABELS[participant.role]} · ${progressLabel(
+                  : `${crewRoleLabel(participant.role)} · ${progressLabel(
                       {
                         progress: participant.progress,
                         finishedAt: participant.finishedAt,
