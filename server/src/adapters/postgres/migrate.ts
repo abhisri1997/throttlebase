@@ -1,7 +1,9 @@
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 import pg from "pg";
+import { createPool } from "./pool.js";
 
 /**
  * Migration runner.
@@ -139,6 +141,11 @@ export const runMigrations = async (
 };
 
 const main = async (): Promise<void> => {
+  // Only the CLI reads .env; runMigrations itself takes whatever pool it is
+  // given, so tests importing it are unaffected. Variables already set in the
+  // shell win, and a missing .env is fine.
+  dotenv.config();
+
   const connectionString =
     process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL;
 
@@ -150,13 +157,9 @@ const main = async (): Promise<void> => {
 
   const dryRun = process.argv.includes("--dry-run");
   const baselineExisting = process.argv.includes("--baseline-existing");
-  const pool = new pg.Pool({
-    connectionString,
-    ...(connectionString.includes("localhost") ||
-    connectionString.includes("127.0.0.1")
-      ? {}
-      : { ssl: { rejectUnauthorized: false } }),
-  });
+  // The shared pool factory strips any sslmode from the URL; left in, pg reads
+  // it as verify-full and rejects Supabase's chain despite rejectUnauthorized.
+  const pool = createPool({ connectionString, rejectUnauthorized: false, max: 2 });
 
   try {
     const result = await runMigrations(pool, { dryRun, baselineExisting });
