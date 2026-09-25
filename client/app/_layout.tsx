@@ -7,7 +7,20 @@ import { StyleSheet as NativeWindStyleSheet } from "nativewind";
 import { ThemeProvider, useTheme } from "../src/theme/ThemeContext";
 import { useAuthState, useResolvedSession } from "../src/services/useAuthState";
 import { useBackgroundLocationTracker } from "../src/hooks/useBackgroundLocationTracker";
+import { installPerformanceBufferGuard } from "../src/dev/performanceBufferGuard";
 import "../global.css";
+
+// Dev builds only: React's per-render performance entries otherwise pile up
+// until Android kills the app for low memory on a long ride.
+installPerformanceBufferGuard({
+  isDev: __DEV__,
+  performance: (globalThis as { performance?: { clearMarks?: () => void; clearMeasures?: () => void } })
+    .performance,
+  timer: {
+    setInterval: (callback, ms) => setInterval(callback, ms),
+    clearInterval: (handle) => clearInterval(handle as ReturnType<typeof setInterval>),
+  },
+});
 
 function AppInner() {
   const { colors, isDark } = useTheme();
