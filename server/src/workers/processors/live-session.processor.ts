@@ -42,6 +42,13 @@ const getRideRecipientIds = async (rideId: string): Promise<string[]> => {
   return result.rows.map((row) => row.rider_id as string);
 };
 
+/** Rides the system ended itself, with no leader to name. */
+const SYSTEM_END_MESSAGES: Record<string, (rideLabel: string) => string> = {
+  all_riders_finished: (rideLabel) => `Everyone has finished ${rideLabel}. The ride is complete.`,
+  idle_timeout: (rideLabel) =>
+    `${rideLabel} ended automatically after a long time without anyone riding.`,
+};
+
 const getRiderName = async (riderId: string | null): Promise<string | null> => {
   if (!riderId) {
     return null;
@@ -156,9 +163,12 @@ export const processLiveSessionEnded = async (
   const actorLabel = actorName ?? "A ride leader";
   const rideLabel = rideDetails.ride_title || "the ride";
 
-  const body = reason
-    ? `${actorLabel} ended live tracking for ${rideLabel}. Reason: ${reason}.`
-    : `${actorLabel} ended live tracking for ${rideLabel}.`;
+  const systemBody = actorRiderId === null ? SYSTEM_END_MESSAGES[reason ?? ""] : undefined;
+  const body = systemBody
+    ? systemBody(rideLabel)
+    : reason
+      ? `${actorLabel} ended live tracking for ${rideLabel}. Reason: ${reason}.`
+      : `${actorLabel} ended live tracking for ${rideLabel}.`;
 
   const notificationOutcome = await createNotificationsForRiders({
     riderIds: recipientIds,

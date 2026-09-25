@@ -7,6 +7,7 @@ export const JOB_TYPES = {
   LIVE_INCIDENT_REPORTED: "live_session.incident_reported",
   LIVE_PRESENCE_SWEEP: "live_session.presence_sweep",
   LIVE_INCIDENT_ESCALATE: "live_session.incident_escalate",
+  RIDE_PROGRESS_SWEEP: "ride_progress.sweep",
   NOTIFICATION_PUSH: "notification.push",
   NOTIFICATION_EMAIL: "notification.email",
 } as const;

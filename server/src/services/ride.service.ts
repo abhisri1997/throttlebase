@@ -360,7 +360,8 @@ export const listDiscoverableRides = async (
 };
 
 /**
- * Gets a user's completed or cancelled rides.
+ * Gets a user's completed or cancelled rides — plus any ride they have
+ * finished themselves while the rest of the group is still out.
  */
 export const getRideHistory = async (riderId: string): Promise<Ride[]> => {
   const result = await query(
@@ -369,7 +370,17 @@ export const getRideHistory = async (riderId: string): Promise<Ride[]> => {
               WHERE rs.ride_id = r.id AND rs.status = 'approved')::int AS stop_count
      FROM rides r
      JOIN riders c ON r.captain_id = c.id
-     WHERE r.status IN ('completed', 'cancelled')
+     WHERE (
+         r.status IN ('completed', 'cancelled')
+         OR EXISTS (
+           SELECT 1
+           FROM ride_live_sessions ls
+           JOIN ride_live_presence p ON p.session_id = ls.id
+           WHERE ls.ride_id = r.id
+             AND p.rider_id = $1
+             AND p.finished_at IS NOT NULL
+         )
+       )
        AND (r.captain_id = $1 OR EXISTS (
          SELECT 1 FROM ride_participants rp WHERE rp.ride_id = r.id AND rp.rider_id = $1
        ))
