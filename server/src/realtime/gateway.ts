@@ -4,6 +4,7 @@ import { z } from "zod";
 import { authenticateLiveSocket } from "./auth.js";
 import { buildLiveRoomKey, buildRideSocketKey } from "./session-room.js";
 import { createSampleThrottle, type TrackPoint } from "./sampleThrottle.js";
+import { createLocationGate } from "./locationGate.js";
 import { query } from "../config/db.js";
 import {
   CreateIncidentSchema,
@@ -51,14 +52,8 @@ const isAllowedSessionStatus = (status: string): boolean =>
 
 /** Decides, per ride and rider, which location updates are stored as track samples. */
 const sampleThrottle = createSampleThrottle();
-
-/**
- * How long a simulated fix keeps a rider's real GPS suppressed. Long enough to
- * cover the gap between simulated updates, short enough that closing the
- * simulation hands the rider straight back to their own device.
- */
-const SIMULATION_TAKEOVER_MS = 30_000;
-const simulatingRiders = new Map<string, number>();
+/** Lets a dev simulation take over a rider's position — and track — while it runs. */
+const locationGate = createLocationGate(sampleThrottle);
 
 const emitSocketError = (socket: Socket, message: string, code = 400): void => {
   socket.emit("session:error", { error: message, code });
@@ -267,30 +262,20 @@ export const createLiveGateway = (httpServer: HttpServer) => {
           return;
         }
 
-        // A simulated ride takes over the rider's position while it runs. The
-        // device keeps reporting real GPS from the background tracker, and
-        // letting both through makes the rider's marker flick between the two.
-        if (payload.simulated) {
-          simulatingRiders.set(rider.riderId, Date.now());
-        } else {
-          const simulatingSince = simulatingRiders.get(rider.riderId);
-
-          if (simulatingSince !== undefined) {
-            if (Date.now() - simulatingSince < SIMULATION_TAKEOVER_MS) return;
-            simulatingRiders.delete(rider.riderId);
-          }
-        }
-
-        const sampleKey = buildRideSocketKey(payload.rideId, rider.riderId);
         const capturedAtMs = payload.captured_at ? Date.parse(payload.captured_at) : Date.now();
         const point: TrackPoint = { lat: payload.lat, lng: payload.lon, capturedAtMs };
-        // Reserve the baseline before awaiting anything: this handler runs
-        // concurrently for every update in a batch, and each must see the
-        // decisions of the ones before it. A simulated fix is broadcast to the
-        // crew but never reserved, so it stays out of the ride's track.
-        const reservation = payload.simulated
-          ? null
-          : sampleThrottle.reserve(sampleKey, point);
+        // Decide before awaiting anything: this handler runs concurrently for
+        // every update in a batch, and each must see the decisions of the ones
+        // before it.
+        const admission = locationGate.admit({
+          riderId: rider.riderId,
+          sampleKey: buildRideSocketKey(payload.rideId, rider.riderId),
+          point,
+          isSimulated: payload.simulated === true,
+          nowMs: Date.now(),
+        });
+        if (!admission.isAccepted) return;
+        const { reservation } = admission;
 
         let location: Awaited<ReturnType<typeof updateLivePresenceLocation>>;
         try {
@@ -413,7 +398,7 @@ export const createLiveGateway = (httpServer: HttpServer) => {
       }
 
       sampleThrottle.clearRider(rider.riderId);
-      simulatingRiders.delete(rider.riderId);
+      locationGate.clearRider(rider.riderId);
     });
   });
 

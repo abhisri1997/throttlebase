@@ -30,9 +30,9 @@ export const LiveLocationUpdateSchema = z.object({
   accuracy_m: z.number().nonnegative().optional(),
   captured_at: z.string().datetime().optional(),
   /**
-   * A dev simulation rather than a real fix. Still broadcast so the crew can
-   * watch it move, but never kept as a track sample — the ride's history would
-   * otherwise interleave the simulation with the rider's own GPS.
+   * A dev simulation rather than a real fix. Broadcast and kept as a track
+   * sample like any other, so a simulated ride is recorded; while it runs the
+   * rider's real GPS is dropped so the two never interleave.
    */
   simulated: z.boolean().optional(),
 });
