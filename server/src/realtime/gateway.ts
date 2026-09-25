@@ -5,6 +5,7 @@ import { authenticateLiveSocket } from "./auth.js";
 import { buildLiveRoomKey, buildRideSocketKey } from "./session-room.js";
 import { createSampleThrottle, type TrackPoint } from "./sampleThrottle.js";
 import { createLocationGate } from "./locationGate.js";
+import { RIDE_PROGRESS_CONFIG } from "../core/ride-progress/config.js";
 import { query } from "../config/db.js";
 import {
   CreateIncidentSchema,
@@ -303,9 +304,20 @@ export const createLiveGateway = (httpServer: HttpServer) => {
           return;
         }
 
+        const { arrival, ...broadcast } = location;
         liveNamespace
           .to(buildLiveRoomKey(payload.rideId, session.id))
-          .emit("location:broadcast", location);
+          .emit("location:broadcast", broadcast);
+
+        // Only the arriving rider is prompted; the auto-finish follows unless
+        // they finish first or ride away.
+        if (arrival === "arrived" || arrival === "left") {
+          socket.emit("ride:arrival", {
+            rideId: payload.rideId,
+            state: arrival,
+            autoFinishAfterMs: RIDE_PROGRESS_CONFIG.autoFinishDwellMs,
+          });
+        }
       } catch (error) {
         if (error instanceof LiveSessionError) {
           emitSocketError(socket, error.message, error.statusCode);

@@ -66,6 +66,9 @@ import {
 } from "../../src/features/navigation/core/format";
 import { navigationDayColors } from "../../src/theme/navigationColors";
 import type { LatLng, RouteLeg } from "../../src/features/navigation/types/navigation";
+import type { LiveSessionParticipant } from "../../src/services/liveSessionSocket";
+import { StartMyRideCard } from "../../src/features/rides/components/StartMyRideCard";
+import { useEndRideWithWarning } from "../../src/features/rides/hooks/useEndRideWithWarning";
 
 const fetchRideDetails = async (id: string) => {
   const { data } = await apiClient.get(`/api/rides/${id}`);
@@ -161,17 +164,6 @@ const startLiveSessionReq = async (rideId: string) => {
 
 const rollOutLiveSessionReq = async (rideId: string) => {
   const { data } = await apiClient.post(`/api/rides/${rideId}/live/roll-out`);
-  return data;
-};
-
-const endLiveSessionReq = async (
-  rideId: string,
-  options?: { markRideCompleted?: boolean; reason?: string },
-) => {
-  const { data } = await apiClient.post(`/api/rides/${rideId}/live/end`, {
-    mark_ride_completed: Boolean(options?.markRideCompleted),
-    ...(options?.reason ? { reason: options.reason } : {}),
-  });
   return data;
 };
 
@@ -685,6 +677,12 @@ export default function RideDetailScreen() {
 
   const effectiveLiveSession = liveSocketSession || liveSession;
   const liveStatus = effectiveLiveSession?.status || "not_started";
+  // The polled session carries each rider's progress; the socket's copy only
+  // arrives on joining.
+  const myLiveParticipant: LiveSessionParticipant | null =
+    ((liveSession?.participants ?? liveSocketSession?.participants ?? []) as LiveSessionParticipant[]).find(
+      (participant) => participant.rider_id === currentRider?.id,
+    ) ?? null;
   const isTerminalRideStatus =
     ride?.status === "completed" || ride?.status === "cancelled";
   const canJoinLiveRoom =
@@ -837,22 +835,10 @@ export default function RideDetailScreen() {
     },
   });
 
-  const liveEndMutation = useMutation({
-    mutationFn: (options?: { markRideCompleted?: boolean; reason?: string }) =>
-      endLiveSessionReq(id!, options),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["ride", id] }),
-        queryClient.invalidateQueries({ queryKey: ["live-session", id] }),
-      ]);
-      refetchLiveSession();
-    },
-    onError: (err: any) => {
-      Alert.alert(
-        "Error",
-        getApiErrorMessage(err, "Failed to end live session"),
-      );
-    },
+  // Ending asks first when riders are still out, listing who and how far.
+  const { endRide: endGroupRideWithWarning } = useEndRideWithWarning({
+    rideId: id,
+    onEnded: () => void refetchLiveSession(),
   });
 
   const liveSOSMutation = useMutation({
@@ -1534,10 +1520,7 @@ useEffect(() => {
             }
 
             if (shouldEndLiveWithRide) {
-              liveEndMutation.mutate({
-                markRideCompleted: true,
-                reason: "ride_completed",
-              });
+              endGroupRideWithWarning();
               return;
             }
 
@@ -1778,6 +1761,16 @@ useEffect(() => {
                 </Text>
               ) : null}
             </View>
+
+            {!isCaptain && (
+              <StartMyRideCard
+                rideId={id!}
+                rideStatus={ride.status}
+                liveStatus={liveStatus}
+                me={myLiveParticipant}
+                onStarted={() => router.push(`/ride/${id}/navigation` as any)}
+              />
+            )}
 
             {liveStatus === "starting" && isLeader && rollCall && (
               <View

@@ -49,6 +49,8 @@ export const StartLiveSessionSchema = z.object({}).optional();
 export const EndLiveSessionSchema = z.object({
   reason: z.string().max(255).optional(),
   mark_ride_completed: z.boolean().default(false),
+  /** End even though riders are still out — the captain has seen who they are. */
+  confirm_unfinished: z.boolean().default(false),
 });
 
 export const CreateIncidentSchema = z

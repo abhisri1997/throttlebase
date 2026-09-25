@@ -9,7 +9,7 @@
 import { useEffect, useRef } from "react";
 import { AppState, type AppStateStatus, Platform } from "react-native";
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "../api/client";
+import { fetchRidesImRiding } from "../features/rides/api/rideProgress";
 import { useAccessToken, useAuthState } from "../services/useAuthState";
 import { useCurrentRider } from "../services/useCurrentRider";
 import {
@@ -25,17 +25,14 @@ type RideSummary = {
 };
 
 /**
- * Fetch active rides where current rider is a participant.
- * GET /api/rides?status=active already filters to rides where the
- * authenticated rider is captain or confirmed participant.
+ * The rides this rider is riding right now: their own ride is under way —
+ * started early, or the group rolled out — and they have not finished. A ride
+ * still "scheduled" counts once they start early; one they have finished does
+ * not, even while the rest of the group rides on.
  */
 const fetchMyActiveRides = async (): Promise<RideSummary[]> => {
   try {
-    const { data } = await apiClient.get("/api/rides", {
-      params: { status: "active" },
-    });
-    const rides = data.rides ?? data;
-    return Array.isArray(rides) ? rides : [];
+    return await fetchRidesImRiding();
   } catch {
     return [];
   }
@@ -64,8 +61,8 @@ export function useBackgroundLocationTracker() {
       return;
     }
 
-    // Any ride returned from GET /api/rides?status=active means
-    // current rider is captain or confirmed participant
+    // Any ride returned from GET /api/rides/riding is one this rider is
+    // riding now; finishing it drops it from the list and stops tracking.
     const activeRide = activeRides?.[0] ?? null;
 
     const currentlyTracking = getActiveTrackingRideId();

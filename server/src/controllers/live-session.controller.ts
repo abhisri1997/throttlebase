@@ -9,6 +9,7 @@ import { emitToLiveRoom } from "../realtime/gateway.js";
 import { buildLiveRoomKey } from "../realtime/session-room.js";
 import {
   LiveSessionError,
+  UnfinishedRidersError,
   createLiveIncident,
   endLiveSession,
   getLiveSession,
@@ -29,7 +30,13 @@ const rid = (req: Request) => (req.rider as unknown as RiderPayload).riderId;
 
 const RideIdSchema = z.string().uuid();
 
-const handleLiveSessionError = (res: Response, error: any, context: string) => {
+export const handleLiveSessionError = (res: Response, error: any, context: string) => {
+  // The client shows these riders to the captain and asks before ending anyway.
+  if (error instanceof UnfinishedRidersError) {
+    res.status(409).json({ error: error.message, code: "UNFINISHED_RIDERS", riders: error.riders });
+    return;
+  }
+
   if (error instanceof LiveSessionError) {
     res.status(error.statusCode).json({ error: error.message });
     return;
@@ -109,6 +116,7 @@ export const endSession = async (
     const data = EndLiveSessionSchema.parse(req.body || {});
     const options = {
       mark_ride_completed: data.mark_ride_completed,
+      confirm_unfinished: data.confirm_unfinished,
       ...(data.reason ? { reason: data.reason } : {}),
     };
     const result = await endLiveSession(

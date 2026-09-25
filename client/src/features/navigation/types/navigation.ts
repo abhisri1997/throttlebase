@@ -1,3 +1,5 @@
+import type { RiderProgress } from "../../rides/core/riderProgress";
+
 export type LatLng = {
   latitude: number;
   longitude: number;
@@ -79,4 +81,7 @@ export type RideParticipantView = {
   displayName: string;
   role: "captain" | "co_captain" | "member";
   isOnline: boolean;
+  /** This rider's own ride; not_started until the live session says otherwise. */
+  progress: RiderProgress;
+  finishedAt: string | null;
 };

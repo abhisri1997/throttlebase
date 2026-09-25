@@ -16,6 +16,8 @@ import { useTheme } from "../../../theme/ThemeContext";
 import type { WaypointStatus } from "../core/navigationSession";
 import type { TripWaypoint } from "../core/tripPlan";
 import type { RideParticipantView } from "../types/navigation";
+import { formatClockTime } from "../core/format";
+import { isFinishedProgress, progressLabel } from "../../rides/core/riderProgress";
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -59,7 +61,25 @@ interface NavigationBottomSheetProps {
   isOverview: boolean;
   /** Start ride, Skip stop, or Continue — whichever applies now. */
   action: TripBarAction | null;
+  /** This rider's own ride: finish it, or take a finish back while the group rides on. */
+  myRide?: MyRideControls;
 }
+
+export interface MyRideControls {
+  isRiding: boolean;
+  isFinished: boolean;
+  /** The group ride is still live, so a finish can be taken back. */
+  canResume: boolean;
+  onFinish: () => void;
+  onResume: () => void;
+  isBusy: boolean;
+}
+
+const ROLE_LABELS: Record<RideParticipantView["role"], string> = {
+  captain: "Captain",
+  co_captain: "Co-Captain",
+  member: "Rider",
+};
 
 interface RoundButtonProps {
   label: string;
@@ -112,6 +132,7 @@ export function NavigationBottomSheet({
   onOverview,
   isOverview,
   action,
+  myRide,
 }: NavigationBottomSheetProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -402,19 +423,70 @@ export function NavigationBottomSheet({
               </View>
               <Text
                 className='text-xs'
-                style={{ color: isFocused ? colors.primary : colors.textMuted }}
+                style={{
+                  color: isFocused
+                    ? colors.primary
+                    : participant.progress === "left_early"
+                      ? colors.danger
+                      : isFinishedProgress(participant.progress)
+                        ? colors.primary
+                        : colors.textMuted,
+                }}
               >
                 {isFocused
                   ? "On map"
-                  : participant.role === "captain"
-                    ? "Captain"
-                    : participant.role === "co_captain"
-                      ? "Co-Captain"
-                      : "Rider"}
+                  : `${ROLE_LABELS[participant.role]} · ${progressLabel(
+                      {
+                        progress: participant.progress,
+                        finishedAt: participant.finishedAt,
+                        isOnline: participant.isOnline,
+                      },
+                      formatClockTime,
+                    )}`}
               </Text>
             </Pressable>
           );
         })}
+
+        {myRide?.isRiding ? (
+          <TouchableOpacity
+            accessibilityRole='button'
+            accessibilityLabel='Finish my ride'
+            onPress={myRide.onFinish}
+            disabled={myRide.isBusy}
+            className='rounded-xl items-center py-3 mt-3'
+            style={{
+              backgroundColor: colors.bg,
+              borderWidth: 1,
+              borderColor: colors.primary,
+              opacity: myRide.isBusy ? 0.7 : 1,
+            }}
+          >
+            <Text className='font-bold' style={{ color: colors.primary }}>
+              {myRide.isBusy ? "Finishing…" : "Finish my ride"}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {myRide?.isFinished && myRide.canResume ? (
+          <TouchableOpacity
+            accessibilityRole='button'
+            accessibilityLabel='Resume my ride'
+            onPress={myRide.onResume}
+            disabled={myRide.isBusy}
+            className='rounded-xl items-center py-3 mt-3'
+            style={{
+              backgroundColor: colors.bg,
+              borderWidth: 1,
+              borderColor: colors.border,
+              opacity: myRide.isBusy ? 0.7 : 1,
+            }}
+          >
+            <Text className='font-semibold' style={{ color: colors.text }}>
+              {myRide.isBusy ? "Resuming…" : "Resume my ride"}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
 
         {participants.length === 0 ? (
           <View
