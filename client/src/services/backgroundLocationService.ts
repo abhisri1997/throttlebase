@@ -154,8 +154,20 @@ const stopBackgroundTracking = async (): Promise<void> => {
     BACKGROUND_LOCATION_TASK,
   ).catch(() => false);
 
-  if (isRunning) {
+  if (!isRunning) {
+    return;
+  }
+
+  try {
     await ExpoLocation.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+  } catch (error: unknown) {
+    // After a JS reload Android can still report the updates as started while
+    // the task itself is gone ("TaskNotFoundException") — there is nothing
+    // left to stop. Anything else is worth a warning, not a crash.
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes("TaskNotFoundException")) {
+      console.warn("[BgLocation] could not stop background updates:", message);
+    }
   }
 };
 
