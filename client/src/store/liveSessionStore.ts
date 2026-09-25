@@ -55,7 +55,7 @@ type LiveSessionState = {
     heading_deg?: number;
     accuracy_m?: number;
     captured_at?: string;
-    /** Dev simulation: shared with the crew, but kept out of the ride's track. */
+    /** Dev simulation: shared with the crew and recorded in the ride's track. */
     simulated?: boolean;
   }) => void;
   /** Records a waypoint arrival for the ride history. False when not in the room yet. */

@@ -155,14 +155,12 @@ export default function RideNavigationScreen() {
   // Dev-only: replays a synthetic ride along the planned route instead of
   // reading real GPS, so navigation can be watched end-to-end without riding.
   // Enabled with `?simulate=1` on this screen; never active outside __DEV__.
-  // Simulated positions are deliberately not published to the live session:
-  // they would be stored as real track samples, and a track fed by both the
-  // simulation and the rider's own GPS reads as constant teleporting.
   const simulatedFix = useSimulatedNavigationFix({
     isEnabled: isSimulated,
     polyline: plannedRoute.route?.polyline ?? null,
-    // Shared with the crew so peer markers move during a simulated ride; the
-    // server is told these are simulated and keeps them out of the track.
+    // Published like real GPS, so the crew sees it move and the ride's track,
+    // stats and profile totals record it. The server is told these are
+    // simulated and drops the device's real GPS while the simulation runs.
     onPosition: publishSimulatedPosition,
   });
   const { fix, headingDegrees, isPermissionDenied } = isSimulated ? simulatedFix : liveFix;
