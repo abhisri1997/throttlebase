@@ -52,7 +52,7 @@ import {
   simplifyPolyline,
 } from "../../src/features/navigation/services/navigationRouteService";
 import { NavigationRouteLayer } from "../../src/features/navigation/components/NavigationRouteLayer";
-import { buildTripPlan } from "../../src/features/navigation/core/tripPlan";
+import { buildTripPlan, rideRoadVia } from "../../src/features/navigation/core/tripPlan";
 import {
   buildRollCall,
   summarizeRollCall,
@@ -1165,7 +1165,8 @@ useEffect(() => {
   // The ride as planned — start, approved stops, destination. Fetched once per
   // plan and cached, so opening navigation from here costs no second request.
   const waypoints = useMemo(() => buildTripPlan(ride), [ride]);
-  const plannedRoute = usePlannedRoute(waypoints);
+  const roadVia = useMemo(() => rideRoadVia(ride), [ride]);
+  const plannedRoute = usePlannedRoute(waypoints, roadVia);
   const rideStartPoint = waypoints?.[0]?.coordinate ?? null;
 
   // Who has actually made it to the start. Riders only report a position once

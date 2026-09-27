@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from "react";
+import React, { useRef, useState } from "react";
 import {
   View,
   Text,
@@ -27,6 +27,8 @@ import { HighlightChips } from "../../src/features/routes/components/HighlightCh
 import { ITINERARY_COLORS, RouteItinerary } from "../../src/features/routes/components/RouteItinerary";
 import { itineraryRows, routeFacts, type RouteStopDetail } from "../../src/features/routes/core/routeSummary";
 import { useTheme } from "../../src/theme/ThemeContext";
+import { PlanRideSection } from "../../src/features/routes/components/PlanRideSection";
+import { parseRideDirection, type RideDirection } from "../../src/features/routes/core/planRide";
 
 const fetchRouteDetails = async (id: string) => {
   const { data } = await apiClient.get(`/api/routes/${id}`);
@@ -65,8 +67,10 @@ function EndpointMarker({ letter, color, textColor = "#ffffff" }: { letter: stri
 
 export default function RouteDetailScreen() {
   const { colors } = useTheme();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, direction: directionParam } = useLocalSearchParams<{ id: string; direction?: string }>();
   const router = useRouter();
+  // Found by searching the other way round: ready to be ridden that way.
+  const [direction, setDirection] = useState<RideDirection>(() => parseRideDirection(directionParam));
   const queryClient = useQueryClient();
   const mapRef = useRef<InstanceType<typeof MapView> | null>(null);
 
@@ -282,6 +286,15 @@ export default function RouteDetailScreen() {
             </Text>{" "}
             on {dateStr}
           </Text>
+          <PlanRideSection
+            startName={route.start_name ?? null}
+            endName={route.end_name ?? null}
+            direction={direction}
+            onDirectionChange={setDirection}
+            onPlan={() =>
+              router.push({ pathname: "/(modals)/create-ride", params: { routeId: route.id, direction } } as any)
+            }
+          />
         </View>
 
         {highlights.length > 0 ? (

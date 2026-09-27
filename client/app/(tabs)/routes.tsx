@@ -91,7 +91,13 @@ export default function ExploreRoutesScreen() {
             route={item}
             viewerId={riderId}
             matchNote={item.match ? matchNote(item.match, search.from?.name ?? null, search.to?.name ?? null) : null}
-            onPress={() => router.push(`/route/${item.id}` as any)}
+            onPress={() =>
+              router.push({
+                pathname: "/route/[id]",
+                // A route found the other way round opens ready to be ridden that way.
+                params: { id: item.id, ...(item.match?.direction === "reverse" ? { direction: "reverse" } : {}) },
+              } as any)
+            }
           />
         )}
         ListEmptyComponent={

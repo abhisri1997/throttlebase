@@ -46,6 +46,8 @@ export interface MapsDirectionsRequest {
   origin: MapsLatLng;
   destination: MapsLatLng;
   waypoints?: MapsLatLng[];
+  /** A road to follow: pass-through points in riding order, threaded between the stops by the server. */
+  via?: MapsLatLng[];
   preferFastest?: boolean;
   trafficAware?: boolean;
 }
