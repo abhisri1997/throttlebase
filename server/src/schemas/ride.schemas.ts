@@ -18,6 +18,17 @@ const StopFieldsSchema = {
   google_place_id: z.string().max(255).optional(),
 };
 
+/**
+ * Planning a ride on a saved route. The app copies the route's ends and the
+ * stops the captain keeps into the ride as usual; this only records which
+ * route it was, which way round, and whether the ride follows its road.
+ */
+const RideRouteSchema = z.object({
+  route_id: z.string().uuid('Must be a valid UUID'),
+  direction: z.enum(['forward', 'reverse']).default('forward'),
+  follow_road: z.boolean().default(true),
+});
+
 export const CreateRideSchema = z.object({
   title: z.string().min(3, 'Title is too short').max(255),
   description: z.string().optional(),
@@ -43,10 +54,16 @@ export const CreateRideSchema = z.object({
     type: z.enum(['fuel', 'rest', 'photo']),
     ...StopFieldsSchema,
   })).optional(),
+  route: RideRouteSchema.optional(),
 });
 
-export const UpdateRideSchema = CreateRideSchema.partial().extend({
+/**
+ * The route a ride was planned on is fixed once it exists; the captain can
+ * only choose whether to keep following its road.
+ */
+export const UpdateRideSchema = CreateRideSchema.omit({ route: true }).partial().extend({
   status: z.enum(['draft', 'scheduled', 'active', 'completed', 'cancelled']).optional(),
+  follow_route_road: z.boolean().optional(),
 });
 
 export const PromoteCoCaptainSchema = z.object({

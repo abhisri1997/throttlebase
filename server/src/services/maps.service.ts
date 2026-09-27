@@ -133,6 +133,7 @@ export const getDirections = (
     CACHE_CATEGORY_DIRECTIONS,
     `${request.origin.lat},${request.origin.lng}`,
     waypoints.map((point) => `${point.lat},${point.lng}`).join(";"),
+    (request.via ?? []).map((point) => `${point.lat},${point.lng}`).join(";"),
     `${request.destination.lat},${request.destination.lng}`,
     Boolean(request.preferFastest),
     Boolean(request.trafficAware),

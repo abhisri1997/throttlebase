@@ -145,6 +145,17 @@ test("treats a different waypoint set as a different route", async () => {
   assert.equal(calls.directions, 2);
 });
 
+test("treats following a road as a different route from Google's own choice", async () => {
+  const { provider, calls } = makeProvider();
+  const { store } = makeStore();
+  const base = { origin: { lat: 1, lng: 2 }, destination: { lat: 3, lng: 4 } };
+
+  await getDirections(base, { provider, store });
+  await getDirections({ ...base, via: [{ lat: 2, lng: 3 }] }, { provider, store });
+
+  assert.equal(calls.directions, 2);
+});
+
 test("caches a traffic-aware route for a minute, not the plain five", async () => {
   const { provider } = makeProvider();
   const { store, writes } = makeStore();

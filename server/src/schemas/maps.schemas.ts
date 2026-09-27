@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_ROAD_VIA_POINTS } from "../core/routes/roadVia.js";
 
 /**
  * Request validation for the /api/maps proxy.
@@ -28,6 +29,8 @@ export const DirectionsRequestSchema = z.object({
   origin: LatLngSchema,
   destination: LatLngSchema,
   waypoints: z.array(LatLngSchema).max(MAX_WAYPOINTS).optional(),
+  /** A road to follow: the ride's pass-through points, see core/routes/roadVia. */
+  via: z.array(LatLngSchema).max(MAX_ROAD_VIA_POINTS).optional(),
   preferFastest: z.boolean().optional(),
   trafficAware: z.boolean().optional(),
 });
