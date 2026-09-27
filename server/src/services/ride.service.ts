@@ -10,7 +10,6 @@ import { haversineMeters } from "../utils/polyline.js";
 import { snapToNearestPlace } from "./meetingPoint.service.js";
 import { enqueueRideStatsRecompute } from "./jobs.service.js";
 import { getRouteById } from "./route.service.js";
-import { roadViaPoints } from "../core/routes/roadVia.js";
 
 /** Rides a rider can still join. */
 const JOINABLE_RIDE_STATUSES: ReadonlySet<string> = new Set(["scheduled", "active"]);
@@ -73,21 +72,6 @@ export class RideRouteUnavailableError extends Error {
 
 type LngLat = [number, number];
 
-const isLngLat = (value: unknown): value is LngLat =>
-  Array.isArray(value) &&
-  value.length >= 2 &&
-  typeof value[0] === "number" &&
-  typeof value[1] === "number" &&
-  Number.isFinite(value[0]) &&
-  Number.isFinite(value[1]);
-
-/** A route's line, whatever older rows stored; anything unreadable is no line. */
-const routeCoordinates = (geojson: unknown): LngLat[] => {
-  const coordinates = (geojson as { coordinates?: unknown } | null)?.coordinates;
-  if (!Array.isArray(coordinates)) return [];
-  return coordinates.filter(isLngLat).map(([lng, lat]) => [lng, lat] as LngLat);
-};
-
 /**
  * The points that hold a ride to its route's road, in riding order, checking
  * the captain may use the route. An empty list still means "follows the road":
@@ -100,7 +84,7 @@ const resolveRoadVia = async (
 ): Promise<LngLat[]> => {
   const route = await getRouteById(routeId, captainId);
   if (!route) throw new RideRouteUnavailableError();
-  return roadViaPoints(routeCoordinates(route.geojson), { reverse: reversed });
+  return reversed ? [...route.road_via].reverse() : route.road_via;
 };
 
 const resolveRideRoute = async (

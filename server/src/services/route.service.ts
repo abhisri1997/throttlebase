@@ -6,6 +6,7 @@ import {
   type RouteSearchQuery,
   type SearchPlace,
 } from "../core/routes/routeSearch.js";
+import { roadViaPoints, routeLine } from "../core/routes/roadVia.js";
 import { enqueueRideStatsRecompute } from "./jobs.service.js";
 import type {
   CreateRouteInput,
@@ -57,7 +58,11 @@ export interface RouteStop {
   distance_from_start_km: number | null;
 }
 
-export type RouteWithStops = Route & { stops: RouteStop[] };
+export type RouteWithStops = Route & {
+  stops: RouteStop[];
+  /** Points that hold a ride to this road, start to end; see core/routes/roadVia. */
+  road_via: [number, number][];
+};
 
 /** Every route read uses these, so points come back as numbers, not PostGIS hex. */
 export const ROUTE_COLUMNS = `
@@ -149,7 +154,11 @@ export const getRouteById = async (
   );
   const route = result.rows[0] as Route | undefined;
   if (!route) return null;
-  return { ...route, stops: await listRouteStops(routeId) };
+  return {
+    ...route,
+    stops: await listRouteStops(routeId),
+    road_via: roadViaPoints(routeLine(route.geojson), { reverse: false }),
+  };
 };
 
 /** Public routes, plus the viewer's own private ones so "only me" stays findable. */
