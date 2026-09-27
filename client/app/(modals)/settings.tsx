@@ -16,7 +16,31 @@ import { useTheme } from "../../src/theme/ThemeContext";
 import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { authService } from "../../src/services/auth";
 import { FEATURES } from "../../src/core/features/features";
-import { Bell, ChevronLeft, LifeBuoy, Lock, Settings as SettingsIcon, Shield, Trash2, UserX } from "lucide-react-native";
+import type { ReactNode } from "react";
+import { Bell, ChevronLeft, LifeBuoy, Lock, Settings as SettingsIcon, Shield, Trash2, User, UserX } from "lucide-react-native";
+
+interface SectionHeaderProps {
+  icon: ReactNode;
+  label: string;
+  color: string;
+}
+
+/**
+ * The label takes the rest of the row (flex-1) rather than its own measured
+ * width: on Android that measurement came out too narrow for the bold,
+ * letter-spaced capitals, so "Security & Privacy" wrapped onto a line with
+ * no room and showed as "SECURITY &".
+ */
+function SectionHeader({ icon, label, color }: SectionHeaderProps) {
+  return (
+    <View className='px-4 flex-row items-center mb-2'>
+      {icon}
+      <Text className='flex-1 font-bold uppercase tracking-wider text-xs ml-2' style={{ color }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
 
 export default function SettingsModal() {
   const router = useRouter();
@@ -210,15 +234,11 @@ export default function SettingsModal() {
       <ScrollView className='flex-1' style={{ backgroundColor: colors.bg }}>
         {/* GENERAL SETTINGS */}
         <View className='pt-6 pb-2'>
-          <View className='px-4 flex-row items-center mb-2'>
-            <SettingsIcon color={colors.textMuted} size={18} />
-            <Text
-              className='font-bold uppercase tracking-wider text-xs ml-2'
-              style={{ color: colors.textMuted }}
-            >
-              General Options
-            </Text>
-          </View>
+          <SectionHeader
+            icon={<SettingsIcon color={colors.textMuted} size={18} />}
+            label='General Options'
+            color={colors.textMuted}
+          />
           <View
             style={{
               backgroundColor: colors.surface,
@@ -265,15 +285,11 @@ export default function SettingsModal() {
 
         {/* PRIVACY SETTINGS */}
         <View className='pt-6 pb-2'>
-          <View className='px-4 flex-row items-center mb-2'>
-            <Shield color={colors.textMuted} size={18} />
-            <Text
-              className='font-bold uppercase tracking-wider text-xs ml-2'
-              style={{ color: colors.textMuted }}
-            >
-              Security & Privacy
-            </Text>
-          </View>
+          <SectionHeader
+            icon={<Shield color={colors.textMuted} size={18} />}
+            label='Security & Privacy'
+            color={colors.textMuted}
+          />
           <View
             style={{
               backgroundColor: colors.surface,
@@ -328,15 +344,11 @@ export default function SettingsModal() {
 
         {/* BLOCKED USERS */}
         <View className='pt-6 pb-12'>
-          <View className='px-4 flex-row items-center mb-2'>
-            <UserX color={colors.danger} size={18} />
-            <Text
-              className='font-bold uppercase tracking-wider text-xs ml-2'
-              style={{ color: colors.danger }}
-            >
-              Blocked Riders
-            </Text>
-          </View>
+          <SectionHeader
+            icon={<UserX color={colors.danger} size={18} />}
+            label='Blocked Riders'
+            color={colors.danger}
+          />
           <View
             className='py-2 min-h-[100px] justify-center'
             style={{
@@ -395,15 +407,11 @@ export default function SettingsModal() {
 
         {FEATURES.support && (
           <View className='pb-12'>
-            <View className='px-4 flex-row items-center mb-2'>
-              <LifeBuoy color={colors.primary} size={18} />
-              <Text
-                className='font-bold uppercase tracking-wider text-xs ml-2'
-                style={{ color: colors.textMuted }}
-              >
-                Support
-              </Text>
-            </View>
+            <SectionHeader
+              icon={<LifeBuoy color={colors.primary} size={18} />}
+              label='Support'
+              color={colors.textMuted}
+            />
             <View
               style={{
                 backgroundColor: colors.surface,
@@ -462,16 +470,19 @@ export default function SettingsModal() {
           </View>
         )}
 
-        <View className='mt-8 mb-10'>
-          <Text
-            className='text-xs font-semibold uppercase mb-2 ml-1'
-            style={{ color: colors.textMuted }}
-          >
-            Account
-          </Text>
+        <View className='pb-12'>
+          <SectionHeader
+            icon={<User color={colors.textMuted} size={18} />}
+            label='Account'
+            color={colors.textMuted}
+          />
           <View
-            className='rounded-2xl overflow-hidden'
-            style={{ backgroundColor: colors.surface }}
+            style={{
+              backgroundColor: colors.surface,
+              borderTopWidth: 1,
+              borderBottomWidth: 1,
+              borderColor: colors.border,
+            }}
           >
             <TouchableOpacity
               onPress={handleDeleteAccount}
