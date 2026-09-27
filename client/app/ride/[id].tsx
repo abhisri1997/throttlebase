@@ -1681,7 +1681,8 @@ useEffect(() => {
           {ride.status === "completed" && trackCoordinates.length > 1 ? (
             <SaveRouteCard rideId={id!} rideTitle={ride.title} />
           ) : null}
-          {startCoords && (
+          {/* Directions to the start only help before the ride is over. */}
+          {startCoords && !isTerminalRideStatus && (
             <TouchableOpacity
               onPress={handleGetDirections}
               className='flex-row items-center p-3 rounded-xl mt-2'
@@ -1853,7 +1854,7 @@ useEffect(() => {
               </TouchableOpacity>
             )}
 
-            {__DEV__ && waypoints && waypoints.length >= 2 && (
+            {__DEV__ && !isTerminalRideStatus && waypoints && waypoints.length >= 2 && (
               <TouchableOpacity
                 onPress={() =>
                   router.push(`/ride/${id}/navigation?simulate=1` as any)
