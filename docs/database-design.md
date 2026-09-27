@@ -70,7 +70,6 @@ Primary user table. Soft-deletable with a grace period.
 | --------------------- | ------------------------ | ------------------------------- | ------------------------------------ |
 | `id`                  | `UUID`                   | PK, DEFAULT `gen_random_uuid()` |                                      |
 | `email`               | `VARCHAR(255)`           | UNIQUE, NOT NULL                |                                      |
-| `password_hash`       | `VARCHAR(255)`           | NOT NULL                        | bcrypt or Argon2id                   |
 | `display_name`        | `VARCHAR(100)`           | NOT NULL                        |                                      |
 | `bio`                 | `TEXT`                   |                                 |                                      |
 | `profile_picture_url` | `TEXT`                   |                                 | S3/object storage URL                |
@@ -83,9 +82,6 @@ Primary user table. Soft-deletable with a grace period.
 | `total_rides`         | `INT`                    | DEFAULT `0`                     | Denormalized counter                 |
 | `total_distance_km`   | `DECIMAL(10,2)`          | DEFAULT `0`                     | Denormalized counter                 |
 | `total_ride_time_sec` | `BIGINT`                 | DEFAULT `0`                     | Denormalized counter                 |
-| `two_factor_enabled`  | `BOOLEAN`                | DEFAULT `false`                 |                                      |
-| `two_factor_secret`   | `VARCHAR(255)`           |                                 | TOTP secret, currently stored server-side for verification |
-| `totp_verified_at`    | `TIMESTAMPTZ`            |                                 | Audit timestamp for last successful TOTP enablement |
 | `is_admin`            | `BOOLEAN`                | DEFAULT `false`                 | Gates admin-only support operations  |
 | `created_at`          | `TIMESTAMPTZ`            | DEFAULT `now()`                 |                                      |
 | `updated_at`          | `TIMESTAMPTZ`            | DEFAULT `now()`                 |                                      |
@@ -608,6 +604,4 @@ Tracked rider sessions used for activity review and revocation.
 | **Denormalization**  | `riders.total_rides`, `riders.total_distance_km`, `posts.like_count`, `posts.comment_count`, `rides.average_rating`, `rides.current_rider_count` — updated via triggers or application logic. |
 | **Leaderboard**      | Powered by materialized views aggregating ride stats, refreshed hourly. Riders with `leaderboard_opt_in = false` are excluded.                                                                |
 | **GPS Data**         | High-volume `gps_traces` table — consider time-based partitioning (monthly) and archival for rides older than 1 year.                                                                         |
-| **Password Storage** | `bcrypt` or `Argon2id` with appropriate cost factors. Never store plaintext.                                                                                                                  |
-| **2FA Secrets**      | TOTP secrets are currently stored server-side to support verification and disable flows. Encrypt-at-rest or dedicated secret storage is a recommended follow-up.                             |
 | **Tokens**           | Invitation and share tokens are signed (JWT/HMAC), time-limited, and stored hashed.                                                                                                           |

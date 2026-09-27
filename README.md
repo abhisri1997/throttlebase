@@ -8,7 +8,7 @@ ThrottleBase is a mobile-first rider platform where users can create and join ri
 - Route and GPS: route creation, sharing, bookmarks, trace ingestion
 - Community: posts, comments, likes, follows, groups, ride reviews
 - Rewards and engagement: badges, achievements, leaderboard
-- Notifications and account controls: preferences, privacy, 2FA, login activity, session management, support
+- Notifications and account controls: preferences, privacy, login activity, session management, support
 - Operations and moderation: admin support ticket triage plus mention-triggered notification fanout
 - Live group sessions: realtime ride coordination, ride-room updates, and safety flow
 

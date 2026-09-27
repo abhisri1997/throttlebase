@@ -45,8 +45,7 @@ This keeps permission checks and state transitions in service logic while contro
 
 ### Security and Account Protection
 
-- TOTP-based 2FA setup, verification, status lookup, and disable flow
-- Login requires a valid TOTP token when `two_factor_enabled = true`
+- Passwordless sign-in (Google, Apple, email code); no passwords or TOTP two-factor
 - Session inventory and rider-initiated session revocation endpoints
 - Login activity audit trail with device fingerprint and IP capture
 - Admin access gating via rider-level `is_admin` flag and middleware
@@ -115,7 +114,7 @@ This keeps permission checks and state transitions in service logic while contro
 - PostGIS supports geospatial route and location workloads.
 - Denormalized counters/aggregates are maintained for read-heavy screens.
 - Queue jobs are persisted in DB and leased by workers with retry/backoff behavior.
-- Security data includes login-activity records, tracked sessions, TOTP verification timestamps, and rider admin flags.
+- Security data includes login-activity records, tracked sessions, and rider admin flags.
 
 ## Operational Guidance
 

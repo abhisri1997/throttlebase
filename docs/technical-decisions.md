@@ -32,12 +32,10 @@ This document captures key implementation decisions with rationale.
 
 - Keep JWT payload centered on `riderId` and email identity context.
 - Include `sessionId` in JWT payload and validate session state on authenticated API/socket requests.
-- Support email-or-username login with case-insensitive lookup.
-- Keep register flow explicit: create account, then authenticate via login contract.
+- Sign-in is passwordless (Google, Apple, one-time email code); riders have no password and no TOTP two-factor, since every sign-in already proves control of an identity provider or inbox.
 - Record login activity and create tracked session records at login so revocation semantics are enforced immediately.
 - Gate support admin actions with a simple `riders.is_admin` boolean until a broader role/permission model is needed.
-- Keep TOTP status/setup APIs near auth routes while session and login-activity APIs live under `/api/security`.
-- Require TOTP verification during login for riders with `two_factor_enabled = true`.
+- Session and login-activity APIs live under `/api/security`.
 
 ## Mobile Architecture
 

@@ -42,9 +42,8 @@ Main backend organization follows a consistent boundary pattern:
 ## Security and Support Flow
 
 1. Successful login records login-activity metadata and creates a tracked session record.
-2. Authenticated riders manage TOTP setup/verification/disable through auth-adjacent endpoints.
-3. Session inventory and revocation flow through `/api/security` endpoints.
-4. Support tickets are rider-owned by default, while admin ticket operations are gated by `requireAdmin` and `riders.is_admin`.
+2. Session inventory and revocation flow through `/api/security` endpoints.
+3. Support tickets are rider-owned by default, while admin ticket operations are gated by `requireAdmin` and `riders.is_admin`.
 
 ## Live Session Flow
 
