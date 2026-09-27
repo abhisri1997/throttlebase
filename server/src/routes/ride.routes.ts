@@ -551,6 +551,59 @@ router.get("/:id/track", authenticate, liveSessionController.getTrack);
 
 /**
  * @swagger
+ * /api/rides/{id}/route:
+ *   post:
+ *     summary: Save the road the caller rode on a completed ride as a route
+ *     description: >
+ *       The route is built from the caller's own recorded track (cleaned and
+ *       simplified), never from client-supplied geometry. Saving the same ride
+ *       again returns the route already saved.
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Ride ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title]
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 maxLength: 255
+ *               visibility:
+ *                 type: string
+ *                 enum: [private, public]
+ *                 default: private
+ *     responses:
+ *       201:
+ *         description: Route created ({ route, created true })
+ *       200:
+ *         description: This ride was already saved; that route is returned ({ route, created false })
+ *       400:
+ *         description: Invalid ride ID or body
+ *       403:
+ *         description: Not a confirmed participant
+ *       404:
+ *         description: Ride not found
+ *       409:
+ *         description: The ride is not completed yet
+ *       422:
+ *         description: Not enough of the ride was recorded to make a route
+ */
+router.post("/:id/route", authenticate, liveSessionController.saveRouteFromMyRide);
+
+/**
+ * @swagger
  * /api/rides/{id}/promote:
  *   post:
  *     summary: Promote a rider to co-captain (captain only)

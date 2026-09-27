@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { getRiderTrack } from "../services/ride-track.service.js";
+import { saveRouteFromRide } from "../services/route-from-ride.service.js";
+import { SaveRouteFromRideSchema } from "../schemas/route.schemas.js";
 import {
   CreateIncidentSchema,
   EndLiveSessionSchema,
@@ -216,6 +218,18 @@ export const getReplay = async (
     res.json(result);
   } catch (error: any) {
     handleLiveSessionError(res, error, "Error fetching live session replay");
+  }
+};
+
+/** Publishes the caller's own track on a completed ride as a route. */
+export const saveRouteFromMyRide = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const rideId = RideIdSchema.parse(req.params.id);
+    const input = SaveRouteFromRideSchema.parse(req.body ?? {});
+    const { route, created } = await saveRouteFromRide(rideId, rid(req), input);
+    res.status(created ? 201 : 200).json({ route, created });
+  } catch (error: any) {
+    handleLiveSessionError(res, error, "Error saving ride as a route");
   }
 };
 

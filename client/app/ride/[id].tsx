@@ -69,6 +69,7 @@ import { navigationDayColors } from "../../src/theme/navigationColors";
 import type { LatLng, RouteLeg } from "../../src/features/navigation/types/navigation";
 import type { LiveSessionParticipant } from "../../src/services/liveSessionSocket";
 import { StartMyRideCard } from "../../src/features/rides/components/StartMyRideCard";
+import { SaveRouteCard } from "../../src/features/rides/components/SaveRouteCard";
 import { useEndRideWithWarning } from "../../src/features/rides/hooks/useEndRideWithWarning";
 
 const fetchRideDetails = async (id: string) => {
@@ -1676,6 +1677,10 @@ useEffect(() => {
               </Text>
             </View>
           </View>
+          {/* Only once there is a recorded track to build the route from. */}
+          {ride.status === "completed" && trackCoordinates.length > 1 ? (
+            <SaveRouteCard rideId={id!} rideTitle={ride.title} />
+          ) : null}
           {startCoords && (
             <TouchableOpacity
               onPress={handleGetDirections}

@@ -40,3 +40,11 @@ export const GpsTraceBatchSchema = z.object({
 });
 
 export type GpsTraceBatchInput = z.infer<typeof GpsTraceBatchSchema>;
+
+/** Saving the route a rider actually rode; the geometry comes from their own track. */
+export const SaveRouteFromRideSchema = z.object({
+  title: z.string().trim().min(1).max(255),
+  visibility: z.enum(['private', 'public']).default('private'),
+});
+
+export type SaveRouteFromRideInput = z.infer<typeof SaveRouteFromRideSchema>;
