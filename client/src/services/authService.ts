@@ -241,6 +241,13 @@ export const createAuthService = (deps: AuthServiceDeps): AuthService => {
 
       switch (decideSessionAction(session, now())) {
         case "use":
+          // On launch a still-valid stored session is read but never passes
+          // through persist(), so it has to be announced here or the app
+          // sits at "loading" and shows the sign-in screen. Only announced
+          // once: this runs on every API call and GPS sample.
+          if (session && (state.status !== "signed-in" || state.session !== session)) {
+            setState({ status: "signed-in", session });
+          }
           return session;
         case "refresh":
           return await refresh();
