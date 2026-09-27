@@ -15,6 +15,7 @@ import { apiClient } from "../../src/api/client";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { authService } from "../../src/services/auth";
+import { FEATURES } from "../../src/core/features/features";
 import { Bell, ChevronLeft, LifeBuoy, Lock, Settings as SettingsIcon, Shield, Trash2, UserX } from "lucide-react-native";
 
 export default function SettingsModal() {
@@ -299,26 +300,29 @@ export default function SettingsModal() {
               ["everyone", "followers_only", "no_one"],
               (val) => updatePrivacy.mutate({ invite_permission: val }),
             )}
-            {renderToggle(
-              "Global Leaderboard Opt-In",
-              privacy?.leaderboard_opt_in ?? true,
-              (val) => updatePrivacy.mutate({ leaderboard_opt_in: val }),
+            {FEATURES.rank &&
+              renderToggle(
+                "Global Leaderboard Opt-In",
+                privacy?.leaderboard_opt_in ?? true,
+                (val) => updatePrivacy.mutate({ leaderboard_opt_in: val }),
+              )}
+            {FEATURES.accountSecurity && (
+              <TouchableOpacity
+                onPress={() => router.push("/(modals)/security")}
+                className='mx-4 py-4 flex-row items-center justify-between'
+              >
+                <View className='flex-row items-center'>
+                  <Lock color={colors.textMuted} size={16} />
+                  <Text
+                    className='ml-2 text-base font-medium'
+                    style={{ color: colors.text }}
+                  >
+                    Devices &amp; Sign-in Activity
+                  </Text>
+                </View>
+                <Text style={{ color: colors.textMuted }}>➔</Text>
+              </TouchableOpacity>
             )}
-            <TouchableOpacity
-              onPress={() => router.push("/(modals)/security")}
-              className='mx-4 py-4 flex-row items-center justify-between'
-            >
-              <View className='flex-row items-center'>
-                <Lock color={colors.textMuted} size={16} />
-                <Text
-                  className='ml-2 text-base font-medium'
-                  style={{ color: colors.text }}
-                >
-                  Devices &amp; Sign-in Activity
-                </Text>
-              </View>
-              <Text style={{ color: colors.textMuted }}>➔</Text>
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -389,72 +393,74 @@ export default function SettingsModal() {
           </View>
         </View>
 
-        <View className='pb-12'>
-          <View className='px-4 flex-row items-center mb-2'>
-            <LifeBuoy color={colors.primary} size={18} />
-            <Text
-              className='font-bold uppercase tracking-wider text-xs ml-2'
-              style={{ color: colors.textMuted }}
-            >
-              Support
-            </Text>
-          </View>
-          <View
-            style={{
-              backgroundColor: colors.surface,
-              borderTopWidth: 1,
-              borderBottomWidth: 1,
-              borderColor: colors.border,
-            }}
-          >
-            <TouchableOpacity
-              onPress={() => router.push("/(modals)/support")}
-              className='px-4 py-4 flex-row items-center justify-between'
-            >
-              <View>
-                <Text
-                  className='text-base font-medium'
-                  style={{ color: colors.text }}
-                >
-                  Contact Support
-                </Text>
-                <Text
-                  className='text-sm mt-1'
-                  style={{ color: colors.textMuted }}
-                >
-                  Report bugs, disputes, account issues, or general questions.
-                </Text>
-              </View>
-              <Text style={{ color: colors.textMuted }}>➔</Text>
-            </TouchableOpacity>
-            {rider?.is_admin ? (
-              <TouchableOpacity
-                onPress={() => router.push("/(modals)/support-admin")}
-                className='px-4 py-4 flex-row items-center justify-between'
-                style={{ borderTopWidth: 1, borderTopColor: colors.border }}
+        {FEATURES.support && (
+          <View className='pb-12'>
+            <View className='px-4 flex-row items-center mb-2'>
+              <LifeBuoy color={colors.primary} size={18} />
+              <Text
+                className='font-bold uppercase tracking-wider text-xs ml-2'
+                style={{ color: colors.textMuted }}
               >
-                <View className='flex-row items-center'>
-                  <Shield color={colors.primary} size={16} />
-                  <View className='ml-2'>
-                    <Text
-                      className='text-base font-medium'
-                      style={{ color: colors.primary }}
-                    >
-                      Admin — Manage Tickets
-                    </Text>
-                    <Text
-                      className='text-sm mt-0.5'
-                      style={{ color: colors.textMuted }}
-                    >
-                      View and update all support tickets.
-                    </Text>
-                  </View>
+                Support
+              </Text>
+            </View>
+            <View
+              style={{
+                backgroundColor: colors.surface,
+                borderTopWidth: 1,
+                borderBottomWidth: 1,
+                borderColor: colors.border,
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => router.push("/(modals)/support")}
+                className='px-4 py-4 flex-row items-center justify-between'
+              >
+                <View>
+                  <Text
+                    className='text-base font-medium'
+                    style={{ color: colors.text }}
+                  >
+                    Contact Support
+                  </Text>
+                  <Text
+                    className='text-sm mt-1'
+                    style={{ color: colors.textMuted }}
+                  >
+                    Report bugs, disputes, account issues, or general questions.
+                  </Text>
                 </View>
                 <Text style={{ color: colors.textMuted }}>➔</Text>
               </TouchableOpacity>
-            ) : null}
+              {rider?.is_admin ? (
+                <TouchableOpacity
+                  onPress={() => router.push("/(modals)/support-admin")}
+                  className='px-4 py-4 flex-row items-center justify-between'
+                  style={{ borderTopWidth: 1, borderTopColor: colors.border }}
+                >
+                  <View className='flex-row items-center'>
+                    <Shield color={colors.primary} size={16} />
+                    <View className='ml-2'>
+                      <Text
+                        className='text-base font-medium'
+                        style={{ color: colors.primary }}
+                      >
+                        Admin — Manage Tickets
+                      </Text>
+                      <Text
+                        className='text-sm mt-0.5'
+                        style={{ color: colors.textMuted }}
+                      >
+                        View and update all support tickets.
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={{ color: colors.textMuted }}>➔</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
-        </View>
+        )}
 
         <View className='mt-8 mb-10'>
           <Text

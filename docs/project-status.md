@@ -10,8 +10,7 @@
 - Rider support tickets now allow follow-up replies and rider-initiated closure from ticket detail.
 - Background jobs foundation with queue + worker runtime.
 - Ride analytics pipeline writing to `ride_history_stats` with enqueue hooks.
-- 2FA setup/verify/disable, login activity capture, and session management APIs are implemented.
-- Login now enforces TOTP verification for riders with 2FA enabled.
+- Passwordless sign-in (Google, Apple, email code), login activity capture, and session management APIs are implemented. Passwords and TOTP two-factor were removed.
 - Session revocation now invalidates existing JWT access through session-bound token checks.
 - Support admin workflow is implemented with admin-only ticket list, status updates, and agent reply support.
 - Mention-triggered notification fanout is implemented for posts and comments.
@@ -66,7 +65,7 @@
 
 1. Integrate real push/email providers and add rider device registration.
 2. Add rider-facing updates when support tickets are changed by admins.
-3. Expand test coverage for session revocation and 2FA challenge edge-cases.
+3. Expand test coverage for session revocation edge-cases.
 
 ## P2 (Scale and Evolution)
 

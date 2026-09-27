@@ -6,13 +6,16 @@ Swagger docs are disabled by default in every environment and should only be ena
 
 ## Auth
 
-- `POST /auth/register`
-- `POST /auth/login` (accepts `identifier` + `password`, and optional `totp_token` when 2FA challenge is required)
-- `GET /auth/check-username`
-- `GET /auth/2fa/status`
-- `POST /auth/2fa/setup`
-- `POST /auth/2fa/verify`
-- `POST /auth/2fa/disable`
+Sign-in is passwordless: Google, Apple, or a one-time email code.
+
+- `POST /auth/google`
+- `POST /auth/apple`
+- `POST /auth/email/start`
+- `POST /auth/email/verify`
+- `POST /auth/refresh`
+- `POST /auth/logout`
+- `POST /auth/logout-all`
+- `GET /auth/jwks.json`
 
 ## Security
 

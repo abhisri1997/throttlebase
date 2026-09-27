@@ -43,7 +43,7 @@ const options: swaggerJsdoc.Options = {
       { name: 'Rewards', description: 'Badges, achievements, and leaderboard' },
       { name: 'Notifications', description: 'In-app notifications and preferences' },
       { name: 'Settings', description: 'App settings, privacy, and blocked riders' },
-      { name: 'Security', description: 'Login activity, session management, and two-factor authentication' },
+      { name: 'Security', description: 'Login activity and session management' },
       { name: 'Support', description: 'Support ticket submission, rider replies, and admin management' },
       { name: 'Live Sessions', description: 'Live session health monitoring' },
     ],
