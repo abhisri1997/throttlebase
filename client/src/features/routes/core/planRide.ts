@@ -64,7 +64,12 @@ export interface RoutePlan {
   start: RoutePlanEnd;
   end: RoutePlanEnd;
   stops: RoutePlanStop[];
-  /** Points that hold the ride to the route's road, in riding order. */
+  /**
+   * Only the way it was recorded: its points lie on that carriageway, so
+   * riding the other way round Google would U-turn to reach each one.
+   */
+  canFollowRoad: boolean;
+  /** Points that hold the ride to the route's road, in riding order; none when it can't be followed. */
   roadVia: LngLat[];
   defaults: PlanDefaults;
 }
@@ -139,7 +144,8 @@ export const planRideOnRoute = (route: PlannableRoute, direction: RideDirection)
 
   const startName = isReverse ? route.end_name : route.start_name;
   const endName = isReverse ? route.start_name : route.end_name;
-  const roadVia = [...(route.road_via ?? [])];
+  const canFollowRoad = !isReverse;
+  const defaults = planDefaults(route.highlights);
 
   return {
     routeId: route.id,
@@ -148,8 +154,9 @@ export const planRideOnRoute = (route: PlannableRoute, direction: RideDirection)
     start: { name: startName ?? "Start", coords: isReverse ? last : first },
     end: { name: endName ?? "Destination", coords: isReverse ? first : last },
     stops,
-    roadVia: isReverse ? roadVia.reverse() : roadVia,
-    defaults: planDefaults(route.highlights),
+    canFollowRoad,
+    roadVia: canFollowRoad ? [...(route.road_via ?? [])] : [],
+    defaults: { ...defaults, followRoad: canFollowRoad && defaults.followRoad },
   };
 };
 

@@ -26,7 +26,8 @@ const StopFieldsSchema = {
 const RideRouteSchema = z.object({
   route_id: z.string().uuid('Must be a valid UUID'),
   direction: z.enum(['forward', 'reverse']).default('forward'),
-  follow_road: z.boolean().default(true),
+  /** Omitted: follow the road when the ride goes the way it was recorded. */
+  follow_road: z.boolean().optional(),
 });
 
 export const CreateRideSchema = z.object({

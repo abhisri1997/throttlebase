@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { highlightChips, itineraryRows, routeFacts, routeHeadline, routeShapePath, viaLine } from "./routeSummary";
+import { highlightChips, itineraryRows, routeFacts, routeHeadline, routeShapePath, splitPlaceName, viaLine } from "./routeSummary";
 
 const route = {
   title: "Ride to home…",
@@ -129,4 +129,12 @@ test("a stop named by its full address leads with the place, the rest as detail"
   assert.equal(rows[1]!.detail, "Infosys Internal Road, Konappana Agrahara, Karnataka, India");
   assert.equal(rows[1]!.distance, null);
   assert.equal(rows[0]!.detail, null, "an area name like the start's is shown whole");
+});
+
+test("a full address reads as its place, with the rest as detail", () => {
+  assert.deepEqual(splitPlaceName("Infosys Campus Building 37, Infosys Internal Road, Konappana Agrahara"), {
+    name: "Infosys Campus Building 37",
+    detail: "Infosys Internal Road, Konappana Agrahara",
+  });
+  assert.deepEqual(splitPlaceName("Mysuru"), { name: "Mysuru", detail: null });
 });

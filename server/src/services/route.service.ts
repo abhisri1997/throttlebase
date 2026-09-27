@@ -157,7 +157,7 @@ export const getRouteById = async (
   return {
     ...route,
     stops: await listRouteStops(routeId),
-    road_via: roadViaPoints(routeLine(route.geojson), { reverse: false }),
+    road_via: roadViaPoints(routeLine(route.geojson)),
   };
 };
 

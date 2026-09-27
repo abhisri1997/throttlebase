@@ -17,7 +17,7 @@ const point = (lng: number, lat: number): LatLng => ({ lat, lng });
 test("a road is steered by its bends, never by its ends", () => {
   const road = zigZag(6);
 
-  const via = roadViaPoints(road, { reverse: false });
+  const via = roadViaPoints(road);
 
   assert.deepEqual(via, road.slice(1, -1));
 });
@@ -30,25 +30,19 @@ test("a straight road needs no steering", () => {
     [77.15, 12.9],
   ];
 
-  assert.deepEqual(roadViaPoints(straight, { reverse: false }), []);
+  assert.deepEqual(roadViaPoints(straight), []);
 });
 
 test("a long winding road is steered by at most twenty points, its sharpest bends", () => {
   const road = zigZag(200);
 
-  const via = roadViaPoints(road, { reverse: false });
+  const via = roadViaPoints(road);
 
   assert.ok(via.length > 0 && via.length <= MAX_ROAD_VIA_POINTS, `got ${via.length}`);
   const roadKeys = new Set(road.map(([lng, lat]) => `${lng},${lat}`));
   assert.ok(via.every(([lng, lat]) => roadKeys.has(`${lng},${lat}`)), "every point lies on the road");
   const longitudes = via.map(([lng]) => lng);
   assert.deepEqual(longitudes, [...longitudes].sort((a, b) => a - b), "in riding order");
-});
-
-test("ridden the other way, the road is steered in reverse order", () => {
-  const road = zigZag(6);
-
-  assert.deepEqual(roadViaPoints(road, { reverse: true }), road.slice(1, -1).reverse());
 });
 
 test("bends within a kilometre of either end are left out", () => {
@@ -61,7 +55,7 @@ test("bends within a kilometre of either end are left out", () => {
     [77.2, 12.9],
   ];
 
-  assert.deepEqual(roadViaPoints(road, { reverse: false }), [
+  assert.deepEqual(roadViaPoints(road), [
     [77.05, 12.91],
     [77.1, 12.9],
   ]);
@@ -74,7 +68,7 @@ test("a single bend is not worth steering by", () => {
     [77.1, 12.9],
   ];
 
-  assert.deepEqual(roadViaPoints(road, { reverse: false }), []);
+  assert.deepEqual(roadViaPoints(road), []);
 });
 
 /* -------------------------------------------------------------------------- */
@@ -179,4 +173,61 @@ test("a leg to a stop before the road's first point is not steered at all", () =
   const plan = planDirectionsWaypoints({ origin, destination: earlyStop, stopovers: [], via });
 
   assert.deepEqual(describe(plan), []);
+});
+
+/* -------------------------------------------------------------------------- */
+/* A recorded track is not a clean road                                        */
+/* -------------------------------------------------------------------------- */
+
+const onRoad = (via: [number, number][], point: [number, number]): boolean =>
+  via.some(([lng, lat]) => lng === point[0] && lat === point[1]);
+
+test("a GPS jump away from the road and back is never steered through", () => {
+  const spike: [number, number] = [77.12, 12.85]; // ~5.5 km south of the road, for one fix
+  const road: [number, number][] = [...zigZag(3), spike, ...zigZag(6).slice(4)];
+
+  const via = roadViaPoints(road);
+
+  assert.ok(!onRoad(via, spike), `steered through the jump: ${JSON.stringify(via)}`);
+  assert.ok(via.length > 0, "the real bends still steer");
+});
+
+test("a side trip off the road and back, like riding into a stop, is never steered through", () => {
+  // Along the road, then 800 m up a lane to a café and back down it, then on.
+  const road: [number, number][] = [
+    [77.0, 12.9],
+    [77.05, 12.91],
+    [77.1, 12.9],
+    [77.1003, 12.9036],
+    [77.1006, 12.9072], // the café
+    [77.1003, 12.9036],
+    [77.1001, 12.9001],
+    [77.15, 12.91],
+    [77.2, 12.9],
+  ];
+
+  const via = roadViaPoints(road);
+
+  assert.ok(!onRoad(via, [77.1006, 12.9072]), `steered to the café: ${JSON.stringify(via)}`);
+  assert.deepEqual(via, [
+    [77.05, 12.91],
+    [77.1, 12.9],
+    [77.15, 12.91],
+  ]);
+});
+
+test("a loop that ends where it started is still steered all the way round", () => {
+  const loop: [number, number][] = [
+    [77.0, 12.9],
+    [77.05, 12.95],
+    [77.1, 12.9],
+    [77.05, 12.85],
+    [77.0005, 12.9002],
+  ];
+
+  assert.deepEqual(roadViaPoints(loop), [
+    [77.05, 12.95],
+    [77.1, 12.9],
+    [77.05, 12.85],
+  ]);
 });

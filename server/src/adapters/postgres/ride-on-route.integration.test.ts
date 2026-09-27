@@ -47,7 +47,13 @@ const rideInput = (route?: { route_id: string; direction?: "forward" | "reverse"
   end_point_coords: ROAD[ROAD.length - 1]!,
   start_point_auto: false,
   ...(route
-    ? { route: { direction: route.direction ?? "forward", follow_road: route.follow_road ?? true, route_id: route.route_id } }
+    ? {
+        route: {
+          route_id: route.route_id,
+          direction: route.direction ?? "forward",
+          ...(route.follow_road !== undefined ? { follow_road: route.follow_road } : {}),
+        },
+      }
     : {}),
 });
 
@@ -80,7 +86,7 @@ test("planning a ride on a saved route", { skip: !CONNECTION }, async (t) => {
   await t.test("a route offers its road's points, so a ride can be previewed on it before it exists", async () => {
     const route = await routes!.getRouteById(publicRoute, CAPTAIN);
 
-    assert.deepEqual(route?.road_via, roadViaPoints(ROAD, { reverse: false }));
+    assert.deepEqual(route?.road_via, roadViaPoints(ROAD));
   });
 
   await t.test("a ride that follows the road keeps the road's points in riding order", async () => {
@@ -89,16 +95,30 @@ test("planning a ride on a saved route", { skip: !CONNECTION }, async (t) => {
     const stored = await storedRoute(admin, ride!.id);
     assert.equal(stored.route_id, publicRoute);
     assert.equal(stored.route_reversed, false);
-    assert.deepEqual(stored.road_via, roadViaPoints(ROAD, { reverse: false }));
+    assert.deepEqual(stored.road_via, roadViaPoints(ROAD));
     assert.ok(stored.road_via!.length > 0);
   });
 
-  await t.test("ridden the other way, the road's points are reversed", async () => {
+  await t.test("ridden the other way round, the ride takes Google's road", async () => {
+    // The recorded points lie on the carriageway going the other way; steering
+    // through them sends riders on U-turns.
     const ride = await rides!.createRide(CAPTAIN, rideInput({ route_id: publicRoute, direction: "reverse" }));
 
     const stored = await storedRoute(admin, ride!.id);
     assert.equal(stored.route_reversed, true);
-    assert.deepEqual(stored.road_via, roadViaPoints(ROAD, { reverse: true }));
+    assert.equal(stored.road_via, null);
+  });
+
+  await t.test("asking to follow the road the other way round is refused, and no ride is made", async () => {
+    const before = await admin.query(`SELECT count(*)::int AS n FROM rides WHERE captain_id = $1`, [CAPTAIN]);
+
+    await assert.rejects(
+      rides!.createRide(CAPTAIN, rideInput({ route_id: publicRoute, direction: "reverse", follow_road: true })),
+      rides!.RoadNotFollowableError,
+    );
+
+    const after = await admin.query(`SELECT count(*)::int AS n FROM rides WHERE captain_id = $1`, [CAPTAIN]);
+    assert.equal(after.rows[0].n, before.rows[0].n);
   });
 
   await t.test("a ride that only borrows the route's ends and stops has no road to follow", async () => {
@@ -137,17 +157,27 @@ test("planning a ride on a saved route", { skip: !CONNECTION }, async (t) => {
 
     assert.equal(read?.route_id, publicRoute);
     assert.equal(read?.route_title, "Zig-zag");
-    assert.deepEqual(read?.road_via, roadViaPoints(ROAD, { reverse: false }));
+    assert.deepEqual(read?.road_via, roadViaPoints(ROAD));
   });
 
   await t.test("the captain can stop following the road, and pick it up again", async () => {
-    const ride = await rides!.createRide(CAPTAIN, rideInput({ route_id: publicRoute, direction: "reverse" }));
+    const ride = await rides!.createRide(CAPTAIN, rideInput({ route_id: publicRoute }));
 
     await rides!.updateRideInfo(ride!.id, CAPTAIN, { follow_route_road: false });
     assert.equal((await storedRoute(admin, ride!.id)).road_via, null);
 
     await rides!.updateRideInfo(ride!.id, CAPTAIN, { follow_route_road: true });
-    assert.deepEqual((await storedRoute(admin, ride!.id)).road_via, roadViaPoints(ROAD, { reverse: true }));
+    assert.deepEqual((await storedRoute(admin, ride!.id)).road_via, roadViaPoints(ROAD));
+  });
+
+  await t.test("a ride the other way round cannot be switched to follow the road", async () => {
+    const ride = await rides!.createRide(CAPTAIN, rideInput({ route_id: publicRoute, direction: "reverse" }));
+
+    await assert.rejects(
+      rides!.updateRideInfo(ride!.id, CAPTAIN, { follow_route_road: true }),
+      rides!.RoadNotFollowableError,
+    );
+    assert.equal((await storedRoute(admin, ride!.id)).road_via, null);
   });
 
   await t.test("a ride not planned on a route has no road to pick up", async () => {
@@ -167,6 +197,6 @@ test("planning a ride on a saved route", { skip: !CONNECTION }, async (t) => {
 
     const stored = await storedRoute(admin, ride!.id);
     assert.equal(stored.route_id, null);
-    assert.deepEqual(stored.road_via, roadViaPoints(ROAD, { reverse: false }));
+    assert.deepEqual(stored.road_via, roadViaPoints(ROAD));
   });
 });

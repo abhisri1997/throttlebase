@@ -114,6 +114,7 @@ function CreateRideForm({ plan }: { plan: RoutePlan | null }) {
 
   // A ride planned on a route: whether it follows the route's road.
   const hasRoute = plan !== null || Boolean(existingRide?.route_id);
+  const canFollowRoad = plan ? plan.canFollowRoad : !existingRide?.route_reversed;
   const initialFollowRoad = plan ? plan.defaults.followRoad : existingRide?.road_via != null;
   const [followRoad, setFollowRoad] = useState<boolean>(initialFollowRoad);
   const roadVia = useMemo<LatLng[]>(() => {
@@ -283,7 +284,7 @@ function CreateRideForm({ plan }: { plan: RoutePlan | null }) {
         : undefined,
     // The server works out the road from the route; the app only says which.
     ...(plan && !editMode
-      ? { route: { route_id: plan.routeId, direction: plan.direction, follow_road: followRoad } }
+      ? { route: { route_id: plan.routeId, direction: plan.direction, follow_road: canFollowRoad && followRoad } }
       : {}),
     ...(editMode && hasRoute && followRoad !== initialFollowRoad ? { follow_route_road: followRoad } : {}),
   });
@@ -516,6 +517,7 @@ function CreateRideForm({ plan }: { plan: RoutePlan | null }) {
           <RoutePlanCard
             title={plan?.title ?? existingRide?.route_title ?? "Saved route"}
             isReversed={plan ? plan.direction === "reverse" : Boolean(existingRide?.route_reversed)}
+            canFollowRoad={canFollowRoad}
             followRoad={followRoad}
             onFollowRoadChange={setFollowRoad}
             {...(plan

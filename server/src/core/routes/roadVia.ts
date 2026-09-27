@@ -19,6 +19,17 @@ const MIN_BEND_M = 100;
 const MIN_END_GAP_M = 1000;
 /** Closer than this to the road, a rider is on it and has passed the points behind them. */
 const ON_ROAD_M = 1000;
+/**
+ * A fix whose neighbours are this many times closer to each other than the
+ * path through it is a spike: a GPS jump, or a U-turn at the end of a lane.
+ */
+const SPIKE_DETOUR_RATIO = 2.5;
+/** Back within this of an earlier point, the track has come back to where it was... */
+const SIDE_TRIP_CLOSE_M = 60;
+/** ...after at least this far — riding into a stop and out again, or round a block... */
+const SIDE_TRIP_MIN_M = 300;
+/** ...but no more than this share of the whole route, which would be a loop ride. */
+const SIDE_TRIP_MAX_SHARE = 0.25;
 
 type LngLat = [number, number];
 
@@ -39,30 +50,79 @@ export const routeLine = (geojson: unknown): LngLat[] => {
   return coordinates.filter(isLngLat).map(([lng, lat]) => [lng, lat] as LngLat);
 };
 
-/**
- * The points that hold a ride to this road, in riding order: its sharpest
- * bends, at most MAX_ROAD_VIA_POINTS. A road that one bend or none describes
- * gets none; Google finds that road on its own.
- */
-export const roadViaPoints = (
-  coordinates: readonly LngLat[],
-  options: { reverse: boolean },
-): LngLat[] => {
-  if (coordinates.length < 3) return [];
+/** Drops fixes the track jumped to and straight back from. */
+const withoutSpikes = (line: readonly LngLat[]): LngLat[] => {
+  const kept: LngLat[] = [];
+  for (const coordinate of line) {
+    // Each drop can expose the point before it as a spike too, so look back again.
+    while (kept.length >= 2) {
+      const before = toLatLng(kept[kept.length - 2]!);
+      const middle = toLatLng(kept[kept.length - 1]!);
+      const after = toLatLng(coordinate);
+      const through = haversineMeters(before, middle) + haversineMeters(middle, after);
+      if (through <= SPIKE_DETOUR_RATIO * haversineMeters(before, after)) break;
+      kept.pop();
+    }
+    kept.push(coordinate);
+  }
+  return kept;
+};
 
-  const line = coordinates.map(toLatLng);
+/** Cuts stretches where the track left the road and came back to the same spot. */
+const withoutSideTrips = (line: readonly LngLat[]): LngLat[] => {
+  const points = line.map(toLatLng);
+  const cumulative = cumulativeDistances(points);
+  const maxTripM = SIDE_TRIP_MAX_SHARE * cumulative[cumulative.length - 1]!;
+
+  const kept: LngLat[] = [];
+  let index = 0;
+  while (index < line.length) {
+    kept.push(line[index]!);
+    // The furthest return to this spot, so a trip with turns inside it goes in one cut.
+    let rejoin = index;
+    for (let later = index + 2; later < line.length; later += 1) {
+      const tripM = cumulative[later]! - cumulative[index]!;
+      if (tripM > maxTripM) break;
+      if (tripM >= SIDE_TRIP_MIN_M && haversineMeters(points[index]!, points[later]!) < SIDE_TRIP_CLOSE_M) {
+        rejoin = later;
+      }
+    }
+    index = rejoin + 1;
+  }
+  return kept;
+};
+
+/**
+ * The road a track describes: its GPS jumps and side trips removed, so a
+ * ride is never sent up a lane to where somebody once stopped, or to a fix
+ * the phone got wrong.
+ */
+const roadFromTrack = (line: readonly LngLat[]): LngLat[] => withoutSideTrips(withoutSpikes(line));
+
+/**
+ * The points that hold a ride to this road, in the order it was recorded: its
+ * sharpest bends, at most MAX_ROAD_VIA_POINTS. A road that one bend or none
+ * describes gets none; Google finds that road on its own.
+ *
+ * There is no reverse: each point lies on the carriageway the road was ridden
+ * on, so riding it the other way round Google would U-turn to reach each one.
+ */
+export const roadViaPoints = (coordinates: readonly LngLat[]): LngLat[] => {
+  const road = roadFromTrack(coordinates);
+  if (road.length < 3) return [];
+
+  const line = road.map(toLatLng);
   const start = line[0]!;
   const end = line[line.length - 1]!;
 
   const chosen = mostSignificantPoints(line, MAX_ROAD_VIA_POINTS, MIN_BEND_M)
-    .map((index) => coordinates[index]!)
+    .map((index) => road[index]!)
     .filter((coordinate) => {
       const point = toLatLng(coordinate);
       return haversineMeters(point, start) >= MIN_END_GAP_M && haversineMeters(point, end) >= MIN_END_GAP_M;
     });
 
-  if (chosen.length < 2) return [];
-  return options.reverse ? [...chosen].reverse() : chosen;
+  return chosen.length < 2 ? [] : chosen;
 };
 
 export interface WaypointPlanInput {
