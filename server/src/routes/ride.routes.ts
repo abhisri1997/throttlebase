@@ -604,6 +604,40 @@ router.post("/:id/route", authenticate, liveSessionController.saveRouteFromMyRid
 
 /**
  * @swagger
+ * /api/rides/{id}/route/preview:
+ *   get:
+ *     summary: What saving the caller's ride as a route would produce, without saving
+ *     description: >
+ *       The route's area names, distance, ride time and the stops it would keep,
+ *       for the save sheet. When the caller already saved this ride,
+ *       saved_route_id points at that route.
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Ride ID
+ *     responses:
+ *       200:
+ *         description: "{ saved_route_id, start_name, end_name, distance_km, duration_s, stops: [{ ride_stop_id, name, distance_from_start_km }] }"
+ *       403:
+ *         description: Not a confirmed participant
+ *       404:
+ *         description: Ride not found
+ *       409:
+ *         description: The ride is not completed yet
+ *       422:
+ *         description: Not enough of the ride was recorded to make a route
+ */
+router.get("/:id/route/preview", authenticate, liveSessionController.previewRouteFromMyRide);
+
+/**
+ * @swagger
  * /api/rides/{id}/promote:
  *   post:
  *     summary: Promote a rider to co-captain (captain only)

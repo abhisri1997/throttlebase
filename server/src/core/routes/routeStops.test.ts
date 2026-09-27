@@ -25,10 +25,10 @@ test("stops keep the ride's order and get their distance along the route", () =>
   });
 
   assert.deepEqual(
-    stops.map((s) => [s.position, s.name]),
+    stops.map((s) => [s.position, s.name, s.rideStopId]),
     [
-      [1, "Stop a"],
-      [2, "Stop b"],
+      [1, "Stop a", "a"],
+      [2, "Stop b", "b"],
     ],
   );
   assert.ok(Math.abs(stops[0]!.distanceFromStartKm - 5.56) < 0.05, `${stops[0]!.distanceFromStartKm}`);

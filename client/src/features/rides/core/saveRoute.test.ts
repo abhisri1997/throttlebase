@@ -1,6 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MAX_ROUTE_TITLE_LENGTH, defaultRouteTitle, saveRouteErrorMessage, validRouteTitle } from "./saveRoute";
+import {
+  MAX_ROUTE_TITLE_LENGTH,
+  ROUTE_HIGHLIGHTS,
+  defaultRouteTitle,
+  saveRouteErrorMessage,
+  suggestedRouteTitle,
+  toggleHighlight,
+  validRouteTitle,
+} from "./saveRoute";
 
 const httpError = (status: number) => ({ response: { status } });
 
@@ -37,4 +45,46 @@ test("someone who was not on the ride is told why", () => {
 test("anything else suggests trying again", () => {
   assert.match(saveRouteErrorMessage(new Error("Network Error")), /try again/i);
   assert.match(saveRouteErrorMessage(httpError(500)), /try again/i);
+});
+
+test("a route is suggested a name from where it starts and ends", () => {
+  assert.equal(
+    suggestedRouteTitle("Electronic City, Doddathoguru", "HSR Layout, Bengaluru", "Ride to home…"),
+    "Electronic City → HSR Layout",
+  );
+});
+
+test("a ride that ends where it started is named as a loop", () => {
+  assert.equal(
+    suggestedRouteTitle("Indiranagar, Bengaluru", "Indiranagar, Bengaluru", "Sunday spin"),
+    "Loop from Indiranagar",
+  );
+});
+
+test("without both ends named, the ride's own name is suggested", () => {
+  assert.equal(suggestedRouteTitle(null, "HSR Layout, Bengaluru", "Ride to home…"), "Ride to home…");
+  assert.equal(suggestedRouteTitle(null, null, undefined), "My ride");
+});
+
+test("the eight highlights have labels riders recognise", () => {
+  assert.equal(ROUTE_HIGHLIGHTS.length, 8);
+  assert.deepEqual(
+    ROUTE_HIGHLIGHTS.map((highlight) => highlight.label),
+    [
+      "Scenic road",
+      "Good surface",
+      "Quiet, little traffic",
+      "Well-lit",
+      "Great stops",
+      "Twisties",
+      "Night-ride friendly",
+      "Beginner friendly",
+    ],
+  );
+});
+
+test("tapping a highlight picks it, and tapping again unpicks it", () => {
+  const picked = toggleHighlight([], "scenic_road");
+  assert.deepEqual(picked, ["scenic_road"]);
+  assert.deepEqual(toggleHighlight(picked, "scenic_road"), []);
 });

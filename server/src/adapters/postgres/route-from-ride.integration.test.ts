@@ -217,6 +217,45 @@ test("saving a finished ride as a route", { skip: !CONNECTION }, async (t) => {
     assert.equal(saved.route.end_name, null);
   });
 
+  await t.test("a preview shows the names and ridden stops without saving anything", async () => {
+    const { rideId, sessionId } = await createRide(admin, "completed");
+    await recordRide(admin, sessionId, RIDER, 200);
+    const cafe = await addStop(admin, rideId, 1, "Hill Cafe", START.lat + 100 * STEP_DEG);
+    await addStop(admin, rideId, 2, "Detour Dhaba", START.lat + 150 * STEP_DEG, START.lon + 0.05);
+    const routesBefore = await admin.query(`SELECT count(*)::int AS n FROM routes WHERE ride_id = $1`, [rideId]);
+
+    const preview = await routeFromRide!.previewRouteFromRide(rideId, RIDER, { nameArea: fakeNameArea });
+
+    assert.equal(preview.saved_route_id, null);
+    assert.equal(preview.start_name, "South Gate, Testville");
+    assert.equal(preview.end_name, "North End, Testville");
+    assert.ok(Math.abs(preview.distance_km - 2.21) < 0.03);
+    assert.equal(preview.duration_s, 199);
+    assert.deepEqual(
+      preview.stops.map((stop) => [stop.ride_stop_id, stop.name]),
+      [[cafe, "Hill Cafe"]],
+    );
+    const routesAfter = await admin.query(`SELECT count(*)::int AS n FROM routes WHERE ride_id = $1`, [rideId]);
+    assert.equal(routesAfter.rows[0].n, routesBefore.rows[0].n);
+  });
+
+  await t.test("a preview of a ride already saved points at that route", async () => {
+    const { rideId, sessionId } = await createRide(admin, "completed");
+    await recordRide(admin, sessionId, RIDER, 200);
+    const saved = await routeFromRide!.saveRouteFromRide(rideId, RIDER, { title: "Once", visibility: "private" });
+
+    const preview = await routeFromRide!.previewRouteFromRide(rideId, RIDER, { nameArea: fakeNameArea });
+
+    assert.equal(preview.saved_route_id, saved.route.id);
+  });
+
+  await t.test("a ride still in progress cannot be previewed either", async () => {
+    const { rideId, sessionId } = await createRide(admin, "active");
+    await recordRide(admin, sessionId, RIDER, 200);
+
+    await rejectsWith(routeFromRide!.previewRouteFromRide(rideId, RIDER, { nameArea: fakeNameArea }), 409);
+  });
+
   await t.test("a participant with nothing recorded gets no route", async () => {
     const { rideId, sessionId } = await createRide(admin, "completed");
     await recordRide(admin, sessionId, RIDER, 200);

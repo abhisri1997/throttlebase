@@ -1,7 +1,11 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { getRiderTrack } from "../services/ride-track.service.js";
-import { nameAreaWithGoogle, saveRouteFromRide } from "../services/route-from-ride.service.js";
+import {
+  nameAreaWithGoogle,
+  previewRouteFromRide,
+  saveRouteFromRide,
+} from "../services/route-from-ride.service.js";
 import { SaveRouteFromRideSchema } from "../schemas/route.schemas.js";
 import {
   CreateIncidentSchema,
@@ -218,6 +222,16 @@ export const getReplay = async (
     res.json(result);
   } catch (error: any) {
     handleLiveSessionError(res, error, "Error fetching live session replay");
+  }
+};
+
+/** What saving the caller's ride as a route would produce, for the save sheet. */
+export const previewRouteFromMyRide = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const rideId = RideIdSchema.parse(req.params.id);
+    res.json(await previewRouteFromRide(rideId, rid(req), { nameArea: nameAreaWithGoogle }));
+  } catch (error: any) {
+    handleLiveSessionError(res, error, "Error previewing ride as a route");
   }
 };
 

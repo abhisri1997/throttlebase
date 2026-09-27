@@ -16,6 +16,8 @@ export interface RideStopForRoute {
 }
 
 export interface RouteStopDraft {
+  /** The ride stop it was copied from, so the saver's note finds it. */
+  rideStopId: string;
   position: number;
   name: string | null;
   lat: number;
@@ -42,6 +44,7 @@ export const buildRouteStops = (input: {
     .map((stop) => ({ stop, projection: projectOntoPolyline({ lat: stop.lat, lng: stop.lng }, line, cumulative) }))
     .filter(({ projection }) => projection.offsetMeters <= MAX_STOP_OFFSET_M)
     .map(({ stop, projection }, index) => ({
+      rideStopId: stop.id,
       position: index + 1,
       name: stop.name,
       lat: stop.lat,
