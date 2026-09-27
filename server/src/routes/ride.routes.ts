@@ -239,7 +239,7 @@ router.delete("/:id", authenticate, rideController.deleteRide);
  *       200:
  *         description: Successfully joined the ride
  *       400:
- *         description: Already a participant or ride is full
+ *         description: Already a participant, ride is full, or the ride is completed or cancelled
  *       404:
  *         description: Ride not found
  */
@@ -632,7 +632,7 @@ router.post("/:id/route", authenticate, liveSessionController.saveRouteFromMyRid
  *       200:
  *         description: Rider promoted to co-captain
  *       400:
- *         description: Cannot promote (not captain or target not a participant)
+ *         description: Cannot promote (not captain, target not a participant, or the ride is completed or cancelled)
  */
 router.post("/:id/promote", authenticate, rideController.promoteCoCaptain);
 
