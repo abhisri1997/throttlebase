@@ -70,6 +70,7 @@ import type { LatLng, RouteLeg } from "../../src/features/navigation/types/navig
 import type { LiveSessionParticipant } from "../../src/services/liveSessionSocket";
 import { StartMyRideCard } from "../../src/features/rides/components/StartMyRideCard";
 import { SaveRouteCard } from "../../src/features/rides/components/SaveRouteCard";
+import { RoadFeedbackCard } from "../../src/features/rides/components/RoadFeedbackCard";
 import { useEndRideWithWarning } from "../../src/features/rides/hooks/useEndRideWithWarning";
 
 const fetchRideDetails = async (id: string) => {
@@ -1679,6 +1680,10 @@ useEffect(() => {
             </View>
           </View>
           {/* Only once there is a recorded track to build the route from. */}
+          {/* The card itself checks this rider was on the ride. */}
+          {ride.status === "completed" && ride.route_id && ride.road_via != null ? (
+            <RoadFeedbackCard rideId={id!} />
+          ) : null}
           {ride.status === "completed" && trackCoordinates.length > 1 ? (
             <SaveRouteCard rideId={id!} rideTitle={ride.title} />
           ) : null}
