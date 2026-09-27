@@ -41,10 +41,44 @@ export const GpsTraceBatchSchema = z.object({
 
 export type GpsTraceBatchInput = z.infer<typeof GpsTraceBatchSchema>;
 
+/**
+ * Why the rider who saved a route says it is good. Kept in step with the
+ * routes_highlights_known check in migration 033.
+ */
+export const ROUTE_HIGHLIGHTS = [
+  'scenic_road',
+  'good_surface',
+  'quiet',
+  'well_lit',
+  'great_stops',
+  'twisties',
+  'night_ride_friendly',
+  'beginner_friendly',
+] as const;
+
+export type RouteHighlight = (typeof ROUTE_HIGHLIGHTS)[number];
+
+/** A stop note is a line or two: "Last fuel for 60 km". */
+export const MAX_STOP_NOTE_LENGTH = 280;
+
 /** Saving the route a rider actually rode; the geometry comes from their own track. */
 export const SaveRouteFromRideSchema = z.object({
   title: z.string().trim().min(1).max(255),
   visibility: z.enum(['private', 'public']).default('private'),
+  highlights: z
+    .array(z.enum(ROUTE_HIGHLIGHTS))
+    .max(ROUTE_HIGHLIGHTS.length)
+    .default([])
+    .transform((highlights) => [...new Set(highlights)]),
+  stop_notes: z
+    .array(
+      z.object({
+        ride_stop_id: z.string().uuid(),
+        note: z.string().trim().max(MAX_STOP_NOTE_LENGTH),
+      }),
+    )
+    .max(50)
+    .default([]),
 });
 
 export type SaveRouteFromRideInput = z.infer<typeof SaveRouteFromRideSchema>;

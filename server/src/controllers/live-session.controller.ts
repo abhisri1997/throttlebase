@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { getRiderTrack } from "../services/ride-track.service.js";
-import { saveRouteFromRide } from "../services/route-from-ride.service.js";
+import { nameAreaWithGoogle, saveRouteFromRide } from "../services/route-from-ride.service.js";
 import { SaveRouteFromRideSchema } from "../schemas/route.schemas.js";
 import {
   CreateIncidentSchema,
@@ -226,7 +226,9 @@ export const saveRouteFromMyRide = async (req: Request, res: Response): Promise<
   try {
     const rideId = RideIdSchema.parse(req.params.id);
     const input = SaveRouteFromRideSchema.parse(req.body ?? {});
-    const { route, created } = await saveRouteFromRide(rideId, rid(req), input);
+    const { route, created } = await saveRouteFromRide(rideId, rid(req), input, {
+      nameArea: nameAreaWithGoogle,
+    });
     res.status(created ? 201 : 200).json({ route, created });
   } catch (error: any) {
     handleLiveSessionError(res, error, "Error saving ride as a route");

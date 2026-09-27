@@ -57,6 +57,10 @@ const createRide = async (pool: pg.Pool, status: string): Promise<{ rideId: stri
   return { rideId, sessionId: session.rows[0].id as string };
 };
 
+/** Names the ends without Google: whichever end is further north is "north". */
+const fakeNameArea = async (point: { lat: number; lng: number }) =>
+  point.lat > START.lat + 0.01 ? "North End, Testville" : "South Gate, Testville";
+
 /** A straight ride north of START, one fix a second. */
 const recordRide = async (pool: pg.Pool, sessionId: string, riderId: string, fixes: number) => {
   await pool.query(
@@ -68,6 +72,16 @@ const recordRide = async (pool: pg.Pool, sessionId: string, riderId: string, fix
      FROM generate_series(0, $6 - 1) AS i`,
     [sessionId, riderId, START.lon, START.lat, STEP_DEG, fixes],
   );
+};
+
+const addStop = async (pool: pg.Pool, rideId: string, sequence: number, name: string, lat: number, lng = START.lon) => {
+  const result = await pool.query(
+    `INSERT INTO ride_stops (ride_id, type, status, sequence, name, location)
+     VALUES ($1, 'rest', 'approved', $2, $3, ST_SetSRID(ST_MakePoint($4::float8, $5::float8), 4326)::geography)
+     RETURNING id`,
+    [rideId, sequence, name, lng, lat],
+  );
+  return result.rows[0].id as string;
 };
 
 const rejectsWith = async (promise: Promise<unknown>, statusCode: number) => {
@@ -143,6 +157,64 @@ test("saving a finished ride as a route", { skip: !CONNECTION }, async (t) => {
     });
     assert.equal(again.created, false);
     assert.equal(again.route.id, first.route.id);
+  });
+
+  await t.test("a saved route knows its ends, stops, highlights and ride time", async () => {
+    const { rideId, sessionId } = await createRide(admin, "completed");
+    await recordRide(admin, sessionId, RIDER, 200);
+    // One stop on the way, one planned but never ridden past (~5 km east).
+    const cafe = await addStop(admin, rideId, 1, "Hill Cafe", START.lat + 100 * STEP_DEG);
+    await addStop(admin, rideId, 2, "Detour Dhaba", START.lat + 150 * STEP_DEG, START.lon + 0.05);
+
+    const saved = await routeFromRide!.saveRouteFromRide(
+      rideId,
+      RIDER,
+      {
+        title: "Testville run",
+        visibility: "public",
+        highlights: ["scenic_road", "great_stops"],
+        stop_notes: [{ ride_stop_id: cafe, note: "  Opens at 6  " }],
+      },
+      { nameArea: fakeNameArea },
+    );
+
+    assert.equal(saved.route.start_name, "South Gate, Testville");
+    assert.equal(saved.route.end_name, "North End, Testville");
+    assert.ok(Math.abs(Number(saved.route.start_lat) - START.lat) < 1e-6);
+    assert.deepEqual(saved.route.highlights, ["scenic_road", "great_stops"]);
+    assert.equal(saved.route.ridden_duration_s, 199);
+    assert.deepEqual(saved.route.via, ["Hill Cafe"]);
+
+    const detail = await routes!.getRouteById(saved.route.id, OUTSIDER);
+    assert.ok(detail);
+    assert.equal(detail.stops.length, 1);
+    assert.equal(detail.stops[0]!.name, "Hill Cafe");
+    assert.equal(detail.stops[0]!.note, "Opens at 6");
+    assert.ok(Math.abs(Number(detail.stops[0]!.distance_from_start_km) - 1.11) < 0.03);
+
+    const listed = (await routes!.listVisibleRoutes(OUTSIDER)).find((route) => route.id === saved.route.id);
+    assert.deepEqual(listed?.via, ["Hill Cafe"]);
+    assert.equal(listed?.end_name, "North End, Testville");
+  });
+
+  await t.test("a route still saves when its ends cannot be named", async () => {
+    const { rideId, sessionId } = await createRide(admin, "completed");
+    await recordRide(admin, sessionId, RIDER, 200);
+
+    const saved = await routeFromRide!.saveRouteFromRide(
+      rideId,
+      RIDER,
+      { title: "Unnamed ends", visibility: "private", highlights: [], stop_notes: [] },
+      {
+        nameArea: async () => {
+          throw new Error("maps quota");
+        },
+      },
+    );
+
+    assert.equal(saved.created, true);
+    assert.equal(saved.route.start_name, null);
+    assert.equal(saved.route.end_name, null);
   });
 
   await t.test("a participant with nothing recorded gets no route", async () => {

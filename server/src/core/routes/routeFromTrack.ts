@@ -20,6 +20,8 @@ export interface RouteGeometry {
   /** GeoJSON order: [longitude, latitude]. */
   coordinates: [number, number][];
   distanceKm: number;
+  /** First usable fix to last, stops included. */
+  durationS: number;
 }
 
 interface Planar {
@@ -126,5 +128,6 @@ export const routeFromTrack = (samples: readonly TrackSample[]): RouteGeometry |
   return {
     coordinates: kept.map((index) => [candidates[index]!.lng, candidates[index]!.lat]),
     distanceKm: Math.round(distanceM / 10) / 100,
+    durationS: Math.round((points[points.length - 1]!.capturedAtMs - points[0]!.capturedAtMs) / 1000),
   };
 };

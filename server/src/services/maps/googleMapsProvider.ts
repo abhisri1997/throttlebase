@@ -16,6 +16,7 @@ import {
   type SearchAlongRouteParams,
   type SearchNearbyParams,
 } from "./mapsProvider.js";
+import { areaNameFromGeocode } from "./areaName.js";
 
 /**
  * The only module in the codebase that talks to Google.
@@ -111,7 +112,10 @@ interface GoogleDirectionsResponse {
 interface GoogleGeocodeResponse {
   status?: string;
   error_message?: string;
-  results?: Array<{ formatted_address?: string }>;
+  results?: Array<{
+    formatted_address?: string;
+    address_components?: Array<{ long_name?: string; types?: string[] }>;
+  }>;
 }
 
 interface GooglePlace {
@@ -324,6 +328,24 @@ export const createGoogleMapsProvider = ({
       assertLegacyStatus("reverse-geocode", payload);
 
       return payload.results?.[0]?.formatted_address ?? null;
+    },
+
+    async reverseGeocodeArea(coords: LatLngLiteral): Promise<string | null> {
+      const params = new URLSearchParams({
+        latlng: toCoordParam(coords),
+        key: apiKey,
+      });
+
+      const payload = await requestGoogleJson<GoogleGeocodeResponse>(
+        "reverse-geocode-area",
+        `${GEOCODE_URL}?${params.toString()}`,
+        { method: "GET" },
+        fetchImpl,
+      );
+
+      assertLegacyStatus("reverse-geocode-area", payload);
+
+      return areaNameFromGeocode(payload.results ?? []);
     },
 
     async autocompletePlaces(request: AutocompleteRequest): Promise<PlacePrediction[]> {

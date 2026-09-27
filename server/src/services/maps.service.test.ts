@@ -5,6 +5,7 @@ import {
   getDirections,
   getPlaceDetails,
   reverseGeocode,
+  reverseGeocodeArea,
   USAGE_API_DIRECTIONS,
   USAGE_API_GEOCODING,
   USAGE_API_PLACES_AUTOCOMPLETE,
@@ -53,6 +54,10 @@ const makeProvider = (overrides: Partial<MapsProvider> = {}) => {
     async reverseGeocode() {
       calls.reverseGeocode++;
       return "MG Road, Bengaluru";
+    },
+    async reverseGeocodeArea() {
+      calls.reverseGeocode++;
+      return "Indiranagar, Bengaluru";
     },
     async autocompletePlaces() {
       calls.autocomplete++;
@@ -184,6 +189,19 @@ test("caches a missing address so an unmapped point is not looked up repeatedly"
   assert.deepEqual(first, { formattedAddress: null });
   assert.deepEqual(second, { formattedAddress: null });
   assert.equal(lookups, 1, "a known-empty answer must not be re-billed");
+});
+
+test("names the area of a route end once, then serves it from cache for a month", async () => {
+  const { provider, calls } = makeProvider();
+  const { store, writes } = makeStore();
+
+  const first = await reverseGeocodeArea({ lat: 12.9116, lng: 77.6389 }, { provider, store });
+  const second = await reverseGeocodeArea({ lat: 12.91161, lng: 77.63891 }, { provider, store });
+
+  assert.deepEqual(first, { areaName: "Indiranagar, Bengaluru" });
+  assert.deepEqual(second, first);
+  assert.equal(calls.reverseGeocode, 1);
+  assert.equal(writes[0]!.ttlMs, 30 * ONE_DAY_MS);
 });
 
 test("keys place details on the place alone, so a new session reuses the entry", async () => {
