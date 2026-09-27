@@ -8,6 +8,7 @@ import { ThemeProvider, useTheme } from "../src/theme/ThemeContext";
 import { useAuthState, useResolvedSession } from "../src/services/useAuthState";
 import { useBackgroundLocationTracker } from "../src/hooks/useBackgroundLocationTracker";
 import { installPerformanceBufferGuard } from "../src/dev/performanceBufferGuard";
+import { FEATURES, isPathEnabled } from "../src/core/features/features";
 import "../global.css";
 
 // Dev builds only: React's per-render performance entries otherwise pile up
@@ -71,6 +72,12 @@ function AppInner() {
   }
 
   if (isAuthenticated && isAuthRoute && !needsOnboarding) {
+    return <Redirect href='/(tabs)/feed' />;
+  }
+
+  // Screens of features held back from this build, reached by a deep link or
+  // a stale notification, land on the feed instead.
+  if (isAuthenticated && !isPathEnabled(pathname, FEATURES)) {
     return <Redirect href='/(tabs)/feed' />;
   }
 
