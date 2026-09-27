@@ -10,6 +10,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
+import { goBackOr } from "../../src/utils/goBack";
 import { ChevronLeft, UserPlus, UserMinus } from "lucide-react-native";
 import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { useTheme } from "../../src/theme/ThemeContext";
@@ -81,7 +82,7 @@ export default function RiderProfileScreen() {
           Rider not found
         </Text>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBackOr(router, "/(tabs)/feed")}
           className='p-3 rounded-xl'
         >
           <Text className='font-bold' style={{ color: colors.text }}>
@@ -112,7 +113,7 @@ export default function RiderProfileScreen() {
         }}
       >
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBackOr(router, "/(tabs)/feed")}
           className='w-10 h-10 items-center justify-center mr-2'
         >
           <ChevronLeft color={colors.text} size={24} />
