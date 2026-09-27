@@ -86,6 +86,40 @@ test("a healthy session is used without contacting the server", async () => {
   assert.equal(calls.length, 0);
 });
 
+test("relaunching with a still-valid stored session signs the rider in", async () => {
+  // Arrange: the app was killed minutes after signing in, so the stored
+  // access token is still good and no refresh is needed.
+  const { service, calls } = buildService(
+    () => Promise.reject(new Error("should not be called")),
+    storedSession(),
+  );
+
+  // Act: what the root layout does on launch.
+  await service.getValidSession();
+
+  // Assert
+  const state = service.getState();
+  assert.equal(state.status, "signed-in");
+  assert.equal(state.status === "signed-in" ? state.session.riderId : null, "rider-1");
+  assert.equal(calls.length, 0);
+});
+
+test("repeated checks of a valid session announce the sign-in only once", async () => {
+  const { service } = buildService(
+    () => Promise.reject(new Error("should not be called")),
+    storedSession(),
+  );
+  const seen: string[] = [];
+  service.onChange((next) => seen.push(next.status));
+
+  await service.getValidSession();
+  await service.getValidSession();
+  await service.getValidSession();
+
+  // The initial "loading" delivered on subscribe, then one "signed-in".
+  assert.deepEqual(seen, ["loading", "signed-in"]);
+});
+
 test("an expiring access token is refreshed", async () => {
   // Arrange: inside the 60s skew window
   const { service, calls } = buildService(
