@@ -6,7 +6,7 @@ This guide is a stakeholder-facing user acceptance test plan for the recently de
 
 It covers step-by-step UI validation for:
 
-- 2FA and session security
+- Login activity and session security
 - Support ticket submission and admin ticket handling
 - Mentions and in-app notifications
 - Ride detail realtime updates
@@ -33,8 +33,7 @@ The following are intentionally excluded from this UAT plan:
 
 1. A running backend API and connected mobile client build.
 2. At least two active app sessions or two devices for realtime validation.
-3. One authenticator app for TOTP testing.
-4. Seeded or manually created ride, post, and support-ticket data.
+3. Seeded or manually created ride, post, and support-ticket data.
 
 ## Required Test Accounts
 
@@ -42,7 +41,6 @@ The following are intentionally excluded from this UAT plan:
 2. Standard rider B
 3. Standard rider C for optional multi-rider realtime checks
 4. Admin rider with is_admin enabled
-5. One rider account that will enable 2FA during testing
 
 ## Recommended Data Setup
 
@@ -71,74 +69,7 @@ Log each failure with:
 5. actual result
 6. screenshot or screen recording reference
 
-## Scenario 1 - Enable 2FA For A Rider
-
-### Objective
-
-Confirm that a rider can enable TOTP-based two-factor authentication from the Security modal.
-
-### Primary Actor
-
-Standard rider A
-
-### Preconditions
-
-1. Rider A can log in successfully.
-2. Rider A has not already enabled 2FA.
-3. An authenticator app is available.
-
-### Steps
-
-1. Log in as rider A.
-2. Open My Profile.
-3. Tap Settings.
-4. Open Security.
-5. In the Two-Factor Authentication section, tap Set Up 2FA.
-6. Copy or enter the displayed manual key into the authenticator app.
-7. Read the 6-digit code from the authenticator app.
-8. Enter the 6-digit code in the Security screen.
-9. Submit the verification step.
-
-### Expected Result
-
-1. The setup completes without leaving the screen in an error state.
-2. The Security screen shows that 2FA is enabled.
-3. The verification code entry clears after success.
-
-## Scenario 2 - Login Challenge For 2FA-Enabled Rider
-
-### Objective
-
-Confirm that a rider with 2FA enabled cannot complete login without a valid TOTP code.
-
-### Primary Actor
-
-Rider A with 2FA already enabled
-
-### Preconditions
-
-1. Scenario 1 has passed.
-2. Rider A is logged out.
-
-### Steps
-
-1. Open the login screen.
-2. Enter rider A email or username.
-3. Enter the correct password.
-4. Attempt to sign in without entering a TOTP code.
-5. Confirm the app prompts for a two-factor code.
-6. Enter an invalid 6-digit code and submit.
-7. Confirm the login is rejected.
-8. Enter the current valid authenticator code.
-9. Submit the login again.
-
-### Expected Result
-
-1. Password-only login does not complete when 2FA is enabled.
-2. An invalid TOTP code is rejected.
-3. A valid TOTP code completes login successfully.
-
-## Scenario 3 - Review Login Activity And Revoke A Session
+## Scenario 1 - Review Login Activity And Revoke A Session
 
 ### Objective
 
@@ -172,7 +103,7 @@ Rider A on device 1 and device 2
 3. The revoked session no longer remains valid on device 2.
 4. Device 1 remains authenticated.
 
-## Scenario 4 - Submit A Support Ticket As A Rider
+## Scenario 2 - Submit A Support Ticket As A Rider
 
 ### Objective
 
@@ -204,7 +135,7 @@ Rider B
 2. The rider sees the new ticket in their support history.
 3. The ticket status appears with an initial open-style state.
 
-## Scenario 5 - Admin Reviews And Updates A Support Ticket
+## Scenario 3 - Admin Reviews And Updates A Support Ticket
 
 ### Objective
 
@@ -216,7 +147,7 @@ Admin rider
 
 ### Preconditions
 
-1. Scenario 4 has created a ticket.
+1. Scenario 2 has created a ticket.
 2. The admin account has is_admin enabled.
 
 ### Steps
@@ -238,7 +169,7 @@ Admin rider
 3. The status update succeeds.
 4. The saved agent reply appears in the ticket detail after update.
 
-## Scenario 6 - Non-Admin Cannot Access Admin Ticket Controls
+## Scenario 4 - Non-Admin Cannot Access Admin Ticket Controls
 
 ### Objective
 
@@ -263,7 +194,7 @@ Standard rider C
 1. Contact Support is visible.
 2. Admin - Manage Tickets is not visible.
 
-## Scenario 7 - Create A Post With A Mention
+## Scenario 5 - Create A Post With A Mention
 
 ### Objective
 
@@ -293,7 +224,7 @@ Rider A mentioning rider B
 2. Rider B sees a new in-app notification for the mention.
 3. The notification appears as unread initially.
 
-## Scenario 8 - Create A Comment With A Mention
+## Scenario 6 - Create A Comment With A Mention
 
 ### Objective
 
@@ -321,7 +252,7 @@ Rider A mentioning rider B in comments
 1. The comment is created successfully.
 2. Rider B receives a new mention notification for the comment.
 
-## Scenario 9 - Manage Read State In Notifications
+## Scenario 7 - Manage Read State In Notifications
 
 ### Objective
 
@@ -351,7 +282,7 @@ Rider B
 2. Tapping an unread notification marks it read.
 3. Mark all clears the remaining unread state.
 
-## Scenario 10 - Ride Detail Realtime Update For Ride Join Or Stop Event
+## Scenario 8 - Ride Detail Realtime Update For Ride Join Or Stop Event
 
 ### Objective
 
@@ -382,7 +313,7 @@ Captain on device 1 and participant on device 2
 2. The broadcasted change matches the action that just occurred.
 3. Unauthorized users should not be able to receive private ride updates.
 
-## Scenario 11 - Start And End A Live Session
+## Scenario 9 - Start And End A Live Session
 
 ### Objective
 
@@ -411,7 +342,7 @@ Ride captain and confirmed participant
 2. The participant sees the live session become active.
 3. Ending the session updates both devices to show the ended state.
 
-## Scenario 12 - Report A Live Incident Or SOS
+## Scenario 10 - Report A Live Incident Or SOS
 
 ### Objective
 
@@ -423,7 +354,7 @@ Confirmed participant reporting to captain
 
 ### Preconditions
 
-1. Scenario 11 has an active live session.
+1. Scenario 9 has an active live session.
 2. Both participant and captain remain connected in the same ride.
 
 ### Steps
@@ -442,9 +373,8 @@ Confirmed participant reporting to captain
 
 1. All scenarios that are in scope have a pass or fail outcome recorded.
 2. Any failing scenario includes screenshots or notes for reproducibility.
-3. Security flows were tested with a real authenticator app.
-4. Realtime flows were tested with two concurrent app sessions.
-5. Unsupported provider integrations were not counted as UAT failures.
+3. Realtime flows were tested with two concurrent app sessions.
+4. Unsupported provider integrations were not counted as UAT failures.
 
 ## PDF Export Workflow
 
