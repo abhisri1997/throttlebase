@@ -102,12 +102,30 @@ const viaAhead = (origin: LatLng, destination: LatLng, via: readonly LatLng[]): 
 };
 
 /**
+ * Pass-through points before the destination. A leg that ends at the next
+ * stop must not be steered through the road beyond that stop and back.
+ */
+const viaBefore = (origin: LatLng, destination: LatLng, via: readonly LatLng[]): LatLng[] => {
+  // The origin opens the line, so a destination before the first point
+  // projects before it rather than onto it.
+  const line = [origin, ...via];
+  const cumulative = cumulativeDistances(line);
+  const end = projectOntoPolyline(destination, line, cumulative);
+
+  // The ride's own destination lies past the road's last point, off the line.
+  if (end.offsetMeters > ON_ROAD_M) return [...via];
+  // via[i] sits at line[i + 1].
+  return via.filter((_, index) => cumulative[index + 1]! <= end.distanceAlongMeters);
+};
+
+/**
  * Directions waypoints for a ride that follows a road: its stops, with the
  * road's points threaded between them in riding order.
  *
  * Stops keep the captain's order. Each pass-through point goes before the
  * first stop that lies further along the road than it does. Points the rider
- * has already passed are dropped, so a reroute mid-ride never sends them back.
+ * has already passed are dropped, so a reroute mid-ride never sends them back,
+ * and so are points past the destination, so a leg to the next stop ends there.
  * When the two together exceed Google's limit, the road's points are thinned;
  * stops never are.
  */
@@ -116,7 +134,8 @@ export const planDirectionsWaypoints = (input: WaypointPlanInput): PlannedWaypoi
   if (input.via.length === 0) return stops;
 
   const budget = MAX_DIRECTIONS_WAYPOINTS - stops.length;
-  const via = thinEvenly(viaAhead(input.origin, input.destination, input.via), budget);
+  const ahead = viaAhead(input.origin, input.destination, input.via);
+  const via = thinEvenly(viaBefore(input.origin, input.destination, ahead), budget);
   if (via.length === 0) return stops;
 
   const line = [input.origin, ...via, input.destination];

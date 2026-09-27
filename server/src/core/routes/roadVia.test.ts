@@ -164,3 +164,19 @@ test("Google's waypoint limit is kept by thinning the road's points, never the s
   const viaLongitudes = plan.filter((waypoint) => waypoint.isVia).map((waypoint) => waypoint.point.lng);
   assert.deepEqual(viaLongitudes, [...viaLongitudes].sort((a, b) => a - b), "thinned points stay in order");
 });
+
+test("a leg that ends at the next stop is not steered past it", () => {
+  const nextStop = point(77.12, 12.9);
+
+  const plan = planDirectionsWaypoints({ origin, destination: nextStop, stopovers: [], via });
+
+  assert.deepEqual(describe(plan), ["via 77.05", "via 77.1"]);
+});
+
+test("a leg to a stop before the road's first point is not steered at all", () => {
+  const earlyStop = point(77.02, 12.9);
+
+  const plan = planDirectionsWaypoints({ origin, destination: earlyStop, stopovers: [], via });
+
+  assert.deepEqual(describe(plan), []);
+});
