@@ -21,6 +21,7 @@ if (CONNECTION) {
 
 const db = CONNECTION ? await import("../../config/db.js") : null;
 const rides = CONNECTION ? await import("../../services/ride.service.js") : null;
+const routes = CONNECTION ? await import("../../services/route.service.js") : null;
 
 const CAPTAIN = "cccccccc-0000-0000-0000-0000000000a1";
 const OTHER = "aaaaaaaa-0000-0000-0000-0000000000a2";
@@ -75,6 +76,12 @@ test("planning a ride on a saved route", { skip: !CONNECTION }, async (t) => {
     [CAPTAIN, OTHER],
   );
   const publicRoute = await insertRoute(admin, OTHER, "public");
+
+  await t.test("a route offers its road's points, so a ride can be previewed on it before it exists", async () => {
+    const route = await routes!.getRouteById(publicRoute, CAPTAIN);
+
+    assert.deepEqual(route?.road_via, roadViaPoints(ROAD, { reverse: false }));
+  });
 
   await t.test("a ride that follows the road keeps the road's points in riding order", async () => {
     const ride = await rides!.createRide(CAPTAIN, rideInput({ route_id: publicRoute }));

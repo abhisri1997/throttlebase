@@ -24,6 +24,21 @@ type LngLat = [number, number];
 
 const toLatLng = ([lng, lat]: LngLat): LatLng => ({ lat, lng });
 
+const isLngLat = (value: unknown): value is LngLat =>
+  Array.isArray(value) &&
+  value.length >= 2 &&
+  typeof value[0] === "number" &&
+  typeof value[1] === "number" &&
+  Number.isFinite(value[0]) &&
+  Number.isFinite(value[1]);
+
+/** A route's stored GeoJSON line as [lng, lat] pairs; anything unreadable is dropped. */
+export const routeLine = (geojson: unknown): LngLat[] => {
+  const coordinates = (geojson as { coordinates?: unknown } | null)?.coordinates;
+  if (!Array.isArray(coordinates)) return [];
+  return coordinates.filter(isLngLat).map(([lng, lat]) => [lng, lat] as LngLat);
+};
+
 /**
  * The points that hold a ride to this road, in riding order: its sharpest
  * bends, at most MAX_ROAD_VIA_POINTS. A road that one bend or none describes
