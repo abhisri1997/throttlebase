@@ -17,6 +17,7 @@ import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
+import { goBackOr } from "../../src/utils/goBack";
 import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { useAccessToken } from "../../src/services/useAuthState";
 import { useLiveSessionStore } from "../../src/store/liveSessionStore";
@@ -1356,7 +1357,7 @@ useEffect(() => {
   }, [currentRider?.id, liveEnabled, liveLocationMarkers, liveStatus, ride?.participants]);
 
   const handleBackPress = useCallback(() => {
-    router.back();
+    goBackOr(router, "/(tabs)/rides");
   }, [router]);
 
   if (isLoading) {
@@ -1380,7 +1381,7 @@ useEffect(() => {
           Failed to load ride details.
         </Text>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBackOr(router, "/(tabs)/rides")}
           className='mt-4 p-3 rounded-xl'
         >
           <Text className='font-bold' style={{ color: colors.text }}>

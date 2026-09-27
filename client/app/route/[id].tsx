@@ -11,6 +11,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
+import { goBackOr } from "../../src/utils/goBack";
 import { getApiErrorMessage } from "../../src/utils/apiError";
 import MapView, {
   Polyline,
@@ -85,7 +86,7 @@ export default function RouteDetailScreen() {
           Failed to load route details.
         </Text>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBackOr(router, "/(tabs)/routes")}
           className='mt-4 p-3 rounded-xl'
         >
           <Text className='font-bold' style={{ color: colors.text }}>
@@ -144,7 +145,7 @@ export default function RouteDetailScreen() {
         {/* Back Button */}
         <SafeAreaView className='absolute top-0 left-0 right-0 px-4 pt-2 flex-row justify-between'>
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => goBackOr(router, "/(tabs)/routes")}
             className='w-10 h-10 rounded-full items-center justify-center'
             style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
           >
