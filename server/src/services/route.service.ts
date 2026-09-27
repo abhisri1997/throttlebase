@@ -8,6 +8,7 @@ import {
 } from "../core/routes/routeSearch.js";
 import { roadViaPoints, routeLine } from "../core/routes/roadVia.js";
 import { enqueueRideStatsRecompute } from "./jobs.service.js";
+import { getRouteRoadFeedback, type RouteRoadFeedback } from "./road-feedback.service.js";
 import type {
   CreateRouteInput,
   GpsTraceBatchInput,
@@ -59,6 +60,8 @@ export interface RouteStop {
 }
 
 export type RouteWithStops = Route & {
+  /** How riders who followed this road found it. */
+  road_feedback: RouteRoadFeedback;
   stops: RouteStop[];
   /** Points that hold a ride to this road, start to end; see core/routes/roadVia. */
   road_via: [number, number][];
@@ -156,6 +159,7 @@ export const getRouteById = async (
   if (!route) return null;
   return {
     ...route,
+    road_feedback: await getRouteRoadFeedback(routeId),
     stops: await listRouteStops(routeId),
     road_via: roadViaPoints(routeLine(route.geojson), { reverse: false }),
   };

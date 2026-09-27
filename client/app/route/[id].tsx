@@ -27,6 +27,11 @@ import { HighlightChips } from "../../src/features/routes/components/HighlightCh
 import { ITINERARY_COLORS, RouteItinerary } from "../../src/features/routes/components/RouteItinerary";
 import { itineraryRows, routeFacts, type RouteStopDetail } from "../../src/features/routes/core/routeSummary";
 import { useTheme } from "../../src/theme/ThemeContext";
+import {
+  roadFeedbackHeadline,
+  roadFeedbackReasonsLine,
+  type RouteRoadFeedback,
+} from "../../src/features/routes/core/roadFeedback";
 import { PlanRideSection } from "../../src/features/routes/components/PlanRideSection";
 import { parseRideDirection, type RideDirection } from "../../src/features/routes/core/planRide";
 
@@ -155,6 +160,10 @@ export default function RouteDetailScreen() {
     stops,
   });
   const highlights: string[] = Array.isArray(route.highlights) ? route.highlights : [];
+  // Riders who followed this road, weighing in on the saver's highlights.
+  const roadFeedback: RouteRoadFeedback | null = route.road_feedback ?? null;
+  const roadFeedbackTitle = roadFeedback ? roadFeedbackHeadline(roadFeedback) : null;
+  const roadFeedbackReasons = roadFeedback ? roadFeedbackReasonsLine(roadFeedback) : null;
 
   // Show the whole route, not a fixed zoom around its start.
   const fitMapToRoute = () => {
@@ -307,6 +316,22 @@ export default function RouteDetailScreen() {
             <Text className='text-xs' style={{ color: colors.textMuted }}>
               {route.creator_name}'s own view of the ride.
             </Text>
+          </View>
+        ) : null}
+
+        {roadFeedbackTitle ? (
+          <View className='px-5 pt-5' style={{ gap: 4 }}>
+            <Text className='text-xl font-bold' style={{ color: colors.text }}>
+              How the road was
+            </Text>
+            <Text className='text-base' style={{ color: colors.text }}>
+              {roadFeedbackTitle}
+            </Text>
+            {roadFeedbackReasons ? (
+              <Text className='text-sm' style={{ color: colors.textMuted }}>
+                Said it differed: {roadFeedbackReasons}
+              </Text>
+            ) : null}
           </View>
         ) : null}
 
