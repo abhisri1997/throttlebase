@@ -61,10 +61,22 @@ test("ridden the other way, the ends swap and the stops come in reverse, measure
       ["Mysuru", 135.4],
     ],
   );
-  assert.deepEqual(plan.roadVia, [
-    [76.9, 12.2],
-    [77.2, 12.7],
-  ]);
+});
+
+test("ridden the other way, the road can't be followed, so Google picks it", () => {
+  // The recorded points lie on the carriageway going the other way.
+  const plan = planRideOnRoute({ ...route, highlights: ["scenic_road"] }, "reverse")!;
+
+  assert.equal(plan.canFollowRoad, false);
+  assert.deepEqual(plan.roadVia, []);
+  assert.equal(plan.defaults.followRoad, false);
+});
+
+test("ridden the way it was recorded, the road can be followed", () => {
+  const plan = planRideOnRoute(route, "forward")!;
+
+  assert.equal(plan.canFollowRoad, true);
+  assert.equal(plan.defaults.followRoad, true);
 });
 
 test("an older route without named points still plans from its line", () => {

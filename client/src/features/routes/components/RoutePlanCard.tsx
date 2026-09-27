@@ -3,11 +3,14 @@ import { StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
 import { Check } from "lucide-react-native";
 import { useTheme } from "../../../theme/ThemeContext";
 import type { RoutePlanStop } from "../core/planRide";
+import { splitPlaceName } from "../core/routeSummary";
 
 interface RoutePlanCardProps {
   /** "Electronic City → HSR Layout", or the route's title. */
   title: string;
   isReversed: boolean;
+  /** False when ridden the other way round; see RoutePlan.canFollowRoad. */
+  canFollowRoad: boolean;
   followRoad: boolean;
   onFollowRoadChange: (followRoad: boolean) => void;
   /** The route's stops, in riding order. Omitted when editing a ride. */
@@ -25,6 +28,7 @@ const formatKm = (km: number): string => `${Math.round(km)} km`;
 export function RoutePlanCard({
   title,
   isReversed,
+  canFollowRoad,
   followRoad,
   onFollowRoadChange,
   stops = [],
@@ -41,36 +45,44 @@ export function RoutePlanCard({
         <Text style={[styles.muted, { color: colors.textMuted }]}>Ridden the other way round</Text>
       ) : null}
 
-      <View style={styles.toggleRow}>
-        <View style={styles.toggleText}>
-          <Text style={[styles.label, { color: colors.text }]}>Follow this road</Text>
-          <Text style={[styles.muted, { color: colors.textMuted }]}>
-            {followRoad
-              ? "Everyone is guided along the road this route was ridden on."
-              : "Google picks the quickest road between the start, stops and destination."}
-          </Text>
+      {canFollowRoad ? (
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleText}>
+            <Text style={[styles.label, { color: colors.text }]}>Follow this road</Text>
+            <Text style={[styles.muted, { color: colors.textMuted }]}>
+              {followRoad
+                ? "Everyone is guided along the road this route was ridden on."
+                : "Google picks the quickest road between the start, stops and destination."}
+            </Text>
+          </View>
+          <Switch
+            value={followRoad}
+            onValueChange={onFollowRoadChange}
+            accessibilityLabel='Follow this road'
+            trackColor={{ false: colors.border, true: colors.primary }}
+            thumbColor='white'
+          />
         </View>
-        <Switch
-          value={followRoad}
-          onValueChange={onFollowRoadChange}
-          accessibilityLabel='Follow this road'
-          trackColor={{ false: colors.border, true: colors.primary }}
-          thumbColor='white'
-        />
-      </View>
+      ) : (
+        <Text style={[styles.muted, styles.reverseNote, { color: colors.textMuted }]}>
+          The road can only be followed the way it was ridden. This way round, Google picks the road between
+          the start, stops and destination.
+        </Text>
+      )}
 
       {stops.length > 0 && isStopKept && onStopKeptChange ? (
         <View style={styles.stops}>
           <Text style={[styles.label, { color: colors.text }]}>Stops to keep</Text>
           {stops.map((stop) => {
             const isKept = isStopKept(stop);
+            const place = splitPlaceName(stop.name);
             return (
               <TouchableOpacity
                 key={`${stop.coords[0]},${stop.coords[1]}`}
                 onPress={() => onStopKeptChange(stop, !isKept)}
                 accessibilityRole='checkbox'
                 accessibilityState={{ checked: isKept }}
-                accessibilityLabel={`${stop.name}${stop.distanceKm !== null ? `, ${formatKm(stop.distanceKm)} in` : ""}`}
+                accessibilityLabel={`${place.name}${stop.distanceKm !== null ? `, ${formatKm(stop.distanceKm)} in` : ""}`}
                 style={styles.stopRow}
               >
                 <View
@@ -85,12 +97,17 @@ export function RoutePlanCard({
                 <View style={styles.stopText}>
                   <View style={styles.stopTitleRow}>
                     <Text style={[styles.stopName, { color: colors.text }]} numberOfLines={1}>
-                      {stop.name}
+                      {place.name}
                     </Text>
                     {stop.distanceKm !== null ? (
                       <Text style={[styles.muted, { color: colors.textMuted }]}>{formatKm(stop.distanceKm)}</Text>
                     ) : null}
                   </View>
+                  {place.detail ? (
+                    <Text style={[styles.muted, { color: colors.textMuted }]} numberOfLines={1}>
+                      {place.detail}
+                    </Text>
+                  ) : null}
                   {stop.note ? (
                     <Text style={[styles.note, { color: colors.textMuted }]}>“{stop.note}”</Text>
                   ) : null}
@@ -112,6 +129,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 17, fontWeight: "700" },
   muted: { fontSize: 12 },
   toggleRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 12 },
+  reverseNote: { marginTop: 12 },
   toggleText: { flex: 1, gap: 2 },
   label: { fontSize: 15, fontWeight: "700" },
   stops: { marginTop: 14, gap: 4 },

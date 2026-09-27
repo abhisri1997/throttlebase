@@ -37,6 +37,8 @@ export const createRide = async (
         .json({ error: "Validation failed", details: error.errors });
     } else if (error instanceof RideService.RideRouteUnavailableError) {
       res.status(404).json({ error: "That route is no longer available" });
+    } else if (error instanceof RideService.RoadNotFollowableError) {
+      res.status(400).json({ error: error.message });
     } else {
       console.error("Error creating ride:", error);
       res
@@ -135,6 +137,8 @@ export const updateRide = async (
       res.status(400).json({ error: error.message });
     } else if (error instanceof RideService.RideRouteUnavailableError) {
       res.status(400).json({ error: "This ride's route is no longer available" });
+    } else if (error instanceof RideService.RoadNotFollowableError) {
+      res.status(400).json({ error: error.message });
     } else {
       console.error("Error updating ride:", error);
       res.status(500).json({ error: "Internal server error" });

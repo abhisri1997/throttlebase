@@ -70,21 +70,29 @@ export class RideRouteUnavailableError extends Error {
   }
 }
 
+/**
+ * A route's road can only be followed the way it was recorded. Its points lie
+ * on the carriageway going that way, so riding it the other way round Google
+ * would U-turn to reach each one.
+ */
+export class RoadNotFollowableError extends Error {
+  constructor() {
+    super("A route ridden the other way round cannot follow its road");
+    this.name = "RoadNotFollowableError";
+  }
+}
+
 type LngLat = [number, number];
 
 /**
- * The points that hold a ride to its route's road, in riding order, checking
- * the captain may use the route. An empty list still means "follows the road":
- * the road is one Google picks on its own.
+ * The points that hold a ride to its route's road, checking the captain may
+ * use the route. An empty list still means "follows the road": the road is
+ * one Google picks on its own.
  */
-const resolveRoadVia = async (
-  captainId: string,
-  routeId: string,
-  reversed: boolean,
-): Promise<LngLat[]> => {
+const resolveRoadVia = async (captainId: string, routeId: string): Promise<LngLat[]> => {
   const route = await getRouteById(routeId, captainId);
   if (!route) throw new RideRouteUnavailableError();
-  return reversed ? [...route.road_via].reverse() : route.road_via;
+  return route.road_via;
 };
 
 const resolveRideRoute = async (
@@ -92,8 +100,12 @@ const resolveRideRoute = async (
   route: NonNullable<CreateRideInput["route"]>,
 ): Promise<RideRoute> => {
   const reversed = route.direction === "reverse";
-  const roadVia = await resolveRoadVia(captainId, route.route_id, reversed);
-  return { routeId: route.route_id, reversed, roadVia: route.follow_road ? roadVia : null };
+  // Unless the app says otherwise, a ride follows the road wherever it can.
+  const followRoad = route.follow_road ?? !reversed;
+  if (followRoad && reversed) throw new RoadNotFollowableError();
+
+  const roadVia = await resolveRoadVia(captainId, route.route_id);
+  return { routeId: route.route_id, reversed, roadVia: followRoad ? roadVia : null };
 };
 
 /**
@@ -536,12 +548,13 @@ export const updateRideInfo = async (
   if (fields.follow_route_road !== undefined) {
     const { route_id: routeId, route_reversed: reversed } = authCheck.rows[0];
     if (fields.follow_route_road && !routeId) throw new RideRouteUnavailableError();
+    if (fields.follow_route_road && reversed) throw new RoadNotFollowableError();
 
     paramIdx++;
     setClauses.push(`road_via = $${paramIdx}`);
     values.push(
       fields.follow_route_road
-        ? JSON.stringify(await resolveRoadVia(captainId, routeId, reversed))
+        ? JSON.stringify(await resolveRoadVia(captainId, routeId))
         : null,
     );
   }

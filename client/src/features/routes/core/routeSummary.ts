@@ -140,11 +140,13 @@ const kmLabel = (km: number | string | null): string | null => {
 };
 
 /** Stops are often named by a full address; lead with the place, keep the rest as detail. */
-const splitStopName = (name: string | null, position: number): { name: string; detail: string | null } => {
-  if (!name) return { name: `Stop ${position}`, detail: null };
+export const splitPlaceName = (name: string): { name: string; detail: string | null } => {
   const [place, ...rest] = name.split(",").map((part) => part.trim());
   return { name: place || name, detail: rest.length > 0 ? rest.join(", ") : null };
 };
+
+const splitStopName = (name: string | null, position: number): { name: string; detail: string | null } =>
+  name ? splitPlaceName(name) : { name: `Stop ${position}`, detail: null };
 
 /** A to B through every stop, in order, as the route page lists them. */
 export const itineraryRows = (route: {
