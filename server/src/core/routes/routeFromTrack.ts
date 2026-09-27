@@ -5,6 +5,7 @@
  */
 import { haversineMeters, type LatLng } from "../../utils/polyline.js";
 import { cleanTrack, type TrackSample } from "../../utils/track.js";
+import { simplifyToAtMost } from "./simplifyLine.js";
 
 /** Shorter than this is a rider who started and stopped, not a route. */
 export const MIN_ROUTE_DISTANCE_M = 500;
@@ -12,9 +13,6 @@ export const MIN_ROUTE_DISTANCE_M = 500;
 export const MAX_ROUTE_POINTS = 1000;
 /** A point this close to the straight line between its neighbours adds nothing. */
 const INITIAL_TOLERANCE_M = 10;
-const TOLERANCE_GROWTH = 1.5;
-
-const EARTH_RADIUS_M = 6_371_000;
 
 export interface RouteGeometry {
   /** GeoJSON order: [longitude, latitude]. */
@@ -23,60 +21,6 @@ export interface RouteGeometry {
   /** First usable fix to last, stops included. */
   durationS: number;
 }
-
-interface Planar {
-  x: number;
-  y: number;
-}
-
-/** Metres on a flat plane around `origin`; accurate enough across one ride. */
-const projector = (origin: LatLng) => {
-  const toRad = Math.PI / 180;
-  const lngScale = Math.cos(origin.lat * toRad) * EARTH_RADIUS_M * toRad;
-  const latScale = EARTH_RADIUS_M * toRad;
-  return (point: LatLng): Planar => ({
-    x: (point.lng - origin.lng) * lngScale,
-    y: (point.lat - origin.lat) * latScale,
-  });
-};
-
-const distanceToSegment = (p: Planar, a: Planar, b: Planar): number => {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const lengthSq = dx * dx + dy * dy;
-  if (lengthSq === 0) return Math.hypot(p.x - a.x, p.y - a.y);
-  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSq));
-  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
-};
-
-/** Douglas–Peucker, with an explicit stack: a long ride would overflow recursion. */
-const simplify = (points: readonly Planar[], toleranceM: number): number[] => {
-  const keep = new Array<boolean>(points.length).fill(false);
-  keep[0] = true;
-  keep[points.length - 1] = true;
-
-  const stack: [number, number][] = [[0, points.length - 1]];
-  while (stack.length > 0) {
-    const [first, last] = stack.pop()!;
-    let farthest = -1;
-    let farthestDistance = toleranceM;
-
-    for (let i = first + 1; i < last; i += 1) {
-      const distance = distanceToSegment(points[i]!, points[first]!, points[last]!);
-      if (distance > farthestDistance) {
-        farthest = i;
-        farthestDistance = distance;
-      }
-    }
-
-    if (farthest !== -1) {
-      keep[farthest] = true;
-      stack.push([first, farthest], [farthest, last]);
-    }
-  }
-
-  return keep.flatMap((isKept, index) => (isKept ? [index] : []));
-};
 
 /**
  * Douglas–Peucker slows sharply on jittery input, so it is given at most this
@@ -117,13 +61,7 @@ export const routeFromTrack = (samples: readonly TrackSample[]): RouteGeometry |
   if (distanceM < MIN_ROUTE_DISTANCE_M) return null;
 
   const candidates = thinForSimplify(points);
-  const planar = candidates.map(projector(candidates[0]!));
-  let tolerance = INITIAL_TOLERANCE_M;
-  let kept = simplify(planar, tolerance);
-  while (kept.length > MAX_ROUTE_POINTS) {
-    tolerance *= TOLERANCE_GROWTH;
-    kept = simplify(planar, tolerance);
-  }
+  const kept = simplifyToAtMost(candidates, MAX_ROUTE_POINTS, INITIAL_TOLERANCE_M);
 
   return {
     coordinates: kept.map((index) => [candidates[index]!.lng, candidates[index]!.lat]),

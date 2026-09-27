@@ -49,6 +49,11 @@ export interface DirectionsRequest {
   /** Stopovers. Each one adds a leg to every returned route. */
   waypoints?: LatLngLiteral[] | undefined;
   /**
+   * Points along a road the route must follow, in riding order. They bend the
+   * route without adding legs; the provider threads them between the stops.
+   */
+  via?: LatLngLiteral[] | undefined;
+  /**
    * Ask Google for alternative routes so the caller can pick the fastest.
    * Google only returns alternatives for requests without stopovers.
    */
