@@ -9,6 +9,7 @@ import {
 } from "lucide-react-native";
 import type { ComponentType } from "react";
 import type { ColorValue } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { FEATURES } from "../../src/core/features/features";
 
@@ -21,6 +22,9 @@ import { FEATURES } from "../../src/core/features/features";
 const tabIcon =
   (Icon: ComponentType<{ size?: number; color?: string }>) =>
   ({ color }: { color: ColorValue }) => <Icon size={24} color={color as string} />;
+
+const TAB_BAR_HEIGHT = 60;
+const TAB_BAR_PADDING = 8;
 
 const TABS_DETAILS = [
   { name: "feed",
@@ -58,6 +62,9 @@ const TABS_DETAILS = [
 
 export default function TabLayout() {
   const { colors } = useTheme();
+  // Android draws edge to edge, so the gesture bar sits over the app; the
+  // tab bar grows by the inset instead of letting it cover the labels.
+  const { bottom: bottomInset } = useSafeAreaInsets();
 
   return (
     <Tabs
@@ -66,9 +73,9 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: colors.tabBar,
           borderTopColor: colors.tabBarBorder,
-          paddingBottom: 8,
-          paddingTop: 8,
-          height: 60,
+          paddingBottom: TAB_BAR_PADDING + bottomInset,
+          paddingTop: TAB_BAR_PADDING,
+          height: TAB_BAR_HEIGHT + bottomInset,
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.tabBarInactive,
