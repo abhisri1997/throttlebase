@@ -2268,8 +2268,8 @@ useEffect(() => {
                   </Text>
                 </View>
               </TouchableOpacity>
-              {/* Captain: Promote button for regular riders */}
-              {isCaptain && p.role === "rider" && (
+              {/* Captain: Promote button for regular riders, while the ride is still on */}
+              {isCaptain && !isTerminalRideStatus && p.role === "rider" && (
                 <TouchableOpacity
                   onPress={() => handlePromote(p.rider_id, p.display_name)}
                   className='px-3 py-1.5 rounded-full'
@@ -2451,89 +2451,92 @@ useEffect(() => {
         </View>
       </ScrollView>
 
-      {/* Floating Action Button */}
-      <View className='absolute bottom-6 left-5 right-5 pb-5 pt-4'>
-        {isParticipant ? (
-          <View
-            className='p-4 rounded-2xl w-full shadow-lg'
-            style={{
-              backgroundColor: colors.surface,
-              borderWidth: 1,
-              borderColor: colors.border,
-            }}
-          >
-            <Text
-              className='font-bold text-center text-lg'
-              style={{ color: colors.text }}
+      {/* Floating Action Button: joining, the meeting point and the "you're in"
+          banner only mean something until the ride is over. */}
+      {!isTerminalRideStatus && (
+        <View className='absolute bottom-6 left-5 right-5 pb-5 pt-4'>
+          {isParticipant ? (
+            <View
+              className='p-4 rounded-2xl w-full shadow-lg'
+              style={{
+                backgroundColor: colors.surface,
+                borderWidth: 1,
+                borderColor: colors.border,
+              }}
             >
-              You are participating in this ride! 🎉
-            </Text>
-            {ride.start_point_auto && (
-              <View className='mt-3'>
-                {/* The meeting point is derived from where everyone rides
-                    from, so it is shown here — otherwise the button below
-                    reads as if it sets the ride's start point itself. */}
-                <Text className='text-xs' style={{ color: colors.textMuted }}>
-                  Meeting point · set automatically
-                </Text>
-                <Text
-                  className='font-semibold mt-0.5'
-                  style={{ color: ride.start_point_name ? colors.text : colors.textMuted }}
-                >
-                  {ride.start_point_name ??
-                    "Waiting for riders to say where they're riding from"}
-                </Text>
-
-                {canSetStartOverride ? (
-                  <LocationPicker
-                    label={startOverrideLabel}
-                    onSelect={(result) =>
-                      updateLocationMutation.mutate(result.coords)
-                    }
-                    customTrigger={(showModal) => (
-                      <TouchableOpacity
-                        onPress={showModal}
-                        className='mt-3 p-3 rounded-xl items-center'
-                        style={{ backgroundColor: colors.primary }}
-                      >
-                        {updateLocationMutation.isPending ? (
-                          <ActivityIndicator color='white' />
-                        ) : (
-                          <Text className='font-bold text-white'>
-                            {startOverrideLabel}
-                          </Text>
-                        )}
-                      </TouchableOpacity>
-                    )}
-                  />
-                ) : (
-                  <Text className='text-xs mt-2' style={{ color: colors.textMuted }}>
-                    The meeting point is locked in 12 hours before the ride.
-                  </Text>
-                )}
-              </View>
-            )}
-          </View>
-        ) : (
-          <TouchableOpacity
-            onPress={handleJoinAttempt}
-            disabled={joinMutation.isPending || isFull}
-            className='p-4 rounded-2xl shadow-lg'
-            style={{ backgroundColor: isFull ? colors.border : colors.primary }}
-          >
-            {joinMutation.isPending ? (
-              <ActivityIndicator color='white' />
-            ) : (
               <Text
                 className='font-bold text-center text-lg'
-                style={{ color: "#ffffff" }}
+                style={{ color: colors.text }}
               >
-                {isFull ? "Ride is Full" : "Join Ride"}
+                You are participating in this ride! 🎉
               </Text>
-            )}
-          </TouchableOpacity>
-        )}
-      </View>
+              {ride.start_point_auto && (
+                <View className='mt-3'>
+                  {/* The meeting point is derived from where everyone rides
+                      from, so it is shown here — otherwise the button below
+                      reads as if it sets the ride's start point itself. */}
+                  <Text className='text-xs' style={{ color: colors.textMuted }}>
+                    Meeting point · set automatically
+                  </Text>
+                  <Text
+                    className='font-semibold mt-0.5'
+                    style={{ color: ride.start_point_name ? colors.text : colors.textMuted }}
+                  >
+                    {ride.start_point_name ??
+                      "Waiting for riders to say where they're riding from"}
+                  </Text>
+
+                  {canSetStartOverride ? (
+                    <LocationPicker
+                      label={startOverrideLabel}
+                      onSelect={(result) =>
+                        updateLocationMutation.mutate(result.coords)
+                      }
+                      customTrigger={(showModal) => (
+                        <TouchableOpacity
+                          onPress={showModal}
+                          className='mt-3 p-3 rounded-xl items-center'
+                          style={{ backgroundColor: colors.primary }}
+                        >
+                          {updateLocationMutation.isPending ? (
+                            <ActivityIndicator color='white' />
+                          ) : (
+                            <Text className='font-bold text-white'>
+                              {startOverrideLabel}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                    />
+                  ) : (
+                    <Text className='text-xs mt-2' style={{ color: colors.textMuted }}>
+                      The meeting point is locked in 12 hours before the ride.
+                    </Text>
+                  )}
+                </View>
+              )}
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={handleJoinAttempt}
+              disabled={joinMutation.isPending || isFull}
+              className='p-4 rounded-2xl shadow-lg'
+              style={{ backgroundColor: isFull ? colors.border : colors.primary }}
+            >
+              {joinMutation.isPending ? (
+                <ActivityIndicator color='white' />
+              ) : (
+                <Text
+                  className='font-bold text-center text-lg'
+                  style={{ color: "#ffffff" }}
+                >
+                  {isFull ? "Ride is Full" : "Join Ride"}
+                </Text>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* Hidden Location Picker for Join Flow Override */}
       {showJoinOverridePicker && (
