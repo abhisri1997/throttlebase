@@ -44,9 +44,10 @@ export const getRoute = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-export const listRoutes = async (_req: Request, res: Response): Promise<void> => {
+export const listRoutes = async (req: Request, res: Response): Promise<void> => {
   try {
-    const routes = await RouteService.listPublicRoutes();
+    const viewerId = (req.rider as unknown as RiderPayload).riderId;
+    const routes = await RouteService.listVisibleRoutes(viewerId);
     res.json(routes);
   } catch (error: any) {
     console.error('Error listing routes:', error);

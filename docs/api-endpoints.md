@@ -47,7 +47,7 @@ Sign-in is passwordless: Google, Apple, or a one-time email code.
 
 ## Routes
 
-- `GET /api/routes`
+- `GET /api/routes` (public routes, plus the caller's own private ones)
 - `POST /api/routes`
 - `POST /api/routes/traces`
 - `GET /api/routes/traces/:rideId`
@@ -122,6 +122,7 @@ Sign-in is passwordless: Google, Apple, or a one-time email code.
 - `POST /api/rides/:id/live/end` — `409 UNFINISHED_RIDERS` with the riders still out unless `confirm_unfinished: true`
 - `POST /api/rides/:id/live/me/start` — start your own ride, up to 60 min early; opens the session if nobody has
 - `POST /api/rides/:id/live/me/finish` — finish your own ride: `arrived` near the destination, `left_early` elsewhere
+- `POST /api/rides/:id/route` — save your own track on a completed ride as a route: `{ title, visibility }`; 201 created, 200 with the route already saved, 409 not completed, 422 too little recorded
 - `POST /api/rides/:id/live/me/resume` — take back a finish while the group ride is live
 - `GET /api/rides/:id/live/session` — participants include `progress`, `finished_at`, `finish_reason`, `arrived_at`, `distance_to_destination_m`
 - `POST /api/rides/:id/live/incident`

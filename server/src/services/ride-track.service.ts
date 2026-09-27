@@ -39,7 +39,7 @@ const toIso = (value: unknown): string | null => {
 const msToIso = (value: number | null): string | null =>
   value === null ? null : new Date(value).toISOString();
 
-const assertConfirmedParticipant = async (rideId: string, riderId: string): Promise<void> => {
+export const assertConfirmedParticipant = async (rideId: string, riderId: string): Promise<void> => {
   const result = await query(
     `SELECT (
        r.captain_id = $2 OR EXISTS (
@@ -61,6 +61,28 @@ const assertConfirmedParticipant = async (rideId: string, riderId: string): Prom
   }
 };
 
+/** One rider's recorded fixes for a session, oldest first. */
+export const loadRiderSamples = async (sessionId: string, riderId: string): Promise<TrackSample[]> => {
+  const result = await query(
+    `SELECT ST_Y(location::geometry) AS lat,
+            ST_X(location::geometry) AS lng,
+            accuracy_m,
+            captured_at
+     FROM ride_live_location_samples
+     WHERE session_id = $1
+       AND rider_id = $2
+     ORDER BY captured_at ASC, id ASC
+     LIMIT $3`,
+    [sessionId, riderId, MAX_TRACK_SAMPLES],
+  );
+  return result.rows.map((row) => ({
+    lat: Number(row.lat),
+    lng: Number(row.lng),
+    accuracyM: row.accuracy_m != null ? Number(row.accuracy_m) : null,
+    capturedAtMs: new Date(row.captured_at).getTime(),
+  }));
+};
+
 /** The caller's own track for a ride. Other riders' tracks are not exposed here. */
 export const getRiderTrack = async (
   rideId: string,
@@ -77,19 +99,8 @@ export const getRiderTrack = async (
   const sessionRow = sessionResult.rows[0];
   if (!sessionRow) throw new LiveSessionError("No live session found for this ride", 404);
 
-  const [samplesResult, arrivalsResult] = await Promise.all([
-    query(
-      `SELECT ST_Y(location::geometry) AS lat,
-              ST_X(location::geometry) AS lng,
-              accuracy_m,
-              captured_at
-       FROM ride_live_location_samples
-       WHERE session_id = $1
-         AND rider_id = $2
-       ORDER BY captured_at ASC, id ASC
-       LIMIT $3`,
-      [sessionRow.id, riderId, MAX_TRACK_SAMPLES],
-    ),
+  const [samples, arrivalsResult] = await Promise.all([
+    loadRiderSamples(String(sessionRow.id), riderId),
     query(
       `SELECT DISTINCT ON (payload->>'waypoint_id')
               payload->>'waypoint_id' AS waypoint_id,
@@ -104,12 +115,6 @@ export const getRiderTrack = async (
     ),
   ]);
 
-  const samples: TrackSample[] = samplesResult.rows.map((row) => ({
-    lat: Number(row.lat),
-    lng: Number(row.lng),
-    accuracyM: row.accuracy_m != null ? Number(row.accuracy_m) : null,
-    capturedAtMs: new Date(row.captured_at).getTime(),
-  }));
   const track = buildTrack(samples);
 
   const waypointArrivals = arrivalsResult.rows

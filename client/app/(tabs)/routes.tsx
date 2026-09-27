@@ -6,8 +6,6 @@ import {
   ActivityIndicator,
   RefreshControl,
   TouchableOpacity,
-  Alert,
-  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
@@ -77,7 +75,7 @@ export default function ExploreRoutesScreen() {
         ListEmptyComponent={
           <View className='flex-1 justify-center items-center px-6'>
             <Text className='mb-4 text-center' style={{ color: colors.textMuted }}>
-              No routes found.
+              No routes yet. Finish a ride, then save it as a route from the ride's page to share it here.
             </Text>
           </View>
         }
@@ -125,18 +123,10 @@ export default function ExploreRoutesScreen() {
       </View>
       {renderContent()}
       <TouchableOpacity
-        onPress={() => {
-          if (Platform.OS === "web") {
-            alert(
-              "Live Route tracking requires a physical mobile device with GPS sensors!",
-            );
-          } else {
-            Alert.alert(
-              "Not Enabled",
-              "Live GPS route tracking is in development.",
-            );
-          }
-        }}
+        // Routes are saved from finished rides, which live in ride history.
+        onPress={() => router.push("/ride-history")}
+        accessibilityRole='button'
+        accessibilityLabel='Save a route from one of your rides'
         className='absolute bottom-6 right-6 w-14 h-14 rounded-full items-center justify-center shadow-lg'
         style={{ backgroundColor: colors.primary }}
         activeOpacity={0.8}

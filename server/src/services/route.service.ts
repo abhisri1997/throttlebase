@@ -87,14 +87,16 @@ export const getRouteById = async (
   return result.rows.length ? (result.rows[0] as Route) : null;
 };
 
-export const listPublicRoutes = async (): Promise<Route[]> => {
+/** Public routes, plus the viewer's own private ones so "only me" stays findable. */
+export const listVisibleRoutes = async (viewerId: string): Promise<Route[]> => {
   const result = await query(
     `SELECT r.*, rd.display_name AS creator_name
      FROM routes r
      JOIN riders rd ON r.creator_id = rd.id
-     WHERE r.visibility = 'public'
+     WHERE r.visibility = 'public' OR r.creator_id = $1
      ORDER BY r.created_at DESC
      LIMIT 50`,
+    [viewerId],
   );
   return result.rows as Route[];
 };
