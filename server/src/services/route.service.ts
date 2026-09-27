@@ -27,9 +27,65 @@ export interface Route {
   visibility: string;
   proposal_status: string | null;
   created_at: string;
+  start_name: string | null;
+  end_name: string | null;
+  start_lat: number | null;
+  start_lng: number | null;
+  end_lat: number | null;
+  end_lng: number | null;
+  highlights: string[];
+  ridden_duration_s: number | null;
+  /** Names of the stops in order, for "via Mysuru · Gundlupet". */
+  via: string[];
   // JOIN fields
   creator_name?: string;
 }
+
+export interface RouteStop {
+  position: number;
+  name: string | null;
+  lat: number;
+  lng: number;
+  note: string | null;
+  distance_from_start_km: number | null;
+}
+
+export type RouteWithStops = Route & { stops: RouteStop[] };
+
+/** Every route read uses these, so points come back as numbers, not PostGIS hex. */
+export const ROUTE_COLUMNS = `
+  r.id, r.creator_id, r.ride_id, r.parent_route_id, r.title, r.geojson,
+  r.distance_km, r.elevation_gain_m, r.elevation_loss_m, r.difficulty,
+  r.visibility, r.proposal_status, r.created_at,
+  r.start_name, r.end_name,
+  ST_Y(r.start_point::geometry) AS start_lat, ST_X(r.start_point::geometry) AS start_lng,
+  ST_Y(r.end_point::geometry) AS end_lat, ST_X(r.end_point::geometry) AS end_lng,
+  r.highlights, r.ridden_duration_s,
+  ARRAY(
+    SELECT rs.name FROM route_stops rs
+    WHERE rs.route_id = r.id AND rs.name IS NOT NULL
+    ORDER BY rs.position
+  ) AS via`;
+
+export const listRouteStops = async (routeId: string): Promise<RouteStop[]> => {
+  const result = await query(
+    `SELECT position, name, note,
+            ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng,
+            distance_from_start_km
+     FROM route_stops
+     WHERE route_id = $1
+     ORDER BY position`,
+    [routeId],
+  );
+  return result.rows.map((row) => ({
+    position: Number(row.position),
+    name: row.name ?? null,
+    lat: Number(row.lat),
+    lng: Number(row.lng),
+    note: row.note ?? null,
+    distance_from_start_km: row.distance_from_start_km != null ? Number(row.distance_from_start_km) : null,
+  }));
+};
 
 // ---------------------------------------------------------------------------
 // Routes CRUD
@@ -67,10 +123,10 @@ export const createRoute = async (
 export const getRouteById = async (
   routeId: string,
   viewerId: string,
-): Promise<Route | null> => {
+): Promise<RouteWithStops | null> => {
   // Fetch route with creator name, respecting visibility
   const result = await query(
-    `SELECT r.*, rd.display_name AS creator_name
+    `SELECT ${ROUTE_COLUMNS}, rd.display_name AS creator_name
      FROM routes r
      JOIN riders rd ON r.creator_id = rd.id
      WHERE r.id = $1
@@ -84,13 +140,15 @@ export const getRouteById = async (
        )`,
     [routeId, viewerId],
   );
-  return result.rows.length ? (result.rows[0] as Route) : null;
+  const route = result.rows[0] as Route | undefined;
+  if (!route) return null;
+  return { ...route, stops: await listRouteStops(routeId) };
 };
 
 /** Public routes, plus the viewer's own private ones so "only me" stays findable. */
 export const listVisibleRoutes = async (viewerId: string): Promise<Route[]> => {
   const result = await query(
-    `SELECT r.*, rd.display_name AS creator_name
+    `SELECT ${ROUTE_COLUMNS}, rd.display_name AS creator_name
      FROM routes r
      JOIN riders rd ON r.creator_id = rd.id
      WHERE r.visibility = 'public' OR r.creator_id = $1

@@ -177,6 +177,31 @@ export const reverseGeocode = (
   });
 };
 
+/** Area names change far more slowly than addresses are looked up. */
+const AREA_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const CACHE_CATEGORY_GEOCODE_AREA = "geocode_area";
+
+export interface AreaNameResult {
+  areaName: string | null;
+}
+
+/** The area a point is in, for naming a route's ends. Cached and budgeted like any Google call. */
+export const reverseGeocodeArea = (
+  coords: LatLngLiteral,
+  deps: MapsServiceDeps,
+): Promise<AreaNameResult> => {
+  const lat = Number(coords.lat.toFixed(GEOCODE_COORD_PRECISION));
+  const lng = Number(coords.lng.toFixed(GEOCODE_COORD_PRECISION));
+
+  return withCacheAndBudget<AreaNameResult>(deps, {
+    api: USAGE_API_GEOCODING,
+    cacheKey: hashKey(CACHE_CATEGORY_GEOCODE_AREA, lat, lng),
+    category: CACHE_CATEGORY_GEOCODE_AREA,
+    ttlMs: AREA_CACHE_TTL_MS,
+    call: async () => ({ areaName: await deps.provider.reverseGeocodeArea({ lat, lng }) }),
+  });
+};
+
 /**
  * Autocomplete is never cached: predictions are keystroke-scoped, and Google
  * bills a session rather than a request, so caching would break the session

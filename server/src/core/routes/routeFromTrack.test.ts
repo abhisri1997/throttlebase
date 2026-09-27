@@ -101,3 +101,10 @@ test("a long winding ride is capped to a bounded number of points", () => {
   assert.ok(route);
   assert.ok(route.coordinates.length <= MAX_ROUTE_POINTS, `${route.coordinates.length} points`);
 });
+
+test("the route keeps how long the ride took, first fix to last", () => {
+  const route = routeFromTrack(straightRide(200));
+
+  assert.ok(route);
+  assert.equal(route.durationS, 199);
+});

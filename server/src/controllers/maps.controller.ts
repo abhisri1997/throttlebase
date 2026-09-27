@@ -14,7 +14,7 @@ import {
   reverseGeocode,
 } from "../services/maps.service.js";
 import { MapsApiError, type MapsProvider } from "../services/maps/mapsProvider.js";
-import { createGoogleMapsProvider } from "../services/maps/googleMapsProvider.js";
+import { resolveMapsProvider } from "../services/maps/resolveProvider.js";
 
 /**
  * HTTP surface for the Google proxy.
@@ -35,25 +35,7 @@ const UPSTREAM_RESPONSE = {
   code: "maps_upstream",
 } as const;
 
-let cachedProvider: MapsProvider | null = null;
-
-/**
- * Builds the provider once per process. Returns null when the key is missing,
- * which is a deployment fault rather than a client one — it is logged loudly
- * and reported as an upstream failure.
- */
-const resolveProvider = (): MapsProvider | null => {
-  if (cachedProvider) return cachedProvider;
-
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-  if (!apiKey) {
-    console.error("[maps] GOOGLE_MAPS_API_KEY is not configured; /api/maps is disabled.");
-    return null;
-  }
-
-  cachedProvider = createGoogleMapsProvider({ apiKey });
-  return cachedProvider;
-};
+const resolveProvider = resolveMapsProvider;
 
 /** Maps any thrown error onto the client-visible contract. */
 const sendError = (res: Response, error: unknown, label: string): void => {

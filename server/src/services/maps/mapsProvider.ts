@@ -157,6 +157,8 @@ export interface MapsProvider {
   getDirections(request: DirectionsRequest): Promise<DirectionsResult>;
   /** Resolves to null when Google has no address for the point. */
   reverseGeocode(coords: LatLngLiteral): Promise<string | null>;
+  /** The area a point is in ("HSR Layout, Bengaluru"); null when Google names none. */
+  reverseGeocodeArea(coords: LatLngLiteral): Promise<string | null>;
   autocompletePlaces(request: AutocompleteRequest): Promise<PlacePrediction[]>;
   /** Resolves to null when the place id is unknown or returns no coordinates. */
   getPlaceDetails(request: PlaceDetailsRequest): Promise<PlaceDetails | null>;
