@@ -30,6 +30,7 @@ import {
   isSwaggerDocsEnabled,
   requireSwaggerBasicAuth,
 } from "./config/security.js";
+import { featureFlags, requireFeature } from "./config/features.js";
 
 const app = express();
 
@@ -199,13 +200,16 @@ app.use("/.well-known", createJwksRoute(authContainer));
 app.use("/api/riders", riderRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/routes", routeRoutes);
+// Groups, rank, support and account security are held back from the closed
+// beta; see config/features.ts. Groups live inside the community router, so
+// their gate is mounted on the sub-path ahead of it.
+app.use("/api/community/groups", requireFeature(featureFlags.groups));
 app.use("/api/community", communityRoutes);
-app.use("/api/rewards", rewardsRoutes);
+app.use("/api/rewards", requireFeature(featureFlags.rank), rewardsRoutes);
 app.use("/api/notifications", notificationRoutes);
-app.use("/api/support", supportRoutes);
-// Active sessions and login history for the settings screen. The router
-// existed but was never mounted, so these endpoints have always returned 404.
-app.use("/api/security", securityRoutes);
+app.use("/api/support", requireFeature(featureFlags.support), supportRoutes);
+// Active sessions and login history for the settings screen.
+app.use("/api/security", requireFeature(featureFlags.accountSecurity), securityRoutes);
 app.use("/api/live", liveSessionRoutes);
 app.use("/api/stop-suggestions", stopSuggestionRoutes);
 app.use("/api/maps", mapsRoutes);

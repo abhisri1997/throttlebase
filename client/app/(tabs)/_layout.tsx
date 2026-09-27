@@ -10,6 +10,7 @@ import {
 import type { ComponentType } from "react";
 import type { ColorValue } from "react-native";
 import { useTheme } from "../../src/theme/ThemeContext";
+import { FEATURES } from "../../src/core/features/features";
 
 /**
  * expo-router types `tabBarIcon`'s color as RN's ColorValue, which widens to
@@ -38,11 +39,13 @@ const TABS_DETAILS = [
   },
   {
     name: "groups",
+    isEnabled: FEATURES.groups,
     title: "Groups",
     tabBarIcon: tabIcon(Users)
   },
   {
     name: "rewards",
+    isEnabled: FEATURES.rank,
     title: "Rank",
     tabBarIcon: tabIcon(Trophy)
   },
@@ -78,6 +81,9 @@ export default function TabLayout() {
           options={{
             title: tab.title,
             tabBarIcon: tab.tabBarIcon,
+            // A held-back tab stays declared, or expo-router would add its
+            // file back as a visible tab; href null hides it instead.
+            ...(tab.isEnabled === false ? { href: null } : {}),
           }}
         />
       ))}

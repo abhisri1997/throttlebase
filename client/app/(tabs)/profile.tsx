@@ -13,6 +13,7 @@ import { authService } from "../../src/services/auth";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
+import { FEATURES } from "../../src/core/features/features";
 import { LogOut, Edit2, Settings } from "lucide-react-native";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { NotificationBell } from "../../src/components/NotificationBell";
@@ -45,10 +46,13 @@ export default function ProfileScreen() {
       const { data } = await apiClient.get("/api/rewards/badges/me");
       return data;
     },
+    // Badges belong to Rank, which is held back from the beta.
+    enabled: FEATURES.rank,
   });
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
-    await Promise.all([profileRefetch(), badgesRefetch()]);
+    // refetch() ignores `enabled`, so the badge call is skipped explicitly.
+    await Promise.all([profileRefetch(), FEATURES.rank ? badgesRefetch() : undefined]);
   });
 
   const handleLogout = async () => {
@@ -309,40 +313,42 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* Badges Section */}
-        <View className='p-5 mb-10'>
-          <Text
-            className='text-xl font-bold mb-4'
-            style={{ color: colors.text }}
-          >
-            My Badges
-          </Text>
-          {badgesLoading ? (
-            <ActivityIndicator color={colors.primary} size='small' />
-          ) : badges && badges.length > 0 ? (
-            <View className='flex-row flex-wrap'>
-              {badges.map((b: any, i: number) => (
-                <View
-                  key={i}
-                  className='p-3 rounded-2xl mr-3 mb-3 items-center w-24'
-                  style={{ borderWidth: 1, borderColor: colors.primary + "4D" }}
-                >
-                  <Text className='text-2xl mb-1'>{b.icon || "🏅"}</Text>
-                  <Text
-                    className='text-xs text-center font-bold px-1'
-                    style={{ color: colors.text }}
-                  >
-                    {b.name}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <Text className='italic' style={{ color: colors.textMuted }}>
-              No badges earned yet
+        {/* Badges Section — part of Rank, held back from the beta */}
+        {FEATURES.rank && (
+          <View className='p-5 mb-10'>
+            <Text
+              className='text-xl font-bold mb-4'
+              style={{ color: colors.text }}
+            >
+              My Badges
             </Text>
-          )}
-        </View>
+            {badgesLoading ? (
+              <ActivityIndicator color={colors.primary} size='small' />
+            ) : badges && badges.length > 0 ? (
+              <View className='flex-row flex-wrap'>
+                {badges.map((b: any, i: number) => (
+                  <View
+                    key={i}
+                    className='p-3 rounded-2xl mr-3 mb-3 items-center w-24'
+                    style={{ borderWidth: 1, borderColor: colors.primary + "4D" }}
+                  >
+                    <Text className='text-2xl mb-1'>{b.icon || "🏅"}</Text>
+                    <Text
+                      className='text-xs text-center font-bold px-1'
+                      style={{ color: colors.text }}
+                    >
+                      {b.name}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text className='italic' style={{ color: colors.textMuted }}>
+                No badges earned yet
+              </Text>
+            )}
+          </View>
+        )}
       </ScrollView>
     </View>
   );
