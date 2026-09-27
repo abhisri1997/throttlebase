@@ -10,21 +10,29 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
-import { RouteCard } from "../../src/components/RouteCard";
+import { RouteCard, type RouteListItem } from "../../src/features/routes/components/RouteCard";
+import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { Plus } from "lucide-react-native";
 import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
 import { useRouter } from "expo-router";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { NotificationBell } from "../../src/components/NotificationBell";
 
-const fetchRoutes = async () => {
+const fetchRoutes = async (): Promise<RouteListItem[]> => {
   const { data } = await apiClient.get("/api/routes");
-  return data;
+  if (!Array.isArray(data)) return [];
+  // A server from before route places (or a partial row) omits these lists.
+  return data.map((route: RouteListItem) => ({
+    ...route,
+    via: Array.isArray(route.via) ? route.via : [],
+    highlights: Array.isArray(route.highlights) ? route.highlights : [],
+  }));
 };
 
 export default function ExploreRoutesScreen() {
   const { colors } = useTheme();
   const router = useRouter();
+  const { riderId } = useCurrentRider();
 
   const {
     data: routes,
@@ -68,7 +76,8 @@ export default function ExploreRoutesScreen() {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <RouteCard
-            routeData={item}
+            route={item}
+            viewerId={riderId}
             onPress={() => router.push(`/route/${item.id}` as any)}
           />
         )}
