@@ -26,6 +26,8 @@ export interface RideRouteSource {
   start_point_name?: string | null;
   end_point_name?: string | null;
   stops?: unknown;
+  /** Set when the ride follows a saved route's road: [[lng, lat], ...] in riding order. */
+  road_via?: unknown;
 }
 
 export const START_WAYPOINT_ID = "start";
@@ -144,3 +146,20 @@ export const tripPlanKey = (waypoints: readonly TripWaypoint[]): string =>
         `${waypoint.id}@${waypoint.coordinate.latitude.toFixed(5)},${waypoint.coordinate.longitude.toFixed(5)}`,
     )
     .join("|");
+
+/**
+ * The points that hold a ride to its route's road, for every Directions
+ * request made for it. Empty when the ride takes whatever road Google picks.
+ */
+export const rideRoadVia = (ride: Pick<RideRouteSource, "road_via"> | null | undefined): LatLng[] => {
+  const raw = ride?.road_via;
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((coordinates) => {
+    const point = toLatLng(coordinates);
+    return point ? [point] : [];
+  });
+};
+
+/** Identifies the road a plan follows, for caching alongside tripPlanKey. */
+export const roadViaKey = (via: readonly LatLng[]): string =>
+  via.map((point) => `${point.latitude.toFixed(5)},${point.longitude.toFixed(5)}`).join(";");

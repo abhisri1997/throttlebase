@@ -59,6 +59,8 @@ interface RouteRequest {
   destination: LatLng;
   /** Stopovers. Each one adds a leg to the result. */
   waypoints?: LatLng[];
+  /** A saved route's road to follow. Bends the route without adding legs. */
+  via?: readonly LatLng[];
   /** Pick the fastest of Google's alternatives. Only possible without stopovers. */
   preferFastest?: boolean;
   /**
@@ -90,6 +92,7 @@ const buildRouteRequestKey = (input: RouteRequest): string =>
     serializePoint(input.origin),
     ...(input.waypoints || []).map(serializePoint),
     serializePoint(input.destination),
+    `via:${(input.via || []).map(serializePoint).join(";")}`,
     input.preferFastest === false ? "first-route" : "fastest-route",
     input.trafficAware ? "traffic" : "no-traffic",
   ].join("|");
@@ -453,6 +456,7 @@ export const fetchNavigationRoute = async (input: RouteRequest): Promise<Navigat
         origin: toProxyPoint(input.origin),
         destination: toProxyPoint(input.destination),
         ...(hasStopovers ? { waypoints: waypoints.map(toProxyPoint) } : {}),
+        ...(input.via && input.via.length > 0 ? { via: input.via.map(toProxyPoint) } : {}),
         // The proxy drops both of these when stopovers are present, because
         // Google returns neither for such a request while still billing for it.
         preferFastest: input.preferFastest !== false,
@@ -507,6 +511,7 @@ export const fetchNavigationRoute = async (input: RouteRequest): Promise<Navigat
  */
 export const fetchPlannedRideRoute = (
   points: readonly LatLng[],
+  via: readonly LatLng[] = [],
 ): Promise<NavigationRoute> => {
   const origin = points[0];
   const destination = points[points.length - 1];
@@ -521,6 +526,7 @@ export const fetchPlannedRideRoute = (
     origin,
     destination,
     waypoints: points.slice(1, -1),
+    via,
     preferFastest: false,
     trafficAware: false,
   });
@@ -534,10 +540,12 @@ export const fetchPlannedRideRoute = (
 export const fetchLiveLeg = (
   origin: LatLng,
   destination: LatLng,
+  via: readonly LatLng[] = [],
 ): Promise<NavigationRoute> =>
   fetchNavigationRoute({
     origin,
     destination,
+    via,
     preferFastest: true,
     trafficAware: true,
   });

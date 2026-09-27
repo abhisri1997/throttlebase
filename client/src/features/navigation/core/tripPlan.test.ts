@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildTripPlan, tripPlanKey, type RideRouteSource } from "./tripPlan";
+import { buildTripPlan, rideRoadVia, roadViaKey, tripPlanKey, type RideRouteSource } from "./tripPlan";
 
 const ride: RideRouteSource = {
   start_point_geojson: { coordinates: [77.49, 10.23] },
@@ -111,4 +111,34 @@ test("the plan key changes when a stop moves", () => {
 
   assert.notEqual(tripPlanKey(plan), tripPlanKey(moved));
   assert.equal(tripPlanKey(plan), tripPlanKey([...plan]));
+});
+
+test("a ride that follows a road hands its points to Directions in riding order", () => {
+  const via = rideRoadVia({
+    road_via: [
+      [77.05, 12.91],
+      [77.1, 12.89],
+    ],
+  });
+
+  assert.deepEqual(via, [
+    { latitude: 12.91, longitude: 77.05 },
+    { latitude: 12.89, longitude: 77.1 },
+  ]);
+});
+
+test("a ride with no road to follow, or one it cannot read, has no points", () => {
+  assert.deepEqual(rideRoadVia({ road_via: null }), []);
+  assert.deepEqual(rideRoadVia({}), []);
+  assert.deepEqual(rideRoadVia({ road_via: "nonsense" }), []);
+  assert.deepEqual(rideRoadVia({ road_via: [[77.05, 12.91], [500, 12.9], ["x", 1]] }), [
+    { latitude: 12.91, longitude: 77.05 },
+  ]);
+});
+
+test("following a road or not is a different plan to fetch", () => {
+  const via = [{ latitude: 12.91, longitude: 77.05 }];
+
+  assert.equal(roadViaKey([]), "");
+  assert.notEqual(roadViaKey(via), roadViaKey([]));
 });
