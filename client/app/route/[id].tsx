@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -6,26 +6,23 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
+  Share,
 } from "react-native";
+import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
 import { goBackOr } from "../../src/utils/goBack";
 import { getApiErrorMessage } from "../../src/utils/apiError";
+import { buildShareLinks } from "../../src/utils/shareLinks";
+import { formatDistance } from "../../src/features/navigation/core/format";
 import MapView, {
   Polyline,
   Marker,
   PROVIDER_GOOGLE,
 } from "../../src/components/MapWrapper";
-import {
-  Map,
-  Mountain,
-  TrendingUp,
-  ChevronLeft,
-  Bookmark,
-  Share2,
-} from "lucide-react-native";
+import { Map, ChevronLeft, Bookmark, Share2 } from "lucide-react-native";
 import { useTheme } from "../../src/theme/ThemeContext";
 
 const fetchRouteDetails = async (id: string) => {
@@ -38,11 +35,36 @@ const bookmarkRoute = async (id: string) => {
   return data;
 };
 
+const START_COLOR = "#22c55e";
+const DESTINATION_COLOR = "#ef4444";
+const MAP_EDGE_PADDING = { top: 90, right: 50, bottom: 50, left: 50 };
+
+/** A lettered map pin, so the ends read as A (start) and B (destination). */
+function EndpointMarker({ letter, color }: { letter: string; color: string }) {
+  return (
+    <View
+      style={{
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: color,
+        borderWidth: 2,
+        borderColor: "#ffffff",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Text style={{ color: "#ffffff", fontWeight: "800", fontSize: 14 }}>{letter}</Text>
+    </View>
+  );
+}
+
 export default function RouteDetailScreen() {
   const { colors } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const mapRef = useRef<InstanceType<typeof MapView> | null>(null);
 
   const {
     data: route,
@@ -106,6 +128,32 @@ export default function RouteDetailScreen() {
     day: "numeric",
     year: "numeric",
   });
+  const distanceKm = Number(route.distance_km);
+  const distanceLabel = Number.isFinite(distanceKm) && distanceKm > 0 ? formatDistance(distanceKm * 1000) : null;
+
+  // Show the whole route, not a fixed zoom around its start.
+  const fitMapToRoute = () => {
+    if (mapCoords.length > 1) {
+      mapRef.current?.fitToCoordinates(mapCoords, { edgePadding: MAP_EDGE_PADDING, animated: false });
+    }
+  };
+
+  const handleShare = async () => {
+    const { primaryLink } = buildShareLinks(
+      `/route/${route.id}`,
+      (path) => Linking.createURL(path, { scheme: "throttlebase" }),
+      process.env.EXPO_PUBLIC_SHARE_BASE_URL,
+    );
+    try {
+      await Share.share({
+        title: route.title,
+        message: `${route.title}${distanceLabel ? ` · ${distanceLabel}` : ""} on ThrottleBase: ${primaryLink}`,
+        url: primaryLink,
+      });
+    } catch (error) {
+      Alert.alert("Couldn't share", getApiErrorMessage(error, "Try again in a moment."));
+    }
+  };
 
   return (
     <View className='flex-1' style={{ backgroundColor: colors.bg }}>
@@ -113,6 +161,8 @@ export default function RouteDetailScreen() {
       <View className='h-2/5 w-full relative'>
         {mapCoords.length > 0 ? (
           <MapView
+            ref={mapRef}
+            onMapReady={fitMapToRoute}
             style={{ flex: 1 }}
             provider={PROVIDER_GOOGLE}
             userInterfaceStyle='dark'
@@ -128,8 +178,12 @@ export default function RouteDetailScreen() {
               strokeColor='#22c55e'
               strokeWidth={5}
             />
-            <Marker coordinate={startCoord} title='Start' pinColor='#22c55e' />
-            <Marker coordinate={endCoord} title='End' pinColor='#f43f5e' />
+            <Marker coordinate={startCoord} title='A · Start' anchor={{ x: 0.5, y: 0.5 }}>
+              <EndpointMarker letter='A' color={START_COLOR} />
+            </Marker>
+            <Marker coordinate={endCoord} title='B · Destination' anchor={{ x: 0.5, y: 0.5 }}>
+              <EndpointMarker letter='B' color={DESTINATION_COLOR} />
+            </Marker>
           </MapView>
         ) : (
           <View
@@ -160,6 +214,9 @@ export default function RouteDetailScreen() {
               <Bookmark color='white' size={20} />
             </TouchableOpacity>
             <TouchableOpacity
+              onPress={handleShare}
+              accessibilityRole='button'
+              accessibilityLabel='Share route'
               className='w-10 h-10 rounded-full items-center justify-center'
               style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
             >
@@ -190,26 +247,14 @@ export default function RouteDetailScreen() {
             </Text>{" "}
             • {dateStr}
           </Text>
-          <View className='flex-row flex-wrap mt-2'>
-            <View className='w-1/2 flex-row items-center mb-4'>
-              <Map color={colors.textMuted} size={18} className='mr-2' />
-              <Text style={{ color: colors.textMuted }}>
-                {route.distance_km || "Unknown"} km Distance
+          {distanceLabel ? (
+            <View className='flex-row items-center mt-2'>
+              <Map color={colors.textMuted} size={18} />
+              <Text className='ml-2' style={{ color: colors.textMuted }}>
+                {distanceLabel}
               </Text>
             </View>
-            <View className='w-1/2 flex-row items-center mb-4'>
-              <Mountain color={colors.textMuted} size={18} className='mr-2' />
-              <Text className='capitalize' style={{ color: colors.textMuted }}>
-                {route.difficulty || "Unrated"} Difficulty
-              </Text>
-            </View>
-            <View className='w-1/2 flex-row items-center'>
-              <TrendingUp color={colors.textMuted} size={18} className='mr-2' />
-              <Text style={{ color: colors.textMuted }}>
-                +{route.elevation_gain_m || 0}m Elevation
-              </Text>
-            </View>
-          </View>
+          ) : null}
         </View>
 
         <View className='p-5 mb-10'>
@@ -217,28 +262,15 @@ export default function RouteDetailScreen() {
             className='text-xl font-bold mb-3'
             style={{ color: colors.text }}
           >
-            Geographical Profile
+            About this route
           </Text>
-          <Text className='leading-6 mb-4' style={{ color: colors.textMuted }}>
-            This route spans a total of {route.distance_km || 0} kilometers and
-            climbs {route.elevation_gain_m || 0} meters. It was crowdsourced
-            from {route.creator_name}'s live GPS telemetry.
+          {/* Only what is known: where it came from. Nothing here rates the
+              road, and nothing claims it is safe. */}
+          <Text className='leading-6' style={{ color: colors.textMuted }}>
+            {route.ride_id
+              ? `Recorded on ${route.creator_name}'s ride and saved on ${dateStr}. A marks the start and B the destination.`
+              : `Saved by ${route.creator_name} on ${dateStr}. A marks the start and B the destination.`}
           </Text>
-          <View
-            className='p-4 rounded-xl'
-            style={{
-              backgroundColor: colors.primary + "1A",
-              borderWidth: 1,
-              borderColor: colors.primary + "4D",
-            }}
-          >
-            <Text className='font-bold mb-1' style={{ color: colors.primary }}>
-              Route Status
-            </Text>
-            <Text className='text-sm' style={{ color: colors.primary }}>
-              Safe to Ride — Confirmed by community
-            </Text>
-          </View>
         </View>
       </ScrollView>
     </View>

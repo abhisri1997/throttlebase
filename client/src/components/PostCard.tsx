@@ -16,6 +16,7 @@ import {
   MoreHorizontal,
 } from "lucide-react-native";
 import { useTheme } from "../theme/ThemeContext";
+import { buildShareLinks } from "../utils/shareLinks";
 import { MentionText } from "./MentionText";
 import type { MentionedRiderReference } from "../utils/mentions";
 
@@ -58,27 +59,13 @@ export const PostCard = ({
     new Date(post.updated_at).getTime() - new Date(post.created_at).getTime() >
       1000;
 
-  const buildShareLinks = () => {
-    const postPath = `/post/${post.id}`;
-    const appLink = Linking.createURL(postPath, { scheme: "throttlebase" });
-
-    const configuredWebBase =
-      process.env.EXPO_PUBLIC_SHARE_BASE_URL?.trim() || "https://throttlebase.in";
-    const normalizedWebBase = configuredWebBase
-      ? configuredWebBase.replace(/\/+$/, "")
-      : "";
-    const webLink = normalizedWebBase ? `${normalizedWebBase}${postPath}` : "";
-
-    return {
-      appLink,
-      webLink,
-      primaryLink: webLink || appLink,
-    };
-  };
-
   const handleShare = async () => {
     try {
-      const { appLink, webLink, primaryLink } = buildShareLinks();
+      const { appLink, webLink, primaryLink } = buildShareLinks(
+        `/post/${post.id}`,
+        (path) => Linking.createURL(path, { scheme: "throttlebase" }),
+        process.env.EXPO_PUBLIC_SHARE_BASE_URL,
+      );
 
       const textLines = [
         "Check out this post on ThrottleBase:",
