@@ -82,3 +82,39 @@ export const SaveRouteFromRideSchema = z.object({
 });
 
 export type SaveRouteFromRideInput = z.infer<typeof SaveRouteFromRideSchema>;
+
+const latitude = z.coerce.number().min(-90).max(90).optional();
+const longitude = z.coerce.number().min(-180).max(180).optional();
+/** The picked place's label, e.g. "Wayanad, Kerala, India". */
+const placeName = z.string().trim().min(1).max(200).optional();
+
+/** GET /api/routes/search query string. Every part is optional. */
+export const RouteSearchQuerySchema = z
+  .object({
+    from_lat: latitude,
+    from_lng: longitude,
+    from_name: placeName,
+    to_lat: latitude,
+    to_lng: longitude,
+    to_name: placeName,
+    min_km: z.coerce.number().min(0).max(5000).optional(),
+    max_km: z.coerce.number().min(0).max(5000).optional(),
+    /** Comma-separated, e.g. "scenic_road,great_stops". */
+    highlights: z
+      .string()
+      .optional()
+      .transform((value) => (value ? value.split(',').map((part) => part.trim()).filter(Boolean) : []))
+      .pipe(z.array(z.enum(ROUTE_HIGHLIGHTS)).max(ROUTE_HIGHLIGHTS.length)),
+  })
+  .refine((query) => (query.from_lat === undefined) === (query.from_lng === undefined), {
+    message: 'from_lat and from_lng come together',
+  })
+  .refine((query) => (query.to_lat === undefined) === (query.to_lng === undefined), {
+    message: 'to_lat and to_lng come together',
+  })
+  .refine(
+    (query) => query.min_km === undefined || query.max_km === undefined || query.min_km <= query.max_km,
+    { message: 'min_km must not exceed max_km' },
+  );
+
+export type RouteSearchQueryInput = z.infer<typeof RouteSearchQuerySchema>;

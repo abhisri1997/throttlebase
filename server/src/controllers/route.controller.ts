@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { CreateRouteSchema, GpsTraceBatchSchema } from '../schemas/route.schemas.js';
+import { CreateRouteSchema, GpsTraceBatchSchema, RouteSearchQuerySchema } from '../schemas/route.schemas.js';
 import * as RouteService from '../services/route.service.js';
 
 interface RiderPayload {
@@ -40,6 +40,32 @@ export const getRoute = async (req: Request, res: Response): Promise<void> => {
     res.json(route);
   } catch (error: any) {
     console.error('Error fetching route:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/** Routes from one place to another, nearby or by name, either direction. */
+export const searchRoutes = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const viewerId = (req.rider as unknown as RiderPayload).riderId;
+    const q = RouteSearchQuerySchema.parse(req.query);
+    const place = (lat: number | undefined, lng: number | undefined, name: string | undefined) =>
+      lat !== undefined && lng !== undefined ? { lat, lng, name: name ?? null } : null;
+
+    const results = await RouteService.searchRoutes(viewerId, {
+      from: place(q.from_lat, q.from_lng, q.from_name),
+      to: place(q.to_lat, q.to_lng, q.to_name),
+      minKm: q.min_km ?? null,
+      maxKm: q.max_km ?? null,
+      highlights: q.highlights,
+    });
+    res.json(results);
+  } catch (error: any) {
+    if (error?.name === 'ZodError') {
+      res.status(400).json({ error: 'Invalid search', details: error.issues });
+      return;
+    }
+    console.error('Error searching routes:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

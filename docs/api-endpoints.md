@@ -48,6 +48,7 @@ Sign-in is passwordless: Google, Apple, or a one-time email code.
 ## Routes
 
 - `GET /api/routes` (public routes, plus the caller's own private ones). Each route carries `start_name`, `end_name`, `start_lat`/`start_lng`, `end_lat`/`end_lng`, `via` (stop names in order), `highlights` and `ridden_duration_s`
+- `GET /api/routes/search?from_lat&from_lng&from_name&to_lat&to_lng&to_name&min_km&max_km&highlights=a,b` — routes from one place to another, all parts optional. A place matches a route end named after it (or a stop) or within the route's radius (15% of its length, 5 to 25 km). Same-direction routes first, then ones ridden the other way; each result has `match: { direction, start_gap_km, end_gap_km }`. Up to 50
 - `POST /api/routes`
 - `POST /api/routes/traces`
 - `GET /api/routes/traces/:rideId`

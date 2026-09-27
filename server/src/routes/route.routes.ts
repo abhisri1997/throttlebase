@@ -161,6 +161,38 @@ router.get('/traces/:rideId', routeController.getTraces);
  *       404:
  *         description: Route not found or access denied
  */
+/**
+ * @swagger
+ * /api/routes/search:
+ *   get:
+ *     summary: Routes from one place to another, nearby or by name, in either direction
+ *     description: >
+ *       A searched place matches a route end named after it (or a stop), or an
+ *       end within the route's radius: 15% of its length, 5 to 25 km. Routes
+ *       ridden the other way come after same-direction ones, with
+ *       match.direction "reverse". Each result carries match.start_gap_km and
+ *       match.end_gap_km from the searched places.
+ *     tags: [Routes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - { in: query, name: from_lat, schema: { type: number } }
+ *       - { in: query, name: from_lng, schema: { type: number } }
+ *       - { in: query, name: from_name, schema: { type: string } }
+ *       - { in: query, name: to_lat, schema: { type: number } }
+ *       - { in: query, name: to_lng, schema: { type: number } }
+ *       - { in: query, name: to_name, schema: { type: string } }
+ *       - { in: query, name: min_km, schema: { type: number } }
+ *       - { in: query, name: max_km, schema: { type: number } }
+ *       - { in: query, name: highlights, schema: { type: string }, description: "Comma-separated; all must match" }
+ *     responses:
+ *       200:
+ *         description: Up to 50 routes, best first, each with a match object
+ *       400:
+ *         description: Invalid search (e.g. a latitude without its longitude)
+ */
+router.get('/search', routeController.searchRoutes);
+
 router.get('/:id', routeController.getRoute);
 
 /**
