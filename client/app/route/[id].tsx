@@ -22,7 +22,10 @@ import MapView, {
   Marker,
   PROVIDER_GOOGLE,
 } from "../../src/components/MapWrapper";
-import { Map, ChevronLeft, Bookmark, Share2 } from "lucide-react-native";
+import { ChevronLeft, Bookmark, Share2 } from "lucide-react-native";
+import { HighlightChips } from "../../src/features/routes/components/HighlightChips";
+import { ITINERARY_COLORS, RouteItinerary } from "../../src/features/routes/components/RouteItinerary";
+import { itineraryRows, routeFacts, type RouteStopDetail } from "../../src/features/routes/core/routeSummary";
 import { useTheme } from "../../src/theme/ThemeContext";
 
 const fetchRouteDetails = async (id: string) => {
@@ -35,12 +38,13 @@ const bookmarkRoute = async (id: string) => {
   return data;
 };
 
-const START_COLOR = "#22c55e";
-const DESTINATION_COLOR = "#ef4444";
+const START_COLOR = ITINERARY_COLORS.start;
+const DESTINATION_COLOR = ITINERARY_COLORS.destination;
+const STOP_COLOR = ITINERARY_COLORS.stop;
 const MAP_EDGE_PADDING = { top: 90, right: 50, bottom: 50, left: 50 };
 
-/** A lettered map pin, so the ends read as A (start) and B (destination). */
-function EndpointMarker({ letter, color }: { letter: string; color: string }) {
+/** A lettered or numbered map pin: A (start), 1, 2… (stops), B (destination). */
+function EndpointMarker({ letter, color, textColor = "#ffffff" }: { letter: string; color: string; textColor?: string }) {
   return (
     <View
       style={{
@@ -54,7 +58,7 @@ function EndpointMarker({ letter, color }: { letter: string; color: string }) {
         justifyContent: "center",
       }}
     >
-      <Text style={{ color: "#ffffff", fontWeight: "800", fontSize: 14 }}>{letter}</Text>
+      <Text style={{ color: textColor, fontWeight: "800", fontSize: 14 }}>{letter}</Text>
     </View>
   );
 }
@@ -130,6 +134,23 @@ export default function RouteDetailScreen() {
   });
   const distanceKm = Number(route.distance_km);
   const distanceLabel = Number.isFinite(distanceKm) && distanceKm > 0 ? formatDistance(distanceKm * 1000) : null;
+  const stops: (RouteStopDetail & { lat: number; lng: number })[] = Array.isArray(route.stops) ? route.stops : [];
+  const facts = routeFacts({
+    title: route.title,
+    start_name: route.start_name ?? null,
+    end_name: route.end_name ?? null,
+    distance_km: route.distance_km ?? null,
+    ridden_duration_s: route.ridden_duration_s ?? null,
+    via: Array.isArray(route.via) ? route.via : [],
+    highlights: [],
+  });
+  const itinerary = itineraryRows({
+    start_name: route.start_name ?? null,
+    end_name: route.end_name ?? null,
+    distance_km: route.distance_km ?? null,
+    stops,
+  });
+  const highlights: string[] = Array.isArray(route.highlights) ? route.highlights : [];
 
   // Show the whole route, not a fixed zoom around its start.
   const fitMapToRoute = () => {
@@ -184,6 +205,16 @@ export default function RouteDetailScreen() {
             <Marker coordinate={endCoord} title='B · Destination' anchor={{ x: 0.5, y: 0.5 }}>
               <EndpointMarker letter='B' color={DESTINATION_COLOR} />
             </Marker>
+            {stops.map((stop) => (
+              <Marker
+                key={`stop-${stop.position}`}
+                coordinate={{ latitude: stop.lat, longitude: stop.lng }}
+                title={`${stop.position} · ${stop.name ?? "Stop"}`}
+                anchor={{ x: 0.5, y: 0.5 }}
+              >
+                <EndpointMarker letter={String(stop.position)} color={STOP_COLOR} textColor='#0f172a' />
+              </Marker>
+            ))}
           </MapView>
         ) : (
           <View
@@ -231,45 +262,55 @@ export default function RouteDetailScreen() {
           className='p-5'
           style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
         >
-          <Text
-            className='text-3xl font-bold flex-1'
-            style={{ color: colors.text }}
-          >
+          <Text className='text-3xl font-bold' style={{ color: colors.text }}>
             {route.title}
           </Text>
-          <Text
-            className='text-sm mb-4 mt-1'
-            style={{ color: colors.textMuted }}
-          >
-            Created by{" "}
+          {route.start_name && route.end_name ? (
+            <Text className='text-base mt-1' style={{ color: colors.text }}>
+              {route.start_name} → {route.end_name}
+            </Text>
+          ) : null}
+          {facts.length > 0 ? (
+            <Text className='text-sm font-semibold mt-3' style={{ color: colors.text }}>
+              {facts.join("  ·  ")}
+            </Text>
+          ) : null}
+          <Text className='text-sm mt-2' style={{ color: colors.textMuted }}>
+            Saved by{" "}
             <Text className='font-bold' style={{ color: colors.text }}>
               {route.creator_name}
             </Text>{" "}
-            • {dateStr}
+            on {dateStr}
           </Text>
-          {distanceLabel ? (
-            <View className='flex-row items-center mt-2'>
-              <Map color={colors.textMuted} size={18} />
-              <Text className='ml-2' style={{ color: colors.textMuted }}>
-                {distanceLabel}
-              </Text>
-            </View>
-          ) : null}
         </View>
 
-        <View className='p-5 mb-10'>
-          <Text
-            className='text-xl font-bold mb-3'
-            style={{ color: colors.text }}
-          >
-            About this route
+        {highlights.length > 0 ? (
+          <View className='px-5 pt-5' style={{ gap: 8 }}>
+            <Text className='text-xl font-bold' style={{ color: colors.text }}>
+              Highlights
+            </Text>
+            <HighlightChips highlights={highlights} />
+            {/* The saver's view, never the app's claim. */}
+            <Text className='text-xs' style={{ color: colors.textMuted }}>
+              {route.creator_name}'s own view of the ride.
+            </Text>
+          </View>
+        ) : null}
+
+        <View className='p-5' style={{ gap: 12 }}>
+          <Text className='text-xl font-bold' style={{ color: colors.text }}>
+            Itinerary
           </Text>
+          <RouteItinerary rows={itinerary} />
+        </View>
+
+        <View className='px-5 pb-10'>
           {/* Only what is known: where it came from. Nothing here rates the
               road, and nothing claims it is safe. */}
-          <Text className='leading-6' style={{ color: colors.textMuted }}>
+          <Text className='text-sm leading-5' style={{ color: colors.textMuted }}>
             {route.ride_id
-              ? `Recorded on ${route.creator_name}'s ride and saved on ${dateStr}. A marks the start and B the destination.`
-              : `Saved by ${route.creator_name} on ${dateStr}. A marks the start and B the destination.`}
+              ? `Recorded on ${route.creator_name}'s ride. Distances are measured along the road they rode.`
+              : `Saved by ${route.creator_name}.`}
           </Text>
         </View>
       </ScrollView>
