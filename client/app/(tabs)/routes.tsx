@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -12,14 +12,23 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
 import { RouteCard, type RouteListItem } from "../../src/features/routes/components/RouteCard";
 import { useCurrentRider } from "../../src/services/useCurrentRider";
+import { RouteSearchPanel } from "../../src/features/routes/components/RouteSearchPanel";
+import {
+  buildRouteSearchParams,
+  matchNote,
+  type RouteSearchState,
+} from "../../src/features/routes/core/routeSearchQuery";
 import { Plus } from "lucide-react-native";
 import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
 import { useRouter } from "expo-router";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { NotificationBell } from "../../src/components/NotificationBell";
 
-const fetchRoutes = async (): Promise<RouteListItem[]> => {
-  const { data } = await apiClient.get("/api/routes");
+const EMPTY_SEARCH: RouteSearchState = { from: null, to: null, lengthId: "any", highlights: [] };
+
+/** The plain list, or search results when anything is being searched. */
+const fetchRoutes = async (searchParams: string | null): Promise<RouteListItem[]> => {
+  const { data } = await apiClient.get(searchParams ? `/api/routes/search?${searchParams}` : "/api/routes");
   if (!Array.isArray(data)) return [];
   // A server from before route places (or a partial row) omits these lists.
   return data.map((route: RouteListItem) => ({
@@ -33,6 +42,8 @@ export default function ExploreRoutesScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const { riderId } = useCurrentRider();
+  const [search, setSearch] = useState<RouteSearchState>(EMPTY_SEARCH);
+  const searchParams = buildRouteSearchParams(search);
 
   const {
     data: routes,
@@ -40,8 +51,9 @@ export default function ExploreRoutesScreen() {
     isError,
     refetch,
   } = useQuery({
-    queryKey: ["routes"],
-    queryFn: fetchRoutes,
+    // ["routes", …] so saving a route (which invalidates ["routes"]) refreshes every search.
+    queryKey: ["routes", searchParams],
+    queryFn: () => fetchRoutes(searchParams),
   });
 
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
@@ -78,13 +90,16 @@ export default function ExploreRoutesScreen() {
           <RouteCard
             route={item}
             viewerId={riderId}
+            matchNote={item.match ? matchNote(item.match, search.from?.name ?? null, search.to?.name ?? null) : null}
             onPress={() => router.push(`/route/${item.id}` as any)}
           />
         )}
         ListEmptyComponent={
           <View className='flex-1 justify-center items-center px-6'>
             <Text className='mb-4 text-center' style={{ color: colors.textMuted }}>
-              No routes yet. Finish a ride, then save it as a route from the ride's page to share it here.
+              {searchParams
+                ? "No routes match this search yet. Try another place or fewer filters."
+                : "No routes yet. Finish a ride, then save it as a route from the ride's page to share it here."}
             </Text>
           </View>
         }
@@ -130,6 +145,7 @@ export default function ExploreRoutesScreen() {
         </Text>
         <NotificationBell />
       </View>
+      <RouteSearchPanel state={search} onChange={setSearch} />
       {renderContent()}
       <TouchableOpacity
         // Routes are saved from finished rides, which live in ride history.
