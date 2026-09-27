@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { type Href, useLocalSearchParams, useRouter } from "expo-router";
-import { useIsFocused } from "@react-navigation/native";
+import { type Href, useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { LocateFixed } from "lucide-react-native";
 import MapView, { PROVIDER_GOOGLE } from "../../../src/components/MapWrapper";
 import { useCurrentRider } from "../../../src/services/useCurrentRider";
@@ -33,7 +32,12 @@ import {
   type RegroupCandidate,
   type RegroupSuggestion,
 } from "../../../src/features/navigation/core/regroup";
-import { projectOntoPolyline } from "../../../src/features/navigation/core/geometry";
+import { haversineMeters, projectOntoPolyline } from "../../../src/features/navigation/core/geometry";
+import { ArrivalPrompt } from "../../../src/features/navigation/components/ArrivalPrompt";
+import { useMyRideProgress } from "../../../src/features/rides/hooks/useMyRideProgress";
+
+/** The server's default wait at the destination before finishing a rider's ride itself. */
+const DEFAULT_AUTO_FINISH_AFTER_MS = 10 * 60 * 1000;
 import { fetchStopSuggestions } from "../../../src/features/rides/api/stopSuggestions";
 import type { StopSuggestion } from "../../../src/features/rides/types/stops";
 import { apiClient } from "../../../src/api/client";
@@ -59,6 +63,22 @@ import type {
 const KEEP_AWAKE_TAG = "ride-navigation-fullscreen";
 /** Banner height assumed for the map padding until the real one is measured. */
 const ESTIMATED_BANNER_HEIGHT = 120;
+/**
+ * Applied until the map reports ready.
+ *
+ * react-native-maps' applyBaseMapPadding defers while the view has no layout,
+ * but never null-checks the GoogleMap itself, so a padding update that lands
+ * after layout and before the map finishes initialising crashes the app:
+ *
+ *   NullPointerException: GoogleMap.setPadding(...) on a null object reference
+ *     at com.rnmaps.maps.MapView.applyBaseMapPadding
+ *
+ * Holding one stable object until onMapReady means no prop update is
+ * dispatched during that window, so the setter is never reached with a null
+ * map. Fixed upstream only in the 2.x betas.
+ */
+const MAP_PADDING_BEFORE_READY = { top: 0, right: 0, bottom: 0, left: 0 } as const;
+
 const INITIAL_REGION_DELTA = 0.08;
 const RECENTER_GAP = 12;
 const KMH_PER_MPS = 3.6;
@@ -85,6 +105,9 @@ export default function RideNavigationScreen() {
   const currentRiderId = useCurrentRider().riderId as string | undefined;
 
   const mapRef = useRef<InstanceType<typeof MapView> | null>(null);
+  /** False until the native GoogleMap exists; see MAP_PADDING_BEFORE_READY. */
+  const [isMapReady, setIsMapReady] = useState(false);
+  const handleMapReady = useCallback(() => setIsMapReady(true), []);
   const sheetCollapsedHeight = navigationSheetCollapsedHeight(insets.bottom);
   const [bannerBottom, setBannerBottom] = useState(insets.top + ESTIMATED_BANNER_HEIGHT);
   const [sheetHeight, setSheetHeight] = useState(sheetCollapsedHeight);
@@ -99,6 +122,7 @@ export default function RideNavigationScreen() {
 
   const live = useRideLiveSession({
     rideId: id,
+    currentRiderId,
     isAppActive,
     onRideEnded: () => router.replace(rideDetailHref),
   });
@@ -137,14 +161,12 @@ export default function RideNavigationScreen() {
   // Dev-only: replays a synthetic ride along the planned route instead of
   // reading real GPS, so navigation can be watched end-to-end without riding.
   // Enabled with `?simulate=1` on this screen; never active outside __DEV__.
-  // Simulated positions are deliberately not published to the live session:
-  // they would be stored as real track samples, and a track fed by both the
-  // simulation and the rider's own GPS reads as constant teleporting.
   const simulatedFix = useSimulatedNavigationFix({
     isEnabled: isSimulated,
     polyline: plannedRoute.route?.polyline ?? null,
-    // Shared with the crew so peer markers move during a simulated ride; the
-    // server is told these are simulated and keeps them out of the track.
+    // Published like real GPS, so the crew sees it move and the ride's track,
+    // stats and profile totals record it. The server is told these are
+    // simulated and drops the device's real GPS while the simulation runs.
     onPosition: publishSimulatedPosition,
   });
   const { fix, headingDegrees, isPermissionDenied } = isSimulated ? simulatedFix : liveFix;
@@ -481,7 +503,29 @@ export default function RideNavigationScreen() {
     presence: live.presence,
     locations: live.locations,
     currentRiderId,
+    sessionParticipants: live.sessionParticipants,
   });
+
+  // This rider's own ride: finish when they are done, even while the group rides on.
+  const destination = waypoints?.[waypoints.length - 1];
+  const myRide = useMyRideProgress({
+    rideId: id,
+    me: live.me,
+    liveDistanceToDestinationMeters:
+      fix && destination ? haversineMeters(fix.coordinate, destination.coordinate) : null,
+  });
+  const [dismissedArrivalAtMs, setDismissedArrivalAtMs] = useState<number | null>(null);
+  // The socket says so the moment they arrive; the session says so if the app
+  // was closed at the time.
+  const arrivedAtMs = live.me?.arrived_at
+    ? Date.parse(live.me.arrived_at)
+    : live.arrival?.receivedAtMs ?? null;
+  const showArrivalPrompt =
+    myRide.isRiding && arrivedAtMs !== null && arrivedAtMs !== dismissedArrivalAtMs;
+  const dismissArrivalPrompt = () => {
+    setDismissedArrivalAtMs(arrivedAtMs);
+    live.dismissArrival();
+  };
 
   const overviewCoordinates = (): LatLng[] => {
     const route = [
@@ -520,18 +564,9 @@ export default function RideNavigationScreen() {
     else camera.showOverview(overviewCoordinates());
   };
 
+  // Only other riders are tappable in the crew sheet; re-center shows yourself.
   const focusParticipant = (participant: RideParticipantView) => {
     setFocusedWaypointId(null);
-    if (participant.riderId === currentRiderId) {
-      if (!fix) {
-        Alert.alert("Location unavailable", "Your live location is not available yet.");
-        return;
-      }
-      setFocusedParticipantId(participant.riderId);
-      camera.focusOn(fix.coordinate, headingDegrees ?? 0);
-      return;
-    }
-
     const location = live.locations[participant.riderId];
     if (!location) {
       Alert.alert(
@@ -654,7 +689,9 @@ export default function RideNavigationScreen() {
     ? "SIMULATED GPS — dev only"
     : live.sessionEndedReason && live.rideState === "COMPLETED"
       ? `Ended: ${live.sessionEndedReason}`
-      : null;
+      : myRide.isFinished && live.rideState !== "COMPLETED"
+        ? "You finished · following the group"
+        : null;
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.bg }]}>
@@ -664,7 +701,8 @@ export default function RideNavigationScreen() {
         provider={PROVIDER_GOOGLE}
         userInterfaceStyle={mapTheme.isNight ? "dark" : "light"}
         customMapStyle={mapTheme.mapStyle}
-        mapPadding={camera.mapPadding}
+        mapPadding={isMapReady ? camera.mapPadding : MAP_PADDING_BEFORE_READY}
+        onMapReady={handleMapReady}
         rotateEnabled
         pitchEnabled
         toolbarEnabled={false}
@@ -695,7 +733,6 @@ export default function RideNavigationScreen() {
         <PeerMarkers
           peers={peers}
           focusedRiderId={focusedParticipantId}
-          color={mapTheme.colors.peer}
           focusedColor={colors.primary}
         />
 
@@ -847,7 +884,27 @@ export default function RideNavigationScreen() {
         onOverview={toggleOverview}
         isOverview={camera.mode === "overview"}
         action={tripAction}
+        currentRiderId={currentRiderId}
+        myRide={{
+          isRiding: myRide.isRiding,
+          isFinished: myRide.isFinished,
+          canResume: live.rideState !== "COMPLETED",
+          onFinish: myRide.confirmFinishMyRide,
+          onResume: myRide.resumeMyRide,
+          isBusy: myRide.isFinishingMyRide || myRide.isResumingMyRide,
+        }}
       />
+
+      {showArrivalPrompt && arrivedAtMs !== null ? (
+        <ArrivalPrompt
+          destinationName={destination ? waypointLabel(destination) : "the destination"}
+          arrivedAtMs={arrivedAtMs}
+          autoFinishAfterMs={live.arrival?.autoFinishAfterMs ?? DEFAULT_AUTO_FINISH_AFTER_MS}
+          onFinish={myRide.finishMyRideNow}
+          onDismiss={dismissArrivalPrompt}
+          isFinishing={myRide.isFinishingMyRide}
+        />
+      ) : null}
     </View>
   );
 }

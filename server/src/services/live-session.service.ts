@@ -9,6 +9,28 @@ import type {
   CreateIncidentInput,
   LiveLocationUpdateInput,
 } from "../schemas/live-session.schemas.js";
+import {
+  nextArrivalState,
+  type ArrivalTransition,
+} from "../core/ride-progress/arrival.js";
+import { RIDE_PROGRESS_CONFIG } from "../core/ride-progress/config.js";
+import {
+  classifyGroupEndFinish,
+  deriveRiderProgress,
+  type FinishReason,
+  type RiderProgress,
+} from "../core/ride-progress/progress.js";
+import {
+  toFinishPosition,
+  finishRemainingRiders,
+  listRidingRiders,
+  lockRiderProgress,
+  markPresentRidersStarted,
+  markRiderStarted,
+  resetSessionProgress,
+  updateArrivalState,
+  type SqlClient,
+} from "./ride-progress.repository.js";
 
 export class LiveSessionError extends Error {
   statusCode: number;
@@ -44,8 +66,33 @@ type LiveSessionSummary = {
     role: "captain" | "co_captain" | "member";
     is_online: boolean;
     last_heartbeat_at: string | null;
+    progress: RiderProgress;
+    ride_started_at: string | null;
+    finished_at: string | null;
+    finish_reason: FinishReason | null;
+    arrived_at: string | null;
+    distance_to_destination_m: number | null;
   }>;
 };
+
+/** Ending the ride would cut short riders who are still out; the caller must confirm. */
+export class UnfinishedRidersError extends LiveSessionError {
+  riders: Array<{
+    rider_id: string;
+    display_name: string | null;
+    is_online: boolean;
+    last_heartbeat_at: string | null;
+    distance_to_destination_m: number | null;
+  }>;
+
+  constructor(riders: UnfinishedRidersError["riders"]) {
+    super(
+      `${riders.length} rider${riders.length === 1 ? " has" : "s have"} not reached the destination`,
+      409,
+    );
+    this.riders = riders;
+  }
+}
 
 const DEFAULT_MAX_LOCATION_AGE_MS = 2 * 60 * 1000;
 const DEFAULT_MAX_LOCATION_FUTURE_SKEW_MS = 30 * 1000;
@@ -122,7 +169,7 @@ const normalizePresenceRole = (
   return "member";
 };
 
-const getRideContext = async (
+export const getRideContext = async (
   client: { query: (text: string, params?: any[]) => Promise<any> },
   rideId: string,
   riderId: string,
@@ -181,7 +228,7 @@ const requireCaptainOrCoCaptain = (ctx: RideContext) => {
   }
 };
 
-const requireConfirmedParticipant = (ctx: RideContext) => {
+export const requireConfirmedParticipant = (ctx: RideContext) => {
   if (!ctx.is_confirmed_participant) {
     throw new LiveSessionError(
       "Only confirmed participants can access live session",
@@ -190,7 +237,7 @@ const requireConfirmedParticipant = (ctx: RideContext) => {
   }
 };
 
-const getLiveSessionByRide = async (
+export const getLiveSessionByRide = async (
   client: { query: (text: string, params?: any[]) => Promise<any> },
   rideId: string,
 ) => {
@@ -205,7 +252,9 @@ const getLiveSessionByRide = async (
   return result.rows[0] ?? null;
 };
 
-const getLiveSessionWithParticipants = async (
+type ParticipantRow = Omit<LiveSessionSummary["participants"][number], "progress">;
+
+export const getLiveSessionWithParticipants = async (
   rideId: string,
 ): Promise<LiveSessionSummary | null> => {
   const result = await query(
@@ -226,13 +275,20 @@ const getLiveSessionWithParticipants = async (
                   'display_name', r.display_name,
                   'role', p.role,
                   'is_online', p.is_online,
-                  'last_heartbeat_at', p.last_heartbeat_at
+                  'last_heartbeat_at', p.last_heartbeat_at,
+                  'ride_started_at', p.ride_started_at,
+                  'finished_at', p.finished_at,
+                  'finish_reason', p.finish_reason,
+                  'arrived_at', p.arrived_at,
+                  'distance_to_destination_m',
+                    round(ST_Distance(COALESCE(p.finish_location, p.last_location), ride.end_point)::numeric)
                 )
                 ORDER BY r.display_name ASC
               ) FILTER (WHERE p.rider_id IS NOT NULL),
               '[]'::json
             ) AS participants
      FROM ride_live_sessions s
+     JOIN rides ride ON ride.id = s.ride_id
      LEFT JOIN ride_live_presence p ON p.session_id = s.id
      LEFT JOIN riders r ON r.id = p.rider_id
      WHERE s.ride_id = $1
@@ -244,7 +300,56 @@ const getLiveSessionWithParticipants = async (
     return null;
   }
 
-  return result.rows[0] as LiveSessionSummary;
+  const row = result.rows[0];
+  return {
+    ...row,
+    participants: (row.participants as ParticipantRow[]).map((participant) => ({
+      ...participant,
+      distance_to_destination_m:
+        participant.distance_to_destination_m === null
+          ? null
+          : Number(participant.distance_to_destination_m),
+      progress: deriveRiderProgress({
+        rideStartedAt: participant.ride_started_at,
+        finishedAt: participant.finished_at,
+        finishReason: participant.finish_reason,
+      }),
+    })),
+  } as LiveSessionSummary;
+};
+
+/** Every confirmed rider gets a presence row, so the roster shows who has not turned up. */
+export const seedSessionPresence = async (
+  client: SqlClient,
+  rideId: string,
+  sessionId: string,
+): Promise<void> => {
+  await client.query(
+    `INSERT INTO ride_live_presence (session_id, rider_id, role, is_online, created_at, updated_at)
+     SELECT $2,
+            riders.rider_id,
+            CASE
+              WHEN riders.role = 'captain' THEN 'captain'
+              WHEN riders.role = 'co_captain' THEN 'co_captain'
+              ELSE 'member'
+            END,
+            false,
+            now(),
+            now()
+     FROM (
+       SELECT r.captain_id AS rider_id, 'captain'::text AS role
+       FROM rides r
+       WHERE r.id = $1
+       UNION
+       SELECT rp.rider_id, rp.role::text
+       FROM ride_participants rp
+       WHERE rp.ride_id = $1
+         AND rp.status = 'confirmed'
+     ) riders
+     ON CONFLICT (session_id, rider_id)
+     DO UPDATE SET role = EXCLUDED.role, updated_at = now()`,
+    [rideId, sessionId],
+  );
 };
 
 export const getLiveSessionFoundationStatus = async () => {
@@ -316,36 +421,14 @@ export const startLiveSession = async (rideId: string, riderId: string) => {
       );
       sessionId = reopen.rows[0].id as string;
       createdOrReopened = true;
+      await resetSessionProgress(client, sessionId);
     } else {
+      // Already open — possibly by a rider who started their own ride early.
+      // The captain starting it now is the roll call, as it always was.
       sessionId = existingSession.id as string;
     }
 
-    await client.query(
-      `INSERT INTO ride_live_presence (session_id, rider_id, role, is_online, created_at, updated_at)
-       SELECT $2,
-              riders.rider_id,
-              CASE
-                WHEN riders.role = 'captain' THEN 'captain'
-                WHEN riders.role = 'co_captain' THEN 'co_captain'
-                ELSE 'member'
-              END,
-              false,
-              now(),
-              now()
-       FROM (
-         SELECT r.captain_id AS rider_id, 'captain'::text AS role
-         FROM rides r
-         WHERE r.id = $1
-         UNION
-         SELECT rp.rider_id, rp.role::text
-         FROM ride_participants rp
-         WHERE rp.ride_id = $1
-           AND rp.status = 'confirmed'
-       ) riders
-       ON CONFLICT (session_id, rider_id)
-       DO UPDATE SET role = EXCLUDED.role, updated_at = now()`,
-      [rideId, sessionId],
-    );
+    await seedSessionPresence(client, rideId, sessionId);
 
     if (createdOrReopened) {
       await client.query(
@@ -404,10 +487,130 @@ export const getLiveSession = async (rideId: string, riderId: string) => {
   return session;
 };
 
+interface CloseSessionInput {
+  rideId: string;
+  session: { id: string; status: string };
+  rideStatus: string;
+  /** Null when the system closes the ride — everyone finished, or it went idle. */
+  actorRiderId: string | null;
+  reason: string | null;
+  markRideCompleted: boolean;
+}
+
+interface CloseSessionOutcome {
+  ended: boolean;
+  markedRideCompleted: boolean;
+  finishedRiderCount: number;
+}
+
+const countStartedRiders = async (client: SqlClient, sessionId: string): Promise<number> => {
+  const result = await client.query(
+    `SELECT count(*)::int AS started
+     FROM ride_live_presence
+     WHERE session_id = $1 AND ride_started_at IS NOT NULL`,
+    [sessionId],
+  );
+  return (result.rows[0]?.started as number | undefined) ?? 0;
+};
+
+/**
+ * Ends the group ride inside the caller's transaction: closes the session,
+ * finishes everyone still riding and, when asked, completes the ride. A ride
+ * still "scheduled" completes too if anyone rode it — riders who started early
+ * before the captain ever rolled out.
+ */
+const closeSessionInTransaction = async (
+  client: SqlClient,
+  input: CloseSessionInput,
+): Promise<CloseSessionOutcome> => {
+  const isOpen = input.session.status !== "ended";
+  let finishedRiderCount = 0;
+
+  if (isOpen) {
+    await client.query(
+      `UPDATE ride_live_sessions
+       SET status = 'ended',
+           ended_by = $2,
+           ended_at = now(),
+           ended_reason = COALESCE($3::text, ended_reason),
+           updated_at = now()
+       WHERE id = $1`,
+      [input.session.id, input.actorRiderId, input.reason],
+    );
+
+    const finished = await finishRemainingRiders(
+      client,
+      input.session.id,
+      RIDE_PROGRESS_CONFIG.arrival.arriveRadiusM,
+    );
+    finishedRiderCount = finished.length;
+
+    await client.query(
+      `UPDATE ride_live_presence
+       SET is_online = false,
+           updated_at = now()
+       WHERE session_id = $1`,
+      [input.session.id],
+    );
+
+    await client.query(
+      `INSERT INTO ride_live_events (session_id, actor_rider_id, event_type, payload)
+       VALUES ($1, $2, 'session_ended', jsonb_build_object('reason', $3::text))`,
+      [input.session.id, input.actorRiderId, input.reason],
+    );
+  }
+
+  const isCompletable =
+    input.rideStatus === "active" ||
+    (input.rideStatus === "scheduled" && (await countStartedRiders(client, input.session.id)) > 0);
+  const markedRideCompleted = input.markRideCompleted && isCompletable;
+
+  if (markedRideCompleted) {
+    await client.query(
+      `UPDATE rides SET status = 'completed', updated_at = now() WHERE id = $1`,
+      [input.rideId],
+    );
+  }
+
+  return { ended: isOpen, markedRideCompleted, finishedRiderCount };
+};
+
+/** Work that must follow a committed close: stats for everyone who rode, and the ended job. */
+const afterSessionClosed = async (
+  rideId: string,
+  actorRiderId: string | null,
+  reason: string | null,
+  outcome: CloseSessionOutcome,
+): Promise<void> => {
+  // Ending the session is how a ride actually completes, so this is where the
+  // track becomes history stats. Editing a ride to "completed" has its own
+  // enqueue; both go through the same de-duplicated job.
+  if (outcome.markedRideCompleted || outcome.finishedRiderCount > 0) {
+    try {
+      await enqueueRideStatsRecompute(rideId, "ride-completed");
+    } catch (queueError) {
+      console.error("Failed to enqueue ride stats recompute job:", queueError);
+    }
+  }
+
+  if (outcome.ended) {
+    try {
+      await enqueueLiveSessionEnded(rideId, actorRiderId, reason ?? undefined);
+    } catch (queueError) {
+      console.error("Failed to enqueue live_session.ended job:", queueError);
+    }
+  }
+};
+
+/** Arrived riders are finished as such by the end; only riders still out need confirming. */
+const isStillOut = (rider: Parameters<typeof toFinishPosition>[0]): boolean =>
+  classifyGroupEndFinish(toFinishPosition(rider), RIDE_PROGRESS_CONFIG.arrival.arriveRadiusM) !==
+  "arrived";
+
 export const endLiveSession = async (
   rideId: string,
   riderId: string,
-  options?: { reason?: string; mark_ride_completed?: boolean },
+  options?: { reason?: string; mark_ride_completed?: boolean; confirm_unfinished?: boolean },
 ) => {
   const client = await pool.connect();
 
@@ -422,70 +625,88 @@ export const endLiveSession = async (
       throw new LiveSessionError("Live session not found", 404);
     }
 
-    if (session.status !== "ended") {
-      await client.query(
-        `UPDATE ride_live_sessions
-         SET status = 'ended',
-             ended_by = $2,
-             ended_at = now(),
-           ended_reason = COALESCE($3::text, ended_reason),
-             updated_at = now()
-         WHERE id = $1`,
-        [session.id, riderId, options?.reason || null],
-      );
+    // Riders still out would have their ride cut short; the captain has to
+    // see who they are before ending it anyway. Riders already at the
+    // destination are simply marked arrived.
+    if (session.status !== "ended" && !options?.confirm_unfinished) {
+      const stillOut = (await listRidingRiders(client, session.id)).filter(isStillOut);
 
-      await client.query(
-        `UPDATE ride_live_presence
-         SET is_online = false,
-             updated_at = now()
-         WHERE session_id = $1`,
-        [session.id],
-      );
-
-      await client.query(
-        `INSERT INTO ride_live_events (session_id, actor_rider_id, event_type, payload)
-         VALUES ($1, $2, 'session_ended', jsonb_build_object('reason', $3::text))`,
-        [session.id, riderId, options?.reason || null],
-      );
+      if (stillOut.length > 0) {
+        throw new UnfinishedRidersError(
+          stillOut.map((rider) => ({
+            rider_id: rider.rider_id,
+            display_name: rider.display_name,
+            is_online: rider.is_online,
+            last_heartbeat_at: rider.last_heartbeat_at,
+            distance_to_destination_m:
+              rider.distance_to_destination_m === null
+                ? null
+                : Math.round(rider.distance_to_destination_m),
+          })),
+        );
+      }
     }
 
-    const markedRideCompleted =
-      Boolean(options?.mark_ride_completed) && ctx.ride_status === "active";
-
-    if (markedRideCompleted) {
-      await client.query(
-        `UPDATE rides SET status = 'completed', updated_at = now() WHERE id = $1`,
-        [rideId],
-      );
-    }
+    const reason = options?.reason || null;
+    const outcome = await closeSessionInTransaction(client, {
+      rideId,
+      session,
+      rideStatus: ctx.ride_status,
+      actorRiderId: riderId,
+      reason,
+      markRideCompleted: Boolean(options?.mark_ride_completed),
+    });
 
     await client.query("COMMIT");
-
-    // Ending the session is how a ride actually completes, so this is where the
-    // track becomes history stats. Editing a ride to "completed" has its own
-    // enqueue; both go through the same de-duplicated job.
-    if (markedRideCompleted) {
-      try {
-        await enqueueRideStatsRecompute(rideId, "ride-completed");
-      } catch (queueError) {
-        console.error("Failed to enqueue ride stats recompute job:", queueError);
-      }
-    }
-
-    if (session.status !== "ended") {
-      try {
-        await enqueueLiveSessionEnded(rideId, riderId, options?.reason);
-      } catch (queueError) {
-        console.error("Failed to enqueue live_session.ended job:", queueError);
-      }
-    }
+    await afterSessionClosed(rideId, riderId, reason, outcome);
 
     const updatedSession = await getLiveSessionWithParticipants(rideId);
     return {
-      ended: session.status !== "ended",
+      ended: outcome.ended,
       session: updatedSession,
       mark_ride_completed: Boolean(options?.mark_ride_completed),
     };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Ends a ride without a captain: everyone who rode has finished, or the ride
+ * went idle. Returns the closed session, or null if it was already ended.
+ */
+export const closeLiveSessionBySystem = async (
+  rideId: string,
+  reason: "all_riders_finished" | "idle_timeout",
+): Promise<LiveSessionSummary | null> => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const ride = await client.query(`SELECT status FROM rides WHERE id = $1 FOR UPDATE`, [rideId]);
+    const session = await getLiveSessionByRide(client, rideId);
+    if (!ride.rows.length || !session || session.status === "ended") {
+      await client.query("ROLLBACK");
+      return null;
+    }
+
+    const outcome = await closeSessionInTransaction(client, {
+      rideId,
+      session,
+      rideStatus: ride.rows[0].status as string,
+      actorRiderId: null,
+      reason,
+      markRideCompleted: true,
+    });
+
+    await client.query("COMMIT");
+    await afterSessionClosed(rideId, null, reason, outcome);
+
+    return getLiveSessionWithParticipants(rideId);
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -528,6 +749,9 @@ export const rollOutLiveSession = async (rideId: string, riderId: string) => {
          VALUES ($1, $2, 'session_rolled_out', jsonb_build_object('source', 'api'))`,
         [session.id, riderId],
       );
+
+      // The group setting off starts the ride of everyone who has turned up.
+      await markPresentRidersStarted(client, session.id);
     }
 
     if (ctx.ride_status === "scheduled") {
@@ -828,6 +1052,50 @@ export const markLivePresenceOffline = async (
   }
 };
 
+interface AdvanceArrivalInput {
+  rideId: string;
+  sessionId: string;
+  riderId: string;
+  progress: { arrival_armed: boolean; arrived_at: string | null } | null;
+  lon: number;
+  lat: number;
+  accuracyM: number | null;
+  capturedAtMs: number;
+}
+
+/** Moves the rider's arrival state on by one fix. A ride without a destination never arrives. */
+const advanceArrival = async (
+  client: SqlClient,
+  input: AdvanceArrivalInput,
+): Promise<ArrivalTransition> => {
+  const result = await client.query(
+    `SELECT ST_Distance(ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, r.end_point) AS distance_m
+     FROM rides r
+     WHERE r.id = $3`,
+    [input.lon, input.lat, input.rideId],
+  );
+  const rawDistance = result.rows[0]?.distance_m;
+  if (rawDistance === null || rawDistance === undefined) return "none";
+
+  const step = nextArrivalState(
+    {
+      isArmed: input.progress?.arrival_armed ?? false,
+      arrivedAtMs: input.progress?.arrived_at ? Date.parse(input.progress.arrived_at) : null,
+    },
+    {
+      distanceToDestinationM: Number(rawDistance),
+      accuracyM: input.accuracyM,
+      capturedAtMs: input.capturedAtMs,
+    },
+    RIDE_PROGRESS_CONFIG.arrival,
+  );
+
+  if (step.transition !== "none") {
+    await updateArrivalState(client, input.sessionId, input.riderId, step.state);
+  }
+  return step.transition;
+};
+
 export const updateLivePresenceLocation = async (
   rideId: string,
   riderId: string,
@@ -842,6 +1110,8 @@ export const updateLivePresenceLocation = async (
   headingDeg: number | null;
   accuracyM: number | null;
   capturedAt: string;
+  /** How this fix moved the rider relative to the destination. */
+  arrival: ArrivalTransition;
 } | null> => {
   const client = await pool.connect();
 
@@ -886,6 +1156,14 @@ export const updateLivePresenceLocation = async (
     }
 
     const role = normalizePresenceRole(ctx.caller_role ?? "member");
+
+    // A rider who has finished stops sharing where they are: the group sees
+    // where they finished, not the ride home.
+    const progress = await lockRiderProgress(client, session.id, riderId);
+    if (progress?.finished_at) {
+      await client.query("ROLLBACK");
+      return null;
+    }
 
     const latestPresence = await client.query(
       `SELECT last_heartbeat_at
@@ -941,7 +1219,27 @@ export const updateLivePresenceLocation = async (
       [session.id, riderId, role, capturedAt, input.lon, input.lat],
     );
 
-    if (options?.persistSample) {
+    // A rider's ride runs from their own start — early, or the group rolling
+    // out. Positions from the roll call before that are shared, not recorded.
+    const isRiding = Boolean(progress?.ride_started_at) || session.status === "active";
+    if (isRiding && !progress?.ride_started_at) {
+      await markRiderStarted(client, session.id, riderId);
+    }
+
+    const arrival = isRiding
+      ? await advanceArrival(client, {
+          rideId,
+          sessionId: session.id as string,
+          riderId,
+          progress,
+          lon: input.lon,
+          lat: input.lat,
+          accuracyM: input.accuracy_m ?? null,
+          capturedAtMs: Number.isFinite(capturedAtMs) ? capturedAtMs : nowMs,
+        })
+      : "none";
+
+    if (options?.persistSample && isRiding) {
       await client.query(
         `INSERT INTO ride_live_location_samples (
            session_id,
@@ -985,6 +1283,7 @@ export const updateLivePresenceLocation = async (
       headingDeg: input.heading_deg ?? null,
       accuracyM: input.accuracy_m ?? null,
       capturedAt,
+      arrival,
     };
   } catch (error) {
     await client.query("ROLLBACK");

@@ -1,5 +1,8 @@
 import { useMemo } from "react";
-import type { LocationBroadcastEvent } from "../../../services/liveSessionSocket";
+import type {
+  LiveSessionParticipant,
+  LocationBroadcastEvent,
+} from "../../../services/liveSessionSocket";
 import type { RideParticipantView } from "../types/navigation";
 import type { NavigationRide } from "./useRideLiveSession";
 
@@ -12,6 +15,8 @@ interface UseRideParticipantsInput {
   presence: Readonly<Record<string, { isOnline?: boolean } | undefined>>;
   locations: Readonly<Record<string, LocationBroadcastEvent>>;
   currentRiderId: string | undefined;
+  /** The live session's view of each rider, for their own ride's progress. */
+  sessionParticipants: readonly LiveSessionParticipant[];
 }
 
 /** The crew list, and the other riders to draw on the map. */
@@ -20,17 +25,23 @@ export const useRideParticipants = ({
   presence,
   locations,
   currentRiderId,
+  sessionParticipants,
 }: UseRideParticipantsInput): { participants: RideParticipantView[]; peers: PeerLocation[] } => {
-  const participants = useMemo(
-    (): RideParticipantView[] =>
-      (ride?.participants ?? []).map((participant) => ({
+  const participants = useMemo((): RideParticipantView[] => {
+    const sessionByRiderId = new Map(sessionParticipants.map((p) => [p.rider_id, p]));
+
+    return (ride?.participants ?? []).map((participant) => {
+      const inSession = sessionByRiderId.get(participant.rider_id);
+      return {
         riderId: participant.rider_id,
         displayName: participant.display_name || "Rider",
         role: participant.role,
         isOnline: presence[participant.rider_id]?.isOnline ?? false,
-      })),
-    [presence, ride?.participants],
-  );
+        progress: inSession?.progress ?? "not_started",
+        finishedAt: inSession?.finished_at ?? null,
+      };
+    });
+  }, [presence, ride?.participants, sessionParticipants]);
 
   const peers = useMemo((): PeerLocation[] => {
     if (participants.length === 0) return [];

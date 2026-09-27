@@ -10,6 +10,11 @@ import { haversineMeters } from "../utils/polyline.js";
 import { snapToNearestPlace } from "./meetingPoint.service.js";
 import { enqueueRideStatsRecompute } from "./jobs.service.js";
 
+/** Rides a rider can still join. */
+const JOINABLE_RIDE_STATUSES: ReadonlySet<string> = new Set(["scheduled", "active"]);
+/** Rides that are over; nothing about who is on them changes any more. */
+const FINISHED_RIDE_STATUSES: ReadonlySet<string> = new Set(["completed", "cancelled"]);
+
 export interface Ride {
   id: string;
   captain_id: string;
@@ -360,7 +365,8 @@ export const listDiscoverableRides = async (
 };
 
 /**
- * Gets a user's completed or cancelled rides.
+ * Gets a user's completed or cancelled rides — plus any ride they have
+ * finished themselves while the rest of the group is still out.
  */
 export const getRideHistory = async (riderId: string): Promise<Ride[]> => {
   const result = await query(
@@ -369,7 +375,17 @@ export const getRideHistory = async (riderId: string): Promise<Ride[]> => {
               WHERE rs.ride_id = r.id AND rs.status = 'approved')::int AS stop_count
      FROM rides r
      JOIN riders c ON r.captain_id = c.id
-     WHERE r.status IN ('completed', 'cancelled')
+     WHERE (
+         r.status IN ('completed', 'cancelled')
+         OR EXISTS (
+           SELECT 1
+           FROM ride_live_sessions ls
+           JOIN ride_live_presence p ON p.session_id = ls.id
+           WHERE ls.ride_id = r.id
+             AND p.rider_id = $1
+             AND p.finished_at IS NOT NULL
+         )
+       )
        AND (r.captain_id = $1 OR EXISTS (
          SELECT 1 FROM ride_participants rp WHERE rp.ride_id = r.id AND rp.rider_id = $1
        ))
@@ -590,8 +606,10 @@ export const joinRide = async (
 
     const ride = rideResult.rows[0];
 
-    // Only allow joining published (scheduled), active, or completed rides
-    if (!["scheduled", "active", "completed"].includes(ride.status)) {
+    // Only a published (scheduled) or active ride can be joined. A finished
+    // one cannot: joining it would also make anyone a participant who can
+    // review a ride they never rode.
+    if (!JOINABLE_RIDE_STATUSES.has(ride.status)) {
       await client.query("ROLLBACK");
       throw new Error(`Cannot join a ride with status "${ride.status}"`);
     }
@@ -652,7 +670,8 @@ export const joinRide = async (
 };
 
 /**
- * Promote a rider to co-captain. Only the original captain can do this.
+ * Promote a rider to co-captain. Only the original captain can do this, and
+ * only while the ride is still on.
  */
 export const promoteToCoCaptain = async (
   rideId: string,
@@ -661,10 +680,15 @@ export const promoteToCoCaptain = async (
 ): Promise<boolean> => {
   // Verify caller is the captain
   const rideCheck = await query(
-    `SELECT id FROM rides WHERE id = $1 AND captain_id = $2`,
+    `SELECT status FROM rides WHERE id = $1 AND captain_id = $2`,
     [rideId, captainId],
   );
   if (rideCheck.rows.length === 0) return false;
+
+  const status = rideCheck.rows[0].status as string;
+  if (FINISHED_RIDE_STATUSES.has(status)) {
+    throw new Error(`Cannot promote riders on a ride that is ${status}`);
+  }
 
   const result = await query(
     `UPDATE ride_participants

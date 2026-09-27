@@ -10,6 +10,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
+import { FEATURES } from "../../src/core/features/features";
+import { goBackOr } from "../../src/utils/goBack";
 import { ChevronLeft, UserPlus, UserMinus } from "lucide-react-native";
 import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { useTheme } from "../../src/theme/ThemeContext";
@@ -81,7 +83,7 @@ export default function RiderProfileScreen() {
           Rider not found
         </Text>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBackOr(router, "/(tabs)/feed")}
           className='p-3 rounded-xl'
         >
           <Text className='font-bold' style={{ color: colors.text }}>
@@ -112,7 +114,7 @@ export default function RiderProfileScreen() {
         }}
       >
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBackOr(router, "/(tabs)/feed")}
           className='w-10 h-10 items-center justify-center mr-2'
         >
           <ChevronLeft color={colors.text} size={24} />
@@ -297,38 +299,40 @@ export default function RiderProfileScreen() {
           )}
         </View>
 
-        {/* Badges Section */}
-        <View className='p-5 mb-10'>
-          <Text
-            className='text-xl font-bold mb-4'
-            style={{ color: colors.text }}
-          >
-            Badges
-          </Text>
-          {rider.badges && rider.badges.length > 0 ? (
-            <View className='flex-row flex-wrap'>
-              {rider.badges.map((b: any, i: number) => (
-                <View
-                  key={i}
-                  className='p-3 rounded-2xl mr-3 mb-3 items-center w-24'
-                  style={{ borderWidth: 1, borderColor: colors.primary + "4D" }}
-                >
-                  <Text className='text-2xl mb-1'>{b.icon || "🏅"}</Text>
-                  <Text
-                    className='text-xs text-center font-bold'
-                    style={{ color: colors.text }}
-                  >
-                    {b.name}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <Text className='italic' style={{ color: colors.textMuted }}>
-              No badges earned yet
+        {/* Badges Section — part of Rank, held back from the beta */}
+        {FEATURES.rank && (
+          <View className='p-5 mb-10'>
+            <Text
+              className='text-xl font-bold mb-4'
+              style={{ color: colors.text }}
+            >
+              Badges
             </Text>
-          )}
-        </View>
+            {rider.badges && rider.badges.length > 0 ? (
+              <View className='flex-row flex-wrap'>
+                {rider.badges.map((b: any, i: number) => (
+                  <View
+                    key={i}
+                    className='p-3 rounded-2xl mr-3 mb-3 items-center w-24'
+                    style={{ borderWidth: 1, borderColor: colors.primary + "4D" }}
+                  >
+                    <Text className='text-2xl mb-1'>{b.icon || "🏅"}</Text>
+                    <Text
+                      className='text-xs text-center font-bold'
+                      style={{ color: colors.text }}
+                    >
+                      {b.name}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text className='italic' style={{ color: colors.textMuted }}>
+                No badges earned yet
+              </Text>
+            )}
+          </View>
+        )}
       </ScrollView>
     </View>
   );

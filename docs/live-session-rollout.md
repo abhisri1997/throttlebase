@@ -59,6 +59,18 @@ Goal: provide reliable participant-only live ride coordination with lifecycle co
 - A lighter `/rides` namespace is also implemented for ride-detail synchronization such as join broadcasts and stop-request updates.
 - Phase 4 is partially implemented: presence sweep, incident escalation scheduling, cleanup scheduling, and notification delivery jobs are in place; external push/email providers are still pending.
 - Token-refresh-aware reconnect hardening remains open.
+- Per-rider progress is implemented: each rider has their own ride inside the group ride (see below).
+
+## Per-Rider Progress
+
+Each rider's ride is tracked on their `ride_live_presence` row (migration 032), separate from the group session:
+
+- **Start** — at roll-out for everyone who has turned up, on a late rider's first position, or early via `live/me/start` (from 60 min before the scheduled time; opens the session as a roll call if nobody has). Track samples are only kept from a rider's start; roll-call positions are shared, not recorded.
+- **Arrival** — every position runs an arrival state machine: arrived within 150 m of the destination, and only "left" again beyond 300 m, so moving around the venue does not reset it. It arms only after the rider has been beyond 300 m, so round trips do not arrive at the start. Fixes worse than 100 m accuracy are ignored.
+- **Finish** — by hand (`arrived` if at the destination, else `left_early`, visible to the whole group), automatically after 10 min parked at the destination (worker `ride_progress.sweep`), or when the captain ends the ride (`arrived` or `group_ended`). An arrival is dated to reaching the destination, so time at the venue adds no distance. Finished riders stop sharing their position and can follow the group; they can resume while the ride is live.
+- **Group end** — the captain is warned (409) about riders still out and can end anyway; the ride completes itself once everyone who rode has finished, and ends itself after 120 min with no riding rider reporting.
+
+Thresholds are environment-tunable: `RIDE_EARLY_START_WINDOW_MIN`, `RIDE_ARRIVAL_RADIUS_M`, `RIDE_ARRIVAL_EXIT_RADIUS_M`, `RIDE_ARRIVAL_MAX_ACCURACY_M`, `RIDE_AUTO_FINISH_DWELL_MIN`, `RIDE_IDLE_AUTO_END_MIN`.
 
 ## Phase 5 - Progressive Release
 

@@ -222,6 +222,8 @@ export const promoteCoCaptain = async (
       res
         .status(400)
         .json({ error: "Validation failed", details: error.errors });
+    } else if (error.message?.includes("Cannot promote")) {
+      res.status(400).json({ error: error.message });
     } else {
       console.error("Error promoting co-captain:", error);
       res.status(500).json({ error: "Internal server error" });

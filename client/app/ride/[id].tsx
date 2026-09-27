@@ -13,11 +13,11 @@ import {
   type AppStateStatus,
   Platform,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useIsFocused } from "@react-navigation/native";
 import { apiClient } from "../../src/api/client";
+import { goBackOr } from "../../src/utils/goBack";
 import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { useAccessToken } from "../../src/services/useAuthState";
 import { useLiveSessionStore } from "../../src/store/liveSessionStore";
@@ -67,6 +67,10 @@ import {
 } from "../../src/features/navigation/core/format";
 import { navigationDayColors } from "../../src/theme/navigationColors";
 import type { LatLng, RouteLeg } from "../../src/features/navigation/types/navigation";
+import type { LiveSessionParticipant } from "../../src/services/liveSessionSocket";
+import { StartMyRideCard } from "../../src/features/rides/components/StartMyRideCard";
+import { SaveRouteCard } from "../../src/features/rides/components/SaveRouteCard";
+import { useEndRideWithWarning } from "../../src/features/rides/hooks/useEndRideWithWarning";
 
 const fetchRideDetails = async (id: string) => {
   const { data } = await apiClient.get(`/api/rides/${id}`);
@@ -162,17 +166,6 @@ const startLiveSessionReq = async (rideId: string) => {
 
 const rollOutLiveSessionReq = async (rideId: string) => {
   const { data } = await apiClient.post(`/api/rides/${rideId}/live/roll-out`);
-  return data;
-};
-
-const endLiveSessionReq = async (
-  rideId: string,
-  options?: { markRideCompleted?: boolean; reason?: string },
-) => {
-  const { data } = await apiClient.post(`/api/rides/${rideId}/live/end`, {
-    mark_ride_completed: Boolean(options?.markRideCompleted),
-    ...(options?.reason ? { reason: options.reason } : {}),
-  });
   return data;
 };
 
@@ -686,6 +679,12 @@ export default function RideDetailScreen() {
 
   const effectiveLiveSession = liveSocketSession || liveSession;
   const liveStatus = effectiveLiveSession?.status || "not_started";
+  // The polled session carries each rider's progress; the socket's copy only
+  // arrives on joining.
+  const myLiveParticipant: LiveSessionParticipant | null =
+    ((liveSession?.participants ?? liveSocketSession?.participants ?? []) as LiveSessionParticipant[]).find(
+      (participant) => participant.rider_id === currentRider?.id,
+    ) ?? null;
   const isTerminalRideStatus =
     ride?.status === "completed" || ride?.status === "cancelled";
   const canJoinLiveRoom =
@@ -838,22 +837,10 @@ export default function RideDetailScreen() {
     },
   });
 
-  const liveEndMutation = useMutation({
-    mutationFn: (options?: { markRideCompleted?: boolean; reason?: string }) =>
-      endLiveSessionReq(id!, options),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["ride", id] }),
-        queryClient.invalidateQueries({ queryKey: ["live-session", id] }),
-      ]);
-      refetchLiveSession();
-    },
-    onError: (err: any) => {
-      Alert.alert(
-        "Error",
-        getApiErrorMessage(err, "Failed to end live session"),
-      );
-    },
+  // Ending asks first when riders are still out, listing who and how far.
+  const { endRide: endGroupRideWithWarning } = useEndRideWithWarning({
+    rideId: id,
+    onEnded: () => void refetchLiveSession(),
   });
 
   const liveSOSMutation = useMutation({
@@ -1371,7 +1358,7 @@ useEffect(() => {
   }, [currentRider?.id, liveEnabled, liveLocationMarkers, liveStatus, ride?.participants]);
 
   const handleBackPress = useCallback(() => {
-    router.back();
+    goBackOr(router, "/(tabs)/rides");
   }, [router]);
 
   if (isLoading) {
@@ -1395,7 +1382,7 @@ useEffect(() => {
           Failed to load ride details.
         </Text>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => goBackOr(router, "/(tabs)/rides")}
           className='mt-4 p-3 rounded-xl'
         >
           <Text className='font-bold' style={{ color: colors.text }}>
@@ -1535,10 +1522,7 @@ useEffect(() => {
             }
 
             if (shouldEndLiveWithRide) {
-              liveEndMutation.mutate({
-                markRideCompleted: true,
-                reason: "ride_completed",
-              });
+              endGroupRideWithWarning();
               return;
             }
 
@@ -1693,7 +1677,12 @@ useEffect(() => {
               </Text>
             </View>
           </View>
-          {startCoords && (
+          {/* Only once there is a recorded track to build the route from. */}
+          {ride.status === "completed" && trackCoordinates.length > 1 ? (
+            <SaveRouteCard rideId={id!} rideTitle={ride.title} />
+          ) : null}
+          {/* Directions to the start only help before the ride is over. */}
+          {startCoords && !isTerminalRideStatus && (
             <TouchableOpacity
               onPress={handleGetDirections}
               className='flex-row items-center p-3 rounded-xl mt-2'
@@ -1780,6 +1769,16 @@ useEffect(() => {
               ) : null}
             </View>
 
+            {!isCaptain && (
+              <StartMyRideCard
+                rideId={id!}
+                rideStatus={ride.status}
+                liveStatus={liveStatus}
+                me={myLiveParticipant}
+                onStarted={() => router.push(`/ride/${id}/navigation` as any)}
+              />
+            )}
+
             {liveStatus === "starting" && isLeader && rollCall && (
               <View
                 className='p-4 rounded-2xl mb-3'
@@ -1855,7 +1854,7 @@ useEffect(() => {
               </TouchableOpacity>
             )}
 
-            {__DEV__ && waypoints && waypoints.length >= 2 && (
+            {__DEV__ && !isTerminalRideStatus && waypoints && waypoints.length >= 2 && (
               <TouchableOpacity
                 onPress={() =>
                   router.push(`/ride/${id}/navigation?simulate=1` as any)
@@ -2269,8 +2268,8 @@ useEffect(() => {
                   </Text>
                 </View>
               </TouchableOpacity>
-              {/* Captain: Promote button for regular riders */}
-              {isCaptain && p.role === "rider" && (
+              {/* Captain: Promote button for regular riders, while the ride is still on */}
+              {isCaptain && !isTerminalRideStatus && p.role === "rider" && (
                 <TouchableOpacity
                   onPress={() => handlePromote(p.rider_id, p.display_name)}
                   className='px-3 py-1.5 rounded-full'
@@ -2452,89 +2451,92 @@ useEffect(() => {
         </View>
       </ScrollView>
 
-      {/* Floating Action Button */}
-      <View className='absolute bottom-6 left-5 right-5 pb-5 pt-4'>
-        {isParticipant ? (
-          <View
-            className='p-4 rounded-2xl w-full shadow-lg'
-            style={{
-              backgroundColor: colors.surface,
-              borderWidth: 1,
-              borderColor: colors.border,
-            }}
-          >
-            <Text
-              className='font-bold text-center text-lg'
-              style={{ color: colors.text }}
+      {/* Floating Action Button: joining, the meeting point and the "you're in"
+          banner only mean something until the ride is over. */}
+      {!isTerminalRideStatus && (
+        <View className='absolute bottom-6 left-5 right-5 pb-5 pt-4'>
+          {isParticipant ? (
+            <View
+              className='p-4 rounded-2xl w-full shadow-lg'
+              style={{
+                backgroundColor: colors.surface,
+                borderWidth: 1,
+                borderColor: colors.border,
+              }}
             >
-              You are participating in this ride! 🎉
-            </Text>
-            {ride.start_point_auto && (
-              <View className='mt-3'>
-                {/* The meeting point is derived from where everyone rides
-                    from, so it is shown here — otherwise the button below
-                    reads as if it sets the ride's start point itself. */}
-                <Text className='text-xs' style={{ color: colors.textMuted }}>
-                  Meeting point · set automatically
-                </Text>
-                <Text
-                  className='font-semibold mt-0.5'
-                  style={{ color: ride.start_point_name ? colors.text : colors.textMuted }}
-                >
-                  {ride.start_point_name ??
-                    "Waiting for riders to say where they're riding from"}
-                </Text>
-
-                {canSetStartOverride ? (
-                  <LocationPicker
-                    label={startOverrideLabel}
-                    onSelect={(result) =>
-                      updateLocationMutation.mutate(result.coords)
-                    }
-                    customTrigger={(showModal) => (
-                      <TouchableOpacity
-                        onPress={showModal}
-                        className='mt-3 p-3 rounded-xl items-center'
-                        style={{ backgroundColor: colors.primary }}
-                      >
-                        {updateLocationMutation.isPending ? (
-                          <ActivityIndicator color='white' />
-                        ) : (
-                          <Text className='font-bold text-white'>
-                            {startOverrideLabel}
-                          </Text>
-                        )}
-                      </TouchableOpacity>
-                    )}
-                  />
-                ) : (
-                  <Text className='text-xs mt-2' style={{ color: colors.textMuted }}>
-                    The meeting point is locked in 12 hours before the ride.
-                  </Text>
-                )}
-              </View>
-            )}
-          </View>
-        ) : (
-          <TouchableOpacity
-            onPress={handleJoinAttempt}
-            disabled={joinMutation.isPending || isFull}
-            className='p-4 rounded-2xl shadow-lg'
-            style={{ backgroundColor: isFull ? colors.border : colors.primary }}
-          >
-            {joinMutation.isPending ? (
-              <ActivityIndicator color='white' />
-            ) : (
               <Text
                 className='font-bold text-center text-lg'
-                style={{ color: "#ffffff" }}
+                style={{ color: colors.text }}
               >
-                {isFull ? "Ride is Full" : "Join Ride"}
+                You are participating in this ride! 🎉
               </Text>
-            )}
-          </TouchableOpacity>
-        )}
-      </View>
+              {ride.start_point_auto && (
+                <View className='mt-3'>
+                  {/* The meeting point is derived from where everyone rides
+                      from, so it is shown here — otherwise the button below
+                      reads as if it sets the ride's start point itself. */}
+                  <Text className='text-xs' style={{ color: colors.textMuted }}>
+                    Meeting point · set automatically
+                  </Text>
+                  <Text
+                    className='font-semibold mt-0.5'
+                    style={{ color: ride.start_point_name ? colors.text : colors.textMuted }}
+                  >
+                    {ride.start_point_name ??
+                      "Waiting for riders to say where they're riding from"}
+                  </Text>
+
+                  {canSetStartOverride ? (
+                    <LocationPicker
+                      label={startOverrideLabel}
+                      onSelect={(result) =>
+                        updateLocationMutation.mutate(result.coords)
+                      }
+                      customTrigger={(showModal) => (
+                        <TouchableOpacity
+                          onPress={showModal}
+                          className='mt-3 p-3 rounded-xl items-center'
+                          style={{ backgroundColor: colors.primary }}
+                        >
+                          {updateLocationMutation.isPending ? (
+                            <ActivityIndicator color='white' />
+                          ) : (
+                            <Text className='font-bold text-white'>
+                              {startOverrideLabel}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                    />
+                  ) : (
+                    <Text className='text-xs mt-2' style={{ color: colors.textMuted }}>
+                      The meeting point is locked in 12 hours before the ride.
+                    </Text>
+                  )}
+                </View>
+              )}
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={handleJoinAttempt}
+              disabled={joinMutation.isPending || isFull}
+              className='p-4 rounded-2xl shadow-lg'
+              style={{ backgroundColor: isFull ? colors.border : colors.primary }}
+            >
+              {joinMutation.isPending ? (
+                <ActivityIndicator color='white' />
+              ) : (
+                <Text
+                  className='font-bold text-center text-lg'
+                  style={{ color: "#ffffff" }}
+                >
+                  {isFull ? "Ride is Full" : "Join Ride"}
+                </Text>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* Hidden Location Picker for Join Flow Override */}
       {showJoinOverridePicker && (

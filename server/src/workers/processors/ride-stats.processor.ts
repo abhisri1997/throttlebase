@@ -12,7 +12,12 @@ export const processRideStatsRecompute = async (
     throw new Error("rideId is required for ride stats recompute job");
   }
 
-  const outcome = await recomputeRideHistoryStats(rideId);
+  const riderId =
+    typeof payload.riderId === "string" && payload.riderId.length > 0
+      ? payload.riderId
+      : undefined;
+
+  const outcome = await recomputeRideHistoryStats(rideId, riderId);
   return {
     processor: "ride-stats",
     ...outcome,

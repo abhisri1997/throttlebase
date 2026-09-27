@@ -15,7 +15,32 @@ import { apiClient } from "../../src/api/client";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { authService } from "../../src/services/auth";
-import { Bell, ChevronLeft, LifeBuoy, Lock, Settings as SettingsIcon, Shield, Trash2, UserX } from "lucide-react-native";
+import { FEATURES } from "../../src/core/features/features";
+import type { ReactNode } from "react";
+import { Bell, ChevronLeft, LifeBuoy, Lock, Settings as SettingsIcon, Shield, Trash2, User, UserX } from "lucide-react-native";
+
+interface SectionHeaderProps {
+  icon: ReactNode;
+  label: string;
+  color: string;
+}
+
+/**
+ * The label takes the rest of the row (flex-1) rather than its own measured
+ * width: on Android that measurement came out too narrow for the bold,
+ * letter-spaced capitals, so "Security & Privacy" wrapped onto a line with
+ * no room and showed as "SECURITY &".
+ */
+function SectionHeader({ icon, label, color }: SectionHeaderProps) {
+  return (
+    <View className='px-4 flex-row items-center mb-2'>
+      {icon}
+      <Text className='flex-1 font-bold uppercase tracking-wider text-xs ml-2' style={{ color }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
 
 export default function SettingsModal() {
   const router = useRouter();
@@ -209,15 +234,11 @@ export default function SettingsModal() {
       <ScrollView className='flex-1' style={{ backgroundColor: colors.bg }}>
         {/* GENERAL SETTINGS */}
         <View className='pt-6 pb-2'>
-          <View className='px-4 flex-row items-center mb-2'>
-            <SettingsIcon color={colors.textMuted} size={18} />
-            <Text
-              className='font-bold uppercase tracking-wider text-xs ml-2'
-              style={{ color: colors.textMuted }}
-            >
-              General Options
-            </Text>
-          </View>
+          <SectionHeader
+            icon={<SettingsIcon color={colors.textMuted} size={18} />}
+            label='General Options'
+            color={colors.textMuted}
+          />
           <View
             style={{
               backgroundColor: colors.surface,
@@ -264,15 +285,11 @@ export default function SettingsModal() {
 
         {/* PRIVACY SETTINGS */}
         <View className='pt-6 pb-2'>
-          <View className='px-4 flex-row items-center mb-2'>
-            <Shield color={colors.textMuted} size={18} />
-            <Text
-              className='font-bold uppercase tracking-wider text-xs ml-2'
-              style={{ color: colors.textMuted }}
-            >
-              Security & Privacy
-            </Text>
-          </View>
+          <SectionHeader
+            icon={<Shield color={colors.textMuted} size={18} />}
+            label='Security & Privacy'
+            color={colors.textMuted}
+          />
           <View
             style={{
               backgroundColor: colors.surface,
@@ -299,40 +316,39 @@ export default function SettingsModal() {
               ["everyone", "followers_only", "no_one"],
               (val) => updatePrivacy.mutate({ invite_permission: val }),
             )}
-            {renderToggle(
-              "Global Leaderboard Opt-In",
-              privacy?.leaderboard_opt_in ?? true,
-              (val) => updatePrivacy.mutate({ leaderboard_opt_in: val }),
+            {FEATURES.rank &&
+              renderToggle(
+                "Global Leaderboard Opt-In",
+                privacy?.leaderboard_opt_in ?? true,
+                (val) => updatePrivacy.mutate({ leaderboard_opt_in: val }),
+              )}
+            {FEATURES.accountSecurity && (
+              <TouchableOpacity
+                onPress={() => router.push("/(modals)/security")}
+                className='mx-4 py-4 flex-row items-center justify-between'
+              >
+                <View className='flex-row items-center'>
+                  <Lock color={colors.textMuted} size={16} />
+                  <Text
+                    className='ml-2 text-base font-medium'
+                    style={{ color: colors.text }}
+                  >
+                    Devices &amp; Sign-in Activity
+                  </Text>
+                </View>
+                <Text style={{ color: colors.textMuted }}>➔</Text>
+              </TouchableOpacity>
             )}
-            <TouchableOpacity
-              onPress={() => router.push("/(modals)/security")}
-              className='mx-4 py-4 flex-row items-center justify-between'
-            >
-              <View className='flex-row items-center'>
-                <Lock color={colors.textMuted} size={16} />
-                <Text
-                  className='ml-2 text-base font-medium'
-                  style={{ color: colors.text }}
-                >
-                  Devices &amp; Sign-in Activity
-                </Text>
-              </View>
-              <Text style={{ color: colors.textMuted }}>➔</Text>
-            </TouchableOpacity>
           </View>
         </View>
 
         {/* BLOCKED USERS */}
         <View className='pt-6 pb-12'>
-          <View className='px-4 flex-row items-center mb-2'>
-            <UserX color={colors.danger} size={18} />
-            <Text
-              className='font-bold uppercase tracking-wider text-xs ml-2'
-              style={{ color: colors.danger }}
-            >
-              Blocked Riders
-            </Text>
-          </View>
+          <SectionHeader
+            icon={<UserX color={colors.danger} size={18} />}
+            label='Blocked Riders'
+            color={colors.danger}
+          />
           <View
             className='py-2 min-h-[100px] justify-center'
             style={{
@@ -389,16 +405,77 @@ export default function SettingsModal() {
           </View>
         </View>
 
-        <View className='pb-12'>
-          <View className='px-4 flex-row items-center mb-2'>
-            <LifeBuoy color={colors.primary} size={18} />
-            <Text
-              className='font-bold uppercase tracking-wider text-xs ml-2'
-              style={{ color: colors.textMuted }}
+        {FEATURES.support && (
+          <View className='pb-12'>
+            <SectionHeader
+              icon={<LifeBuoy color={colors.primary} size={18} />}
+              label='Support'
+              color={colors.textMuted}
+            />
+            <View
+              style={{
+                backgroundColor: colors.surface,
+                borderTopWidth: 1,
+                borderBottomWidth: 1,
+                borderColor: colors.border,
+              }}
             >
-              Support
-            </Text>
+              <TouchableOpacity
+                onPress={() => router.push("/(modals)/support")}
+                className='px-4 py-4 flex-row items-center justify-between'
+              >
+                <View>
+                  <Text
+                    className='text-base font-medium'
+                    style={{ color: colors.text }}
+                  >
+                    Contact Support
+                  </Text>
+                  <Text
+                    className='text-sm mt-1'
+                    style={{ color: colors.textMuted }}
+                  >
+                    Report bugs, disputes, account issues, or general questions.
+                  </Text>
+                </View>
+                <Text style={{ color: colors.textMuted }}>➔</Text>
+              </TouchableOpacity>
+              {rider?.is_admin ? (
+                <TouchableOpacity
+                  onPress={() => router.push("/(modals)/support-admin")}
+                  className='px-4 py-4 flex-row items-center justify-between'
+                  style={{ borderTopWidth: 1, borderTopColor: colors.border }}
+                >
+                  <View className='flex-row items-center'>
+                    <Shield color={colors.primary} size={16} />
+                    <View className='ml-2'>
+                      <Text
+                        className='text-base font-medium'
+                        style={{ color: colors.primary }}
+                      >
+                        Admin — Manage Tickets
+                      </Text>
+                      <Text
+                        className='text-sm mt-0.5'
+                        style={{ color: colors.textMuted }}
+                      >
+                        View and update all support tickets.
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={{ color: colors.textMuted }}>➔</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
+        )}
+
+        <View className='pb-12'>
+          <SectionHeader
+            icon={<User color={colors.textMuted} size={18} />}
+            label='Account'
+            color={colors.textMuted}
+          />
           <View
             style={{
               backgroundColor: colors.surface,
@@ -406,66 +483,6 @@ export default function SettingsModal() {
               borderBottomWidth: 1,
               borderColor: colors.border,
             }}
-          >
-            <TouchableOpacity
-              onPress={() => router.push("/(modals)/support")}
-              className='px-4 py-4 flex-row items-center justify-between'
-            >
-              <View>
-                <Text
-                  className='text-base font-medium'
-                  style={{ color: colors.text }}
-                >
-                  Contact Support
-                </Text>
-                <Text
-                  className='text-sm mt-1'
-                  style={{ color: colors.textMuted }}
-                >
-                  Report bugs, disputes, account issues, or general questions.
-                </Text>
-              </View>
-              <Text style={{ color: colors.textMuted }}>➔</Text>
-            </TouchableOpacity>
-            {rider?.is_admin ? (
-              <TouchableOpacity
-                onPress={() => router.push("/(modals)/support-admin")}
-                className='px-4 py-4 flex-row items-center justify-between'
-                style={{ borderTopWidth: 1, borderTopColor: colors.border }}
-              >
-                <View className='flex-row items-center'>
-                  <Shield color={colors.primary} size={16} />
-                  <View className='ml-2'>
-                    <Text
-                      className='text-base font-medium'
-                      style={{ color: colors.primary }}
-                    >
-                      Admin — Manage Tickets
-                    </Text>
-                    <Text
-                      className='text-sm mt-0.5'
-                      style={{ color: colors.textMuted }}
-                    >
-                      View and update all support tickets.
-                    </Text>
-                  </View>
-                </View>
-                <Text style={{ color: colors.textMuted }}>➔</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        </View>
-
-        <View className='mt-8 mb-10'>
-          <Text
-            className='text-xs font-semibold uppercase mb-2 ml-1'
-            style={{ color: colors.textMuted }}
-          >
-            Account
-          </Text>
-          <View
-            className='rounded-2xl overflow-hidden'
-            style={{ backgroundColor: colors.surface }}
           >
             <TouchableOpacity
               onPress={handleDeleteAccount}

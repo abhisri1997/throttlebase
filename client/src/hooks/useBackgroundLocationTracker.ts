@@ -9,7 +9,7 @@
 import { useEffect, useRef } from "react";
 import { AppState, type AppStateStatus, Platform } from "react-native";
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "../api/client";
+import { fetchRidesImRiding } from "../features/rides/api/rideProgress";
 import { useAccessToken, useAuthState } from "../services/useAuthState";
 import { useCurrentRider } from "../services/useCurrentRider";
 import {
@@ -25,20 +25,24 @@ type RideSummary = {
 };
 
 /**
- * Fetch active rides where current rider is a participant.
- * GET /api/rides?status=active already filters to rides where the
- * authenticated rider is captain or confirmed participant.
+ * The rides this rider is riding right now: their own ride is under way —
+ * started early, or the group rolled out — and they have not finished. A ride
+ * still "scheduled" counts once they start early; one they have finished does
+ * not, even while the rest of the group rides on.
  */
-const fetchMyActiveRides = async (): Promise<RideSummary[]> => {
-  try {
-    const { data } = await apiClient.get("/api/rides", {
-      params: { status: "active" },
-    });
-    const rides = data.rides ?? data;
-    return Array.isArray(rides) ? rides : [];
-  } catch {
-    return [];
-  }
+// A failed poll must not read as "no ride": that stopped tracking on every
+// server hiccup and restarted it on the next good poll. Letting the error
+// through keeps the last known rides until a poll succeeds.
+const fetchMyActiveRides = (): Promise<RideSummary[]> => fetchRidesImRiding();
+
+const logTrackingError = (action: string) => (error: unknown) =>
+  console.warn(
+    `[BgLocation] could not ${action} tracking:`,
+    error instanceof Error ? error.message : error,
+  );
+
+const stopTrackingSafely = (): void => {
+  stopTracking().catch(logTrackingError("stop"));
 };
 
 export function useBackgroundLocationTracker() {
@@ -60,22 +64,26 @@ export function useBackgroundLocationTracker() {
   useEffect(() => {
     if (Platform.OS === "web" || !isAuthenticated || !token || !rider?.id) {
       // Not authenticated or web — stop any active tracking
-      stopTracking();
+      stopTrackingSafely();
       return;
     }
 
-    // Any ride returned from GET /api/rides?status=active means
-    // current rider is captain or confirmed participant
-    const activeRide = activeRides?.[0] ?? null;
+    // Not answered yet — still loading, or failing with nothing to go on.
+    // Only a real answer may start or stop tracking.
+    if (activeRides === undefined) return;
+
+    // Any ride returned from GET /api/rides/riding is one this rider is
+    // riding now; finishing it drops it from the list and stops tracking.
+    const activeRide = activeRides[0] ?? null;
 
     const currentlyTracking = getActiveTrackingRideId();
 
     if (activeRide && activeRide.id !== currentlyTracking) {
       // New active ride found — start tracking
-      startTracking(activeRide.id, token);
+      startTracking(activeRide.id, token).catch(logTrackingError("start"));
     } else if (!activeRide && currentlyTracking) {
       // No active ride anymore — stop tracking
-      stopTracking();
+      stopTrackingSafely();
     }
   }, [activeRides, isAuthenticated, token, rider?.id]);
 
@@ -96,7 +104,7 @@ export function useBackgroundLocationTracker() {
   // Cleanup on unmount (logout / app shutdown)
   useEffect(() => {
     return () => {
-      stopTracking();
+      stopTrackingSafely();
     };
   }, []);
 }

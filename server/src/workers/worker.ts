@@ -29,10 +29,12 @@ import {
   processNotificationPush,
   processNotificationEmail,
 } from "./processors/notification-delivery.processor.js";
+import { processRideProgressSweep } from "./processors/ride-progress.processor.js";
 import {
   enqueueLiveIncidentEscalationJob,
   enqueueLivePresenceSweepJob,
   enqueueCleanupExpiredSessionsJob,
+  enqueueRideProgressSweepJob,
 } from "../services/jobs.service.js";
 
 type JobProcessor = (
@@ -51,6 +53,7 @@ const processors: Record<string, JobProcessor> = {
   [JOB_TYPES.LIVE_INCIDENT_REPORTED]: processLiveIncidentReported,
   [JOB_TYPES.LIVE_PRESENCE_SWEEP]: processLivePresenceSweep,
   [JOB_TYPES.LIVE_INCIDENT_ESCALATE]: processLiveIncidentEscalation,
+  [JOB_TYPES.RIDE_PROGRESS_SWEEP]: processRideProgressSweep,
   [JOB_TYPES.NOTIFICATION_PUSH]: processNotificationPush,
   [JOB_TYPES.NOTIFICATION_EMAIL]: processNotificationEmail,
 };
@@ -61,6 +64,7 @@ const scheduleOperationalJobs = async (): Promise<void> => {
       enqueueLivePresenceSweepJob(),
       enqueueLiveIncidentEscalationJob(),
       enqueueCleanupExpiredSessionsJob(),
+      enqueueRideProgressSweepJob(),
     ]);
   } catch (error) {
     console.error("[worker] Failed to enqueue operational live jobs:", error);

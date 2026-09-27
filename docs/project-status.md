@@ -1,5 +1,44 @@
 # Project Status - ThrottleBase
 
+## Closed Beta Scope
+
+The first release is a closed beta: a few riders and riding clubs, installed
+from TestFlight and the Play internal track. Its hero features are routes and
+rides; everything else ships only if it is already solid, to keep the surface
+small and the bug count low.
+
+### In the beta
+
+- Routes: create, bookmark, share.
+- Rides: create, join, schedule, live group session and full-screen
+  navigation, per-rider start and finish, ride history.
+- Feed (posts, comments, likes, mentions) and follows with rider profiles.
+- Profile with ride stats only (distance, rides, history).
+- Passwordless sign-in, onboarding, settings, in-app notifications.
+
+### Held back behind feature flags (code kept, off by default)
+
+| Feature | Server flag | Client flag |
+|---|---|---|
+| Groups | `FEATURE_GROUPS` | `EXPO_PUBLIC_FEATURE_GROUPS` |
+| Rank (leaderboard, badges, achievements) | `FEATURE_RANK` | `EXPO_PUBLIC_FEATURE_RANK` |
+| Support tickets and admin triage | `FEATURE_SUPPORT` | `EXPO_PUBLIC_FEATURE_SUPPORT` |
+| Devices and sign-in activity | `FEATURE_ACCOUNT_SECURITY` | `EXPO_PUBLIC_FEATURE_ACCOUNT_SECURITY` |
+
+A feature comes back by setting both flags to `true` and shipping a new app
+build. Badges keep being awarded meanwhile, so Rank launches with history.
+
+### Removed
+
+- Passwords and TOTP two-factor: sign-in is passwordless.
+
+### To revisit before or during the beta
+
+- Push notifications: delivery is not working as intended yet, so the beta
+  relies on in-app notifications until push is reworked.
+- Email notifications: still a provider stub.
+- A feedback channel for testers, now that support tickets are hidden.
+
 ## Implementation Progress
 
 ### Completed
@@ -10,8 +49,7 @@
 - Rider support tickets now allow follow-up replies and rider-initiated closure from ticket detail.
 - Background jobs foundation with queue + worker runtime.
 - Ride analytics pipeline writing to `ride_history_stats` with enqueue hooks.
-- 2FA setup/verify/disable, login activity capture, and session management APIs are implemented.
-- Login now enforces TOTP verification for riders with 2FA enabled.
+- Passwordless sign-in (Google, Apple, email code), login activity capture, and session management APIs are implemented. Passwords and TOTP two-factor were removed.
 - Session revocation now invalidates existing JWT access through session-bound token checks.
 - Support admin workflow is implemented with admin-only ticket list, status updates, and agent reply support.
 - Mention-triggered notification fanout is implemented for posts and comments.
@@ -66,7 +104,7 @@
 
 1. Integrate real push/email providers and add rider device registration.
 2. Add rider-facing updates when support tickets are changed by admins.
-3. Expand test coverage for session revocation and 2FA challenge edge-cases.
+3. Expand test coverage for session revocation edge-cases.
 
 ## P2 (Scale and Evolution)
 

@@ -16,6 +16,14 @@ import { useTheme } from "../../../theme/ThemeContext";
 import type { WaypointStatus } from "../core/navigationSession";
 import type { TripWaypoint } from "../core/tripPlan";
 import type { RideParticipantView } from "../types/navigation";
+import { formatClockTime } from "../core/format";
+import { crewRoleLabel } from "../core/crewRole";
+import { splitCrew } from "../core/crewList";
+import { progressLabel } from "../../rides/core/riderProgress";
+import { CrewSelfCard, type MyRideControls } from "./CrewSelfCard";
+import { crewStatusColor } from "./crewStatusColor";
+
+export type { MyRideControls } from "./CrewSelfCard";
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -59,8 +67,11 @@ interface NavigationBottomSheetProps {
   isOverview: boolean;
   /** Start ride, Skip stop, or Continue — whichever applies now. */
   action: TripBarAction | null;
+  /** This rider's own ride: finish it, or take a finish back while the group rides on. */
+  myRide?: MyRideControls;
+  /** Shown apart as the "You" card rather than as a crew row. */
+  currentRiderId?: string;
 }
-
 interface RoundButtonProps {
   label: string;
   onPress: () => void;
@@ -112,6 +123,8 @@ export function NavigationBottomSheet({
   onOverview,
   isOverview,
   action,
+  myRide,
+  currentRiderId,
 }: NavigationBottomSheetProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -143,6 +156,21 @@ export function NavigationBottomSheet({
       }).start();
     },
     [collapsedHeight, heightValue],
+  );
+
+  // Anything done from the sheet — focusing a rider or stop, finishing,
+  // ending — puts the map back in view.
+  const withCollapse = useCallback(
+    (onPress: () => void) => () => {
+      snapToHeight(collapsedHeight);
+      onPress();
+    },
+    [collapsedHeight, snapToHeight],
+  );
+
+  const crew = useMemo(
+    () => splitCrew(participants, currentRiderId),
+    [currentRiderId, participants],
   );
 
   const toggle = useCallback(() => {
@@ -251,7 +279,7 @@ export function NavigationBottomSheet({
 
             <RoundButton
               label={isOverview ? "Back to your position" : "Show route overview"}
-              onPress={onOverview}
+              onPress={withCollapse(onOverview)}
               isActive={isOverview}
             >
               <Route color={isOverview ? "white" : colors.text} size={20} />
@@ -275,7 +303,7 @@ export function NavigationBottomSheet({
               <TouchableOpacity
                 accessibilityRole='button'
                 accessibilityState={{ disabled: Boolean(action.isBusy) }}
-                onPress={action.onPress}
+                onPress={withCollapse(action.onPress)}
                 disabled={action.isBusy}
                 style={[
                   styles.chip,
@@ -326,7 +354,7 @@ export function NavigationBottomSheet({
                   key={waypoint.id}
                   accessibilityRole='button'
                   accessibilityLabel={`Show ${waypoint.name} on the map`}
-                  onPress={() => onWaypointPress?.(waypoint)}
+                  onPress={withCollapse(() => onWaypointPress?.(waypoint))}
                   className='flex-row items-center justify-between p-3 rounded-xl mb-2'
                   style={{
                     backgroundColor: colors.bg,
@@ -377,7 +405,20 @@ export function NavigationBottomSheet({
           </View>
         ) : null}
 
-        {participants.map((participant) => {
+        {crew.self ? (
+          <CrewSelfCard
+            self={crew.self}
+            myRide={
+              myRide && {
+                ...myRide,
+                onFinish: withCollapse(myRide.onFinish),
+                onResume: withCollapse(myRide.onResume),
+              }
+            }
+          />
+        ) : null}
+
+        {crew.others.map((participant) => {
           const isFocused = focusedParticipantId === participant.riderId;
 
           return (
@@ -385,32 +426,40 @@ export function NavigationBottomSheet({
               key={participant.riderId}
               accessibilityRole='button'
               accessibilityLabel={`Show ${participant.displayName} on the map`}
-              onPress={() => onParticipantPress?.(participant)}
+              onPress={withCollapse(() => onParticipantPress?.(participant))}
               className='flex-row items-center justify-between p-3 rounded-xl mb-2'
               style={{ backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border }}
             >
-              <View className='flex-row items-center'>
+              <View className='flex-row items-center flex-1 pr-2'>
                 <View
                   style={[
                     styles.presenceDot,
                     { backgroundColor: participant.isOnline ? colors.primary : colors.textMuted },
                   ]}
                 />
-                <Text style={{ color: colors.text, fontWeight: isFocused ? "700" : "400" }}>
+                <Text
+                  numberOfLines={1}
+                  style={{ color: colors.text, fontWeight: isFocused ? "700" : "400", flexShrink: 1 }}
+                >
                   {participant.displayName}
                 </Text>
               </View>
               <Text
                 className='text-xs'
-                style={{ color: isFocused ? colors.primary : colors.textMuted }}
+                style={{
+                  color: isFocused ? colors.primary : crewStatusColor(participant.progress, colors),
+                }}
               >
                 {isFocused
                   ? "On map"
-                  : participant.role === "captain"
-                    ? "Captain"
-                    : participant.role === "co_captain"
-                      ? "Co-Captain"
-                      : "Rider"}
+                  : `${crewRoleLabel(participant.role)} · ${progressLabel(
+                      {
+                        progress: participant.progress,
+                        finishedAt: participant.finishedAt,
+                        isOnline: participant.isOnline,
+                      },
+                      formatClockTime,
+                    )}`}
               </Text>
             </Pressable>
           );
@@ -430,7 +479,7 @@ export function NavigationBottomSheet({
         {isHost && canEndRide ? (
           <TouchableOpacity
             accessibilityRole='button'
-            onPress={onEndRide}
+            onPress={withCollapse(onEndRide)}
             disabled={ending}
             className='rounded-xl items-center py-3 mt-3'
             style={{ backgroundColor: colors.danger, opacity: ending ? 0.7 : 1 }}

@@ -32,7 +32,7 @@ Provide a single rider platform that supports:
 
 - Rewards: badges, achievements, leaderboard
 - Notifications, settings, privacy controls, and delivery preferences
-- Account security surfaces: 2FA, login activity, and session revocation
+- Account security surfaces: login activity and session revocation
 - Support ticketing for riders plus admin ticket triage and reply workflow
 
 ### Live Group Coordination

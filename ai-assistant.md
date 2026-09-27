@@ -54,7 +54,8 @@ Code locations:
 ## Current Status (High Signal)
 
 - Core backend domains implemented: auth, riders, rides, routes, community, rewards, notifications, support, live session.
-- Security module: TOTP setup/verify/disable, login activity, session management.
+- Auth: passwordless (Google, Apple, email code). No passwords or TOTP.
+- Security module: login activity, session management.
 - Support: admin-only ticket triage, agent replies.
 - Mention notifications: in-app creation + queued push/email delivery stubs.
 - Queue/worker active: ride analytics, live-session ops, notification delivery.
@@ -72,20 +73,19 @@ Code locations:
 
 - Local DB/bootstrap hardened: fresh-machine setup, migration reliability.
 - Swagger generation: lazy init, avoids startup deprecation warnings.
-- Register flow: logs in post-signup before auth-store persist. Login supports email-or-username.
 - Client validation errors: normalized via shared parser utility.
 - Groups UX: membership-context reliability hardened across list/detail/join.
 - Ride visibility: participant-only access enforced for active/private rides.
-- Account security modal: 2FA setup, login activity, session revocation.
+- Account security modal: login activity, session revocation.
 - Admin support inbox: status update flow behind `is_admin` checks.
 - Mention parsing: creates notifications, queues push/email delivery jobs.
 - Live session: lifecycle, presence, incidents, worker fanout, client map/presence integrated.
 - Ride detail: subscribes realtime ride-room updates for joins, stop-request changes.
 - Navigation screen: stability polish — overlays, bottom sheet, recenter, waypoint rendering.
-- Login: enforces TOTP when 2FA enabled. Requires valid session for API/socket auth.
+- Auth: requires a valid session for API/socket auth.
 - Ride-room subscriptions: enforce visibility/participation checks before join `ride:<rideId>`.
 - Mention fanout: recipient-scoped notification identifiers prevent dedupe collapse.
-- Security/profile flows: tolerate older schemas missing `riders.is_admin`, `riders.totp_verified_at`.
+- Security/profile flows: tolerate older schemas missing `riders.is_admin`.
 - UAT guide: stakeholder-facing, local PDF generation workflow.
 - Support center: individual ticket detail view, agent replies.
 - Ticket detail: rider follow-up replies, rider-initiated close.

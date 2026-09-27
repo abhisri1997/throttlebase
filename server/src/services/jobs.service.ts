@@ -34,18 +34,25 @@ const enqueueRecurringJobIfDue = async (
   return true;
 };
 
+/**
+ * Queues turning a ride's track into history stats. With a riderId only that
+ * rider is recomputed — one rider finishing while the rest still ride.
+ */
 export const enqueueRideStatsRecompute = async (
   rideId: string,
-  source: "ride-completed" | "gps-ingest",
+  source: "ride-completed" | "gps-ingest" | "rider-finished",
+  riderId?: string,
 ): Promise<void> => {
+  // A pending whole-ride job already covers any single rider.
   const existing = await query(
     `SELECT id
      FROM jobs
      WHERE type = $1
-       AND status IN ('pending', 'processing')
+       AND status = 'pending'
        AND payload->>'rideId' = $2
+       AND (payload->>'riderId' IS NULL OR payload->>'riderId' = $3)
      LIMIT 1`,
-    [JOB_TYPES.RIDE_STATS_RECOMPUTE, rideId],
+    [JOB_TYPES.RIDE_STATS_RECOMPUTE, rideId, riderId ?? null],
   );
 
   if (existing.rows.length > 0) {
@@ -56,6 +63,7 @@ export const enqueueRideStatsRecompute = async (
     type: JOB_TYPES.RIDE_STATS_RECOMPUTE,
     payload: {
       rideId,
+      ...(riderId ? { riderId } : {}),
       source,
       requestedAt: new Date().toISOString(),
     },
@@ -94,7 +102,8 @@ export const enqueueLiveSessionStarted = async (
 
 export const enqueueLiveSessionEnded = async (
   rideId: string,
-  actorRiderId: string,
+  /** Null when the system ended the ride. */
+  actorRiderId: string | null,
   reason?: string,
 ): Promise<void> => {
   const existing = await query(
@@ -198,6 +207,16 @@ export const enqueueCleanupExpiredSessionsJob =
 export const enqueueLivePresenceSweepJob = async (): Promise<boolean> => {
   return enqueueRecurringJobIfDue(
     JOB_TYPES.LIVE_PRESENCE_SWEEP,
+    { enqueuedAt: new Date().toISOString() },
+    30,
+    1,
+  );
+};
+
+/** Finishes riders parked at the destination and ends rides nobody is riding. */
+export const enqueueRideProgressSweepJob = async (): Promise<boolean> => {
+  return enqueueRecurringJobIfDue(
+    JOB_TYPES.RIDE_PROGRESS_SWEEP,
     { enqueuedAt: new Date().toISOString() },
     30,
     1,

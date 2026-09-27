@@ -1,6 +1,6 @@
 import React, { useCallback, useState, useRef, useEffect } from 'react';
 import {
-  View, Text, TouchableOpacity, Modal, ActivityIndicator, Platform,
+  View, Text, TouchableOpacity, Modal, ActivityIndicator, Platform, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE } from './MapWrapper';
@@ -101,10 +101,24 @@ export default function LocationPicker({
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setLoadingLocation(false);
+        Alert.alert(
+          'Location permission needed',
+          'Allow location access to drop a pin where you are, or search for the place instead.',
+        );
         return;
       }
-      const location = await Location.getCurrentPositionAsync({});
+
+      // Last known fix first. Asking for a fresh one indoors, in a tunnel or
+      // on an emulator can fail outright while a perfectly good cached
+      // position is sitting there, and for choosing a point on a map a recent
+      // fix is as good as a live one.
+      const lastKnown = await Location.getLastKnownPositionAsync();
+      const location =
+        lastKnown ??
+        (await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        }));
+
       const { latitude, longitude } = location.coords;
       setSelectedCoords([longitude, latitude]);
       setSelectedName(PENDING_ADDRESS_LABEL);
@@ -116,6 +130,10 @@ export default function LocationPicker({
       }, 500);
     } catch (err) {
       console.error('Location error:', err);
+      Alert.alert(
+        "Couldn't find your location",
+        'Check that location services are on, or search for the place instead.',
+      );
     } finally {
       setLoadingLocation(false);
     }

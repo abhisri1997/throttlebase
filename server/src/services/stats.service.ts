@@ -244,11 +244,16 @@ const refreshRiderAggregateTotals = async (riderId: string): Promise<void> => {
 
 export const recomputeRideHistoryStats = async (
   rideId: string,
+  /** Recompute only this rider — one rider finishing while the rest still ride. */
+  riderId?: string,
 ): Promise<{ rideId: string; ridersProcessed: number }> => {
   // The track comes from the live session's sampled positions — what the
   // navigation screen and background tracker actually broadcast. `gps_traces`
   // is a separate upload path no client writes to, so reading it found nothing.
   // Altitude is never sent over the socket, so elevation stays unknown.
+  //
+  // A rider's ride ends at their finish. An arrival is dated to reaching the
+  // destination, so samples from time spent there are left out.
   const tracesResult = await query(
     `SELECT s.rider_id,
             ST_Y(s.location::geometry) AS latitude,
@@ -258,9 +263,13 @@ export const recomputeRideHistoryStats = async (
             s.captured_at AS recorded_at
      FROM ride_live_location_samples s
      JOIN ride_live_sessions ls ON ls.id = s.session_id
+     LEFT JOIN ride_live_presence p
+       ON p.session_id = s.session_id AND p.rider_id = s.rider_id
      WHERE ls.ride_id = $1
+       AND ($2::uuid IS NULL OR s.rider_id = $2::uuid)
+       AND (p.finished_at IS NULL OR s.captured_at <= p.finished_at)
      ORDER BY s.rider_id ASC, s.captured_at ASC`,
-    [rideId],
+    [rideId, riderId ?? null],
   );
 
   const traces = tracesResult.rows as TracePoint[];

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware.js";
 import * as rideController from "../controllers/ride.controller.js";
 import * as liveSessionController from "../controllers/live-session.controller.js";
+import * as rideProgressController from "../controllers/ride-progress.controller.js";
 
 const router = Router();
 
@@ -118,6 +119,19 @@ router.get("/", authenticate, rideController.getAllRides);
  *         description: Array of past rides the authenticated rider participated in
  */
 router.get("/history", authenticate, rideController.getHistory);
+
+/**
+ * @swagger
+ * /api/rides/riding:
+ *   get:
+ *     summary: Rides you are riding right now — what your device should be tracking
+ *     tags: [Live Session]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Rides under way for you and not yet finished
+ */
+router.get("/riding", authenticate, rideProgressController.getRidesImRiding);
 router.post("/", authenticate, rideController.createRide);
 
 /**
@@ -225,7 +239,7 @@ router.delete("/:id", authenticate, rideController.deleteRide);
  *       200:
  *         description: Successfully joined the ride
  *       400:
- *         description: Already a participant or ride is full
+ *         description: Already a participant, ride is full, or the ride is completed or cancelled
  *       404:
  *         description: Ride not found
  */
@@ -309,11 +323,60 @@ router.get("/:id/live/session", authenticate, liveSessionController.getSession);
  *               mark_ride_completed:
  *                 type: boolean
  *                 default: false
+ *               confirm_unfinished:
+ *                 type: boolean
+ *                 default: false
+ *                 description: End even though riders have not reached the destination
  *     responses:
  *       200:
  *         description: Session ended or already ended
+ *       409:
+ *         description: Riders still out (code UNFINISHED_RIDERS); resend with confirm_unfinished to end anyway
  */
 router.post("/:id/live/end", authenticate, liveSessionController.endSession);
+
+/**
+ * @swagger
+ * /api/rides/{id}/live/me/start:
+ *   post:
+ *     summary: Start your own ride — early, before the captain rolls out, is allowed
+ *     tags: [Live Session]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Your ride has started
+ *       201:
+ *         description: Your ride has started and opened the live session
+ *       400:
+ *         description: Too early, or the ride cannot be started
+ */
+router.post("/:id/live/me/start", authenticate, rideProgressController.startMyRide);
+
+/**
+ * @swagger
+ * /api/rides/{id}/live/me/finish:
+ *   post:
+ *     summary: Finish your own ride — arrived near the destination, left early elsewhere
+ *     tags: [Live Session]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Your ride has finished (ride_completed when you were the last rider out)
+ */
+router.post("/:id/live/me/finish", authenticate, rideProgressController.finishMyRide);
+
+/**
+ * @swagger
+ * /api/rides/{id}/live/me/resume:
+ *   post:
+ *     summary: Take back your finish while the group ride is still live
+ *     tags: [Live Session]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: You are riding again
+ */
+router.post("/:id/live/me/resume", authenticate, rideProgressController.resumeMyRide);
 
 /**
  * @swagger
@@ -488,6 +551,59 @@ router.get("/:id/track", authenticate, liveSessionController.getTrack);
 
 /**
  * @swagger
+ * /api/rides/{id}/route:
+ *   post:
+ *     summary: Save the road the caller rode on a completed ride as a route
+ *     description: >
+ *       The route is built from the caller's own recorded track (cleaned and
+ *       simplified), never from client-supplied geometry. Saving the same ride
+ *       again returns the route already saved.
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Ride ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title]
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 maxLength: 255
+ *               visibility:
+ *                 type: string
+ *                 enum: [private, public]
+ *                 default: private
+ *     responses:
+ *       201:
+ *         description: Route created ({ route, created true })
+ *       200:
+ *         description: This ride was already saved; that route is returned ({ route, created false })
+ *       400:
+ *         description: Invalid ride ID or body
+ *       403:
+ *         description: Not a confirmed participant
+ *       404:
+ *         description: Ride not found
+ *       409:
+ *         description: The ride is not completed yet
+ *       422:
+ *         description: Not enough of the ride was recorded to make a route
+ */
+router.post("/:id/route", authenticate, liveSessionController.saveRouteFromMyRide);
+
+/**
+ * @swagger
  * /api/rides/{id}/promote:
  *   post:
  *     summary: Promote a rider to co-captain (captain only)
@@ -516,7 +632,7 @@ router.get("/:id/track", authenticate, liveSessionController.getTrack);
  *       200:
  *         description: Rider promoted to co-captain
  *       400:
- *         description: Cannot promote (not captain or target not a participant)
+ *         description: Cannot promote (not captain, target not a participant, or the ride is completed or cancelled)
  */
 router.post("/:id/promote", authenticate, rideController.promoteCoCaptain);
 

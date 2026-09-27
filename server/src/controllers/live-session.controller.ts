@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { getRiderTrack } from "../services/ride-track.service.js";
+import { saveRouteFromRide } from "../services/route-from-ride.service.js";
+import { SaveRouteFromRideSchema } from "../schemas/route.schemas.js";
 import {
   CreateIncidentSchema,
   EndLiveSessionSchema,
@@ -9,6 +11,7 @@ import { emitToLiveRoom } from "../realtime/gateway.js";
 import { buildLiveRoomKey } from "../realtime/session-room.js";
 import {
   LiveSessionError,
+  UnfinishedRidersError,
   createLiveIncident,
   endLiveSession,
   getLiveSession,
@@ -29,7 +32,13 @@ const rid = (req: Request) => (req.rider as unknown as RiderPayload).riderId;
 
 const RideIdSchema = z.string().uuid();
 
-const handleLiveSessionError = (res: Response, error: any, context: string) => {
+export const handleLiveSessionError = (res: Response, error: any, context: string) => {
+  // The client shows these riders to the captain and asks before ending anyway.
+  if (error instanceof UnfinishedRidersError) {
+    res.status(409).json({ error: error.message, code: "UNFINISHED_RIDERS", riders: error.riders });
+    return;
+  }
+
   if (error instanceof LiveSessionError) {
     res.status(error.statusCode).json({ error: error.message });
     return;
@@ -109,6 +118,7 @@ export const endSession = async (
     const data = EndLiveSessionSchema.parse(req.body || {});
     const options = {
       mark_ride_completed: data.mark_ride_completed,
+      confirm_unfinished: data.confirm_unfinished,
       ...(data.reason ? { reason: data.reason } : {}),
     };
     const result = await endLiveSession(
@@ -208,6 +218,18 @@ export const getReplay = async (
     res.json(result);
   } catch (error: any) {
     handleLiveSessionError(res, error, "Error fetching live session replay");
+  }
+};
+
+/** Publishes the caller's own track on a completed ride as a route. */
+export const saveRouteFromMyRide = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const rideId = RideIdSchema.parse(req.params.id);
+    const input = SaveRouteFromRideSchema.parse(req.body ?? {});
+    const { route, created } = await saveRouteFromRide(rideId, rid(req), input);
+    res.status(created ? 201 : 200).json({ route, created });
+  } catch (error: any) {
+    handleLiveSessionError(res, error, "Error saving ride as a route");
   }
 };
 

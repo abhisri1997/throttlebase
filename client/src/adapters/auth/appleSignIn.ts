@@ -1,6 +1,6 @@
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as Crypto from "expo-crypto";
-import { SignInCancelledError } from "./googleSignIn.js";
+import { SignInCancelledError } from "./googleSignIn";
 
 export interface AppleCredentialPayload {
   identityToken: string;

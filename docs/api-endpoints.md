@@ -6,13 +6,16 @@ Swagger docs are disabled by default in every environment and should only be ena
 
 ## Auth
 
-- `POST /auth/register`
-- `POST /auth/login` (accepts `identifier` + `password`, and optional `totp_token` when 2FA challenge is required)
-- `GET /auth/check-username`
-- `GET /auth/2fa/status`
-- `POST /auth/2fa/setup`
-- `POST /auth/2fa/verify`
-- `POST /auth/2fa/disable`
+Sign-in is passwordless: Google, Apple, or a one-time email code.
+
+- `POST /auth/google`
+- `POST /auth/apple`
+- `POST /auth/email/start`
+- `POST /auth/email/verify`
+- `POST /auth/refresh`
+- `POST /auth/logout`
+- `POST /auth/logout-all`
+- `GET /auth/jwks.json`
 
 ## Security
 
@@ -33,17 +36,18 @@ Swagger docs are disabled by default in every environment and should only be ena
 
 - `GET /api/rides`
 - `POST /api/rides`
+- `GET /api/rides/riding` — rides the caller is riding right now (started, not finished); what the device's background tracker follows
 - `GET /api/rides/:id`
 - `PATCH /api/rides/:id`
-- `POST /api/rides/:id/join`
-- `POST /api/rides/:id/promote`
+- `POST /api/rides/:id/join` — scheduled or active rides only; a completed or cancelled ride answers 400
+- `POST /api/rides/:id/promote` — captain only, while the ride is not completed or cancelled
 - `GET /api/rides/:id/stops`
 - `POST /api/rides/:id/stops`
 - `PATCH /api/rides/:id/stops/:stopId`
 
 ## Routes
 
-- `GET /api/routes`
+- `GET /api/routes` (public routes, plus the caller's own private ones)
 - `POST /api/routes`
 - `POST /api/routes/traces`
 - `GET /api/routes/traces/:rideId`
@@ -115,8 +119,12 @@ Swagger docs are disabled by default in every environment and should only be ena
 
 - `GET /api/live/health`
 - `POST /api/rides/:id/live/start`
-- `POST /api/rides/:id/live/end`
-- `GET /api/rides/:id/live/session`
+- `POST /api/rides/:id/live/end` — `409 UNFINISHED_RIDERS` with the riders still out unless `confirm_unfinished: true`
+- `POST /api/rides/:id/live/me/start` — start your own ride, up to 60 min early; opens the session if nobody has
+- `POST /api/rides/:id/live/me/finish` — finish your own ride: `arrived` near the destination, `left_early` elsewhere
+- `POST /api/rides/:id/route` — save your own track on a completed ride as a route: `{ title, visibility }`; 201 created, 200 with the route already saved, 409 not completed, 422 too little recorded
+- `POST /api/rides/:id/live/me/resume` — take back a finish while the group ride is live
+- `GET /api/rides/:id/live/session` — participants include `progress`, `finished_at`, `finish_reason`, `arrived_at`, `distance_to_destination_m`
 - `POST /api/rides/:id/live/incident`
 - `POST /api/rides/:id/live/incident/:incidentId/ack`
 - `GET /api/rides/:id/live/timeline`
@@ -127,7 +135,7 @@ Swagger docs are disabled by default in every environment and should only be ena
 ### `/live` namespace
 
 - Client -> server: `session:join`, `session:leave`, `presence:heartbeat`, `location:update`, `incident:create`
-- Server -> client: `session:state`, `presence:update`, `location:broadcast`, `incident:created`, `session:ended`, `session:error`
+- Server -> client: `session:state`, `presence:update`, `location:broadcast`, `incident:created`, `session:ended`, `session:error`, `rider:progress` (a rider started, finished or resumed), `ride:arrival` (to the arriving rider only: `arrived` / `left`, with `autoFinishAfterMs`)
 
 ### `/rides` namespace
 
