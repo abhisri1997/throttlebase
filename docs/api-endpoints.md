@@ -39,8 +39,8 @@ Sign-in is passwordless: Google, Apple, or a one-time email code.
 - `GET /api/rides/riding` — rides the caller is riding right now (started, not finished); what the device's background tracker follows
 - `GET /api/rides/:id`
 - `PATCH /api/rides/:id`
-- `POST /api/rides/:id/join`
-- `POST /api/rides/:id/promote`
+- `POST /api/rides/:id/join` — scheduled or active rides only; a completed or cancelled ride answers 400
+- `POST /api/rides/:id/promote` — captain only, while the ride is not completed or cancelled
 - `GET /api/rides/:id/stops`
 - `POST /api/rides/:id/stops`
 - `PATCH /api/rides/:id/stops/:stopId`
