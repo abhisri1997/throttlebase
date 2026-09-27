@@ -15,12 +15,16 @@ export interface RouteListItem extends RouteSummaryInput {
   creator_id: string;
   creator_name?: string;
   geojson?: { coordinates?: number[][] } | null;
+  /** Present on search results: how the route answers the search. */
+  match?: { direction: "forward" | "reverse"; start_gap_km: number | null; end_gap_km: number | null };
 }
 
 interface RouteCardProps {
   route: RouteListItem;
   /** The signed-in rider, so their own routes read "You". */
   viewerId: string | null;
+  /** On a search result: "Starts 7.8 km from Bengaluru · ends in Sulthan Bathery". */
+  matchNote?: string | null;
   onPress: () => void;
 }
 
@@ -28,7 +32,7 @@ interface RouteCardProps {
  * A route in the Routes list: where it goes first, then how it goes (its
  * stops, length, ride time and highlights), then who rode it.
  */
-export function RouteCard({ route, viewerId, onPress }: RouteCardProps) {
+export function RouteCard({ route, viewerId, matchNote, onPress }: RouteCardProps) {
   const { colors } = useTheme();
   const [shapeWidth, setShapeWidth] = useState(0);
   const headline = routeHeadline(route);
@@ -37,6 +41,7 @@ export function RouteCard({ route, viewerId, onPress }: RouteCardProps) {
   const isMine = viewerId !== null && route.creator_id === viewerId;
   const savedOn = new Date(route.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
   const author = isMine ? "You" : route.creator_name ?? "A rider";
+  const isReversed = route.match?.direction === "reverse";
 
   return (
     <TouchableOpacity
@@ -65,12 +70,22 @@ export function RouteCard({ route, viewerId, onPress }: RouteCardProps) {
           <Text style={[styles.headline, { color: colors.text }]} numberOfLines={2}>
             {headline}
           </Text>
+          {isReversed ? (
+            <View style={[styles.pill, { backgroundColor: colors.border }]}>
+              <Text style={[styles.pillText, { color: colors.text }]}>RIDDEN THE OTHER WAY</Text>
+            </View>
+          ) : null}
           {route.visibility === "private" ? (
             <View style={[styles.pill, { backgroundColor: colors.primary + "26" }]}>
               <Text style={[styles.pillText, { color: colors.primary }]}>ONLY YOU</Text>
             </View>
           ) : null}
         </View>
+        {matchNote ? (
+          <Text style={[styles.match, { color: colors.primary }]} numberOfLines={2}>
+            {matchNote}
+          </Text>
+        ) : null}
         {via ? (
           <Text style={[styles.via, { color: colors.textMuted }]} numberOfLines={1}>
             {via}
@@ -98,6 +113,7 @@ const styles = StyleSheet.create({
   pill: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3, marginTop: 2 },
   pillText: { fontSize: 10, fontWeight: "700", letterSpacing: 0.4 },
   via: { fontSize: 13 },
+  match: { fontSize: 13, fontWeight: "600" },
   facts: { fontSize: 13, fontWeight: "600", fontVariant: ["tabular-nums"] },
   by: { fontSize: 12 },
 });
