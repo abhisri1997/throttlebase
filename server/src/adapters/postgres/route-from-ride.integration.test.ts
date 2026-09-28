@@ -74,6 +74,36 @@ const recordRide = async (pool: pg.Pool, sessionId: string, riderId: string, fix
   );
 };
 
+/**
+ * Ride north 100 fixes, park, walk ~300 m east to a building and back over
+ * ~10 minutes, then ride on north: the Infosys ride, in miniature.
+ */
+const recordRideWithWalkOff = async (pool: pg.Pool, sessionId: string, riderId: string) => {
+  const walkStepDeg = 0.00018; // ~20 m of longitude
+  const parkedLat = START.lat + 99 * STEP_DEG;
+  const fixes = [
+    ...Array.from({ length: 100 }, (_, i) => ({ lng: START.lon, lat: START.lat + i * STEP_DEG, s: i, acc: 5 })),
+    ...Array.from({ length: 30 }, (_, i) => ({
+      lng: START.lon + (i < 15 ? i + 1 : 30 - i - 1) * walkStepDeg,
+      lat: parkedLat,
+      s: 99 + (i + 1) * 20,
+      acc: 20,
+    })),
+    ...Array.from({ length: 100 }, (_, i) => ({ lng: START.lon, lat: parkedLat + (i + 1) * STEP_DEG, s: 719 + i, acc: 5 })),
+  ];
+  await pool.query(
+    `INSERT INTO ride_live_location_samples (session_id, rider_id, location, accuracy_m, captured_at)
+     SELECT $1, $2, ST_SetSRID(ST_MakePoint(f.lng, f.lat), 4326)::geography, f.acc,
+            now() - interval '1 hour' + f.s * interval '1 second'
+     FROM UNNEST($3::float8[], $4::float8[], $5::int[], $6::float8[]) AS f(lng, lat, s, acc)`,
+    [sessionId, riderId, fixes.map((f) => f.lng), fixes.map((f) => f.lat), fixes.map((f) => f.s), fixes.map((f) => f.acc)],
+  );
+  return { parked: { lat: parkedLat, lng: START.lon }, building: { lat: parkedLat, lng: START.lon + 15 * walkStepDeg } };
+};
+
+const metresBetween = (a: { lat: number; lng: number }, b: { lat: number; lng: number }): number =>
+  Math.hypot((a.lat - b.lat) * 111_320, (a.lng - b.lng) * 111_320 * Math.cos((a.lat * Math.PI) / 180));
+
 const addStop = async (pool: pg.Pool, rideId: string, sequence: number, name: string, lat: number, lng = START.lon) => {
   const result = await pool.query(
     `INSERT INTO ride_stops (ride_id, type, status, sequence, name, location)
@@ -280,5 +310,62 @@ test("saving a finished ride as a route", { skip: !CONNECTION }, async (t) => {
     assert.ok(!forOthers.some((route) => route.id === saved.route.id));
     const forCreator = await routes!.listVisibleRoutes(RIDER);
     assert.ok(forCreator.some((route) => route.id === saved.route.id));
+  });
+
+  await t.test("walking off at a stop is left out of the route, and the stop sits where the bike was", async () => {
+    const { rideId, sessionId } = await createRide(admin, "completed");
+    const { parked, building } = await recordRideWithWalkOff(admin, sessionId, RIDER);
+    await addStop(admin, rideId, 1, "Building 37", building.lat, building.lng);
+
+    const saved = await routeFromRide!.saveRouteFromRide(rideId, RIDER, { title: "Office run", visibility: "public" });
+
+    assert.ok(Math.abs(Number(saved.route.distance_km) - 2.21) < 0.05, `rode ${saved.route.distance_km} km`);
+    assert.ok(Math.abs(Number(saved.route.ridden_duration_s) - 198) < 5, `rode ${saved.route.ridden_duration_s} s`);
+    const detail = await routes!.getRouteById(saved.route.id, RIDER);
+    assert.equal(detail?.stops[0]?.name, "Building 37");
+    assert.ok(metresBetween(detail!.stops[0]!, parked) < 25, "the stop is where the bike was parked");
+    assert.ok(metresBetween(detail!.stops[0]!, building) > 250, "not the building the rider walked to");
+  });
+
+  await t.test("a route saved before stops were understood is rebuilt from its ride, keeping names and notes", async () => {
+    const { rideId, sessionId } = await createRide(admin, "completed");
+    const { parked, building } = await recordRideWithWalkOff(admin, sessionId, RIDER);
+    await addStop(admin, rideId, 1, "Building 37", building.lat, building.lng);
+    // As the old save wrote it: the walk in the line, time first fix to last, the stop at the building.
+    const old = await admin.query(
+      `INSERT INTO routes (creator_id, ride_id, title, geojson, distance_km, visibility,
+                           start_name, end_name, ridden_duration_s)
+       VALUES ($1, $2, 'Old save', $3, 2.8, 'public', 'Named Start', 'Named End', 818)
+       RETURNING id`,
+      [RIDER, rideId, JSON.stringify({ type: "LineString", coordinates: [[START.lon, START.lat], [building.lng, building.lat], [START.lon, START.lat + 0.02]] })],
+    );
+    const routeId = old.rows[0].id as string;
+    await admin.query(
+      `INSERT INTO route_stops (route_id, position, name, location, note)
+       VALUES ($1, 1, 'Building 37', ST_SetSRID(ST_MakePoint($2::float8, $3::float8), 4326)::geography, 'Park at the gate')`,
+      [routeId, building.lng, building.lat],
+    );
+
+    const rebuilt = await routeFromRide!.rebuildRouteFromRide(routeId);
+
+    assert.ok(rebuilt);
+    assert.equal(rebuilt.before.durationS, 818);
+    assert.ok(Math.abs(rebuilt.after.durationS - 198) < 5);
+    const detail = await routes!.getRouteById(routeId, RIDER);
+    assert.equal(detail?.start_name, "Named Start");
+    assert.equal(detail?.end_name, "Named End");
+    assert.ok(Math.abs(Number(detail?.distance_km) - 2.21) < 0.05);
+    assert.equal(detail?.stops[0]?.note, "Park at the gate");
+    assert.ok(metresBetween(detail!.stops[0]!, parked) < 25);
+    assert.ok(detail!.geojson && (detail!.geojson as { coordinates: number[][] }).coordinates.every(([lng]) => lng! < START.lon + 0.0002));
+  });
+
+  await t.test("a route with no ride of its own is left alone", async () => {
+    const drawn = await admin.query(
+      `INSERT INTO routes (creator_id, title, geojson, visibility) VALUES ($1, 'Drawn', $2, 'public') RETURNING id`,
+      [RIDER, JSON.stringify({ type: "LineString", coordinates: [[77.6, 12.9], [77.6, 12.95]] })],
+    );
+
+    assert.equal(await routeFromRide!.rebuildRouteFromRide(drawn.rows[0].id as string), null);
   });
 });

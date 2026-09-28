@@ -12,6 +12,8 @@ export const MAX_PLAUSIBLE_SPEED_MPS = 250 / 3.6;
 export interface TrackSample extends LatLng {
   accuracyM: number | null;
   capturedAtMs: number;
+  /** The phone's own speed reading, when it gave one. */
+  speedKmh?: number | null;
 }
 
 export interface RiderTrack {

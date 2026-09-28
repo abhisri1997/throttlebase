@@ -1,4 +1,6 @@
 import { query } from "../config/db.js";
+import { ridingStats } from "../core/ride-progress/ridingStats.js";
+import type { TrackSample } from "../utils/track.js";
 import { enqueueRewardsRecompute } from "./jobs.service.js";
 
 interface TracePoint {
@@ -7,6 +9,7 @@ interface TracePoint {
   longitude: string | number;
   altitude_m: string | number | null;
   speed_kmh: string | number | null;
+  accuracy_m: string | number | null;
   recorded_at: string;
 }
 
@@ -22,11 +25,9 @@ interface RiderStatsComputation {
   caloriesBurned: number;
 }
 
-const EARTH_RADIUS_METERS = 6371000;
-/** Above this, a segment is a GPS outlier rather than road covered. */
-const MAX_PLAUSIBLE_SPEED_KMH = 200;
-
+/** Null stays null: Number(null) is 0, which would read a missing speed as standing still. */
 const toNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === "") return null;
   const num = Number(value);
   return Number.isFinite(num) ? num : null;
 };
@@ -36,144 +37,64 @@ const roundTo = (value: number, precision: number): number => {
   return Math.round(value * factor) / factor;
 };
 
-const haversineMeters = (
-  fromLat: number,
-  fromLng: number,
-  toLat: number,
-  toLng: number,
-): number => {
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
+const toTrackSample = (point: TracePoint): TrackSample => ({
+  lat: Number(point.latitude),
+  lng: Number(point.longitude),
+  accuracyM: toNumber(point.accuracy_m),
+  capturedAtMs: new Date(point.recorded_at).getTime(),
+  speedKmh: toNumber(point.speed_kmh),
+});
 
-  const dLat = toRad(toLat - fromLat);
-  const dLng = toRad(toLng - fromLng);
-  const lat1 = toRad(fromLat);
-  const lat2 = toRad(toLat);
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return EARTH_RADIUS_METERS * c;
+/** Altitude is never sent over the socket today, so this stays zero until it is. */
+const elevationChange = (points: readonly TracePoint[]): { gainM: number; lossM: number } => {
+  let gainM = 0;
+  let lossM = 0;
+  for (let i = 1; i < points.length; i++) {
+    const prevAlt = toNumber(points[i - 1]!.altitude_m);
+    const currAlt = toNumber(points[i]!.altitude_m);
+    if (prevAlt === null || currAlt === null) continue;
+    const delta = currAlt - prevAlt;
+    // Guard against noisy altitude spikes from device GPS.
+    if (Math.abs(delta) > 150) continue;
+    if (delta > 0) gainM += delta;
+    else lossM -= delta;
+  }
+  return { gainM, lossM };
 };
 
+/**
+ * Distance, moving time and speeds count only the riding: a stop, and any
+ * walking at it, is neither (see core/ride-progress/segmentRide). Total time
+ * is still first fix to last.
+ */
 const computeForRider = (
   riderId: string,
   points: TracePoint[],
 ): RiderStatsComputation => {
-  if (points.length === 0) {
-    return {
-      riderId,
-      totalDistanceKm: 0,
-      totalTimeSec: 0,
-      movingTimeSec: 0,
-      avgSpeedKmh: 0,
-      maxSpeedKmh: 0,
-      elevationGainM: 0,
-      elevationLossM: 0,
-      caloriesBurned: 0,
-    };
-  }
-
-  let totalDistanceMeters = 0;
-  let movingTimeSec = 0;
-  let maxSpeedKmh = 0;
-  let elevationGainM = 0;
-  let elevationLossM = 0;
-
-  const firstPoint = points[0]!;
-  const lastPoint = points[points.length - 1]!;
-  const firstTs = new Date(firstPoint.recorded_at).getTime();
-  const lastTs = new Date(lastPoint.recorded_at).getTime();
-  const totalTimeSec = Math.max(0, Math.round((lastTs - firstTs) / 1000));
-
-  for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1]!;
-    const curr = points[i]!;
-
-    const prevLat = toNumber(prev.latitude);
-    const prevLng = toNumber(prev.longitude);
-    const currLat = toNumber(curr.latitude);
-    const currLng = toNumber(curr.longitude);
-
-    const prevTs = new Date(prev.recorded_at).getTime();
-    const currTs = new Date(curr.recorded_at).getTime();
-    const dtSec = Math.round((currTs - prevTs) / 1000);
-
-    if (
-      prevLat === null ||
-      prevLng === null ||
-      currLat === null ||
-      currLng === null ||
-      dtSec <= 0
-    ) {
-      continue;
-    }
-
-    const segmentMeters = haversineMeters(prevLat, prevLng, currLat, currLng);
-    if (!Number.isFinite(segmentMeters) || segmentMeters < 0) {
-      continue;
-    }
-
-    // A leap no motorcycle makes is a bad fix, not distance ridden. Without
-    // this one outlier adds kilometres, and a track fed by two sources at once
-    // (a rider's GPS and a dev simulation) reads as thousands of them.
-    const impliedSpeedKmh = segmentMeters / 1000 / (dtSec / 3600);
-    if (impliedSpeedKmh > MAX_PLAUSIBLE_SPEED_KMH) {
-      continue;
-    }
-
-    totalDistanceMeters += segmentMeters;
-
-    const currSpeed = toNumber(curr.speed_kmh) ?? 0;
-    const prevSpeed = toNumber(prev.speed_kmh) ?? 0;
-    const measuredSpeed = Math.max(currSpeed, prevSpeed);
-    if (measuredSpeed > maxSpeedKmh) {
-      maxSpeedKmh = measuredSpeed;
-    }
-
-    const estimatedSpeed =
-      dtSec > 0 ? segmentMeters / 1000 / (dtSec / 3600) : 0;
-
-    if (Math.max(measuredSpeed, estimatedSpeed) > 2) {
-      movingTimeSec += dtSec;
-    }
-
-    const prevAlt = toNumber(prev.altitude_m);
-    const currAlt = toNumber(curr.altitude_m);
-    if (prevAlt !== null && currAlt !== null) {
-      const delta = currAlt - prevAlt;
-
-      // Guard against noisy altitude spikes from device GPS.
-      if (Math.abs(delta) <= 150) {
-        if (delta > 0) {
-          elevationGainM += delta;
-        } else if (delta < 0) {
-          elevationLossM += Math.abs(delta);
-        }
-      }
-    }
-  }
-
-  const totalDistanceKm = totalDistanceMeters / 1000;
-  const avgSpeedKmh =
-    movingTimeSec > 0 ? totalDistanceKm / (movingTimeSec / 3600) : 0;
-
-  const caloriesBurned = Math.max(
-    0,
-    Math.round(totalDistanceKm * 35 + movingTimeSec / 60),
-  );
+  const firstPoint = points[0];
+  const lastPoint = points[points.length - 1];
+  const totalTimeSec =
+    firstPoint && lastPoint
+      ? Math.max(
+          0,
+          Math.round(
+            (new Date(lastPoint.recorded_at).getTime() - new Date(firstPoint.recorded_at).getTime()) / 1000,
+          ),
+        )
+      : 0;
+  const riding = ridingStats(points.map(toTrackSample));
+  const elevation = elevationChange(points);
 
   return {
     riderId,
-    totalDistanceKm: roundTo(totalDistanceKm, 2),
+    totalDistanceKm: riding.distanceKm,
     totalTimeSec,
-    movingTimeSec,
-    avgSpeedKmh: roundTo(avgSpeedKmh, 2),
-    maxSpeedKmh: roundTo(maxSpeedKmh, 2),
-    elevationGainM: roundTo(elevationGainM, 2),
-    elevationLossM: roundTo(elevationLossM, 2),
-    caloriesBurned,
+    movingTimeSec: riding.ridingTimeS,
+    avgSpeedKmh: riding.avgSpeedKmh,
+    maxSpeedKmh: riding.maxSpeedKmh,
+    elevationGainM: roundTo(elevation.gainM, 2),
+    elevationLossM: roundTo(elevation.lossM, 2),
+    caloriesBurned: Math.max(0, Math.round(riding.distanceKm * 35 + riding.ridingTimeS / 60)),
   };
 };
 
@@ -232,7 +153,8 @@ const refreshRiderAggregateTotals = async (riderId: string): Promise<void> => {
        SELECT
          $1::uuid AS rider_id,
          COALESCE(SUM(total_distance_km), 0)::numeric(10,2) AS total_distance_km,
-         COALESCE(SUM(total_time_sec), 0)::bigint AS total_ride_time_sec,
+         -- Riding time, not first fix to last: stops aren't riding.
+         COALESCE(SUM(moving_time_sec), 0)::bigint AS total_ride_time_sec,
          COUNT(*)::int AS total_rides
        FROM ride_history_stats
        WHERE rider_id = $1
@@ -260,6 +182,7 @@ export const recomputeRideHistoryStats = async (
             ST_X(s.location::geometry) AS longitude,
             NULL::numeric AS altitude_m,
             s.speed_kmh,
+            s.accuracy_m,
             s.captured_at AS recorded_at
      FROM ride_live_location_samples s
      JOIN ride_live_sessions ls ON ls.id = s.session_id
