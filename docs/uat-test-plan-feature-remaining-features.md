@@ -34,13 +34,14 @@ The following are intentionally excluded from this UAT plan:
 1. A running backend API and connected mobile client build.
 2. At least two active app sessions or two devices for realtime validation.
 3. Seeded or manually created ride, post, and support-ticket data.
+4. For Scenarios 1–4, the held-back features enabled on both sides and a build made with them: `FEATURE_ACCOUNT_SECURITY` / `EXPO_PUBLIC_FEATURE_ACCOUNT_SECURITY` (Scenario 1) and `FEATURE_SUPPORT` / `EXPO_PUBLIC_FEATURE_SUPPORT` (Scenarios 2–4). Both are off in the closed beta.
 
 ## Required Test Accounts
 
 1. Standard rider A
 2. Standard rider B
 3. Standard rider C for optional multi-rider realtime checks
-4. Admin rider with is_admin enabled
+4. Admin rider: a row `(rider_id, 'admin')` in `rider_roles`, granted out of band. The rider must sign in again (or refresh) after the grant so the role reaches their token
 
 ## Recommended Data Setup
 
@@ -52,6 +53,8 @@ The following are intentionally excluded from this UAT plan:
 ## Pass And Fail Guidance
 
 Pass a scenario only when all expected UI outcomes occur without manual database fixes during execution.
+
+Known issue (2026-09-28): the settings screen decides whether to show "Admin - Manage Tickets" from `is_admin` on the rider profile, which is always `false` since that column was replaced by `rider_roles`. Scenario 3 fails at step 4 until the client reads roles. The admin endpoints themselves check roles correctly.
 
 Fail a scenario when:
 
@@ -148,7 +151,7 @@ Admin rider
 ### Preconditions
 
 1. Scenario 2 has created a ticket.
-2. The admin account has is_admin enabled.
+2. The admin account has the `admin` role in `rider_roles` and has signed in since it was granted.
 
 ### Steps
 

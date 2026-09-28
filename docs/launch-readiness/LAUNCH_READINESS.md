@@ -8,8 +8,8 @@
 
 - Monorepo: `server/` (Node 22, TypeScript, Express 5, PostgreSQL + PostGIS, Socket.IO `/live`, DB-backed queue + worker)
   and `client/` (Expo SDK 57, React Native, Expo Router, Zustand, TanStack Query).
-- Hosting: Railway (API/worker), Neon (Postgres), Cloudflare DNS. Domains: `throttlebase.in`, `api.throttlebase.in`.
-- Auth: Google + Apple sign-in → server-issued JWT. Roles on token (admin).
+- Hosting: Railway (API/worker), Supabase (Postgres + PostGIS, `ap-south-1` Mumbai; moved from Neon), Cloudflare DNS. Domains: `throttlebase.in`, `api.throttlebase.in`, `api-dev.throttlebase.in`.
+- Auth: passwordless — Google, Apple, email code → server-issued ES256 access JWT + rotating refresh token. Roles on token (`admin`, `support`) from `rider_roles`.
 - Launch target: **India-only**, both stores, **18+ only**.
 
 ## Rules for the agent
@@ -17,7 +17,7 @@
 1. Start with **Phase 0** and stop for review before changing code.
 2. One branch + PR per epic. Small, reviewable commits. Tests for every behavior change.
 3. Migrations must be additive/reversible. Ask before any migration that drops or rewrites data.
-4. Never commit secrets. Never modify Railway/Neon/Cloudflare/EAS settings — list required changes instead.
+4. Never commit secrets. Never modify Railway/Supabase/Cloudflare/EAS settings — list required changes instead.
 5. Legal text: generate **drafts only**, clearly marked `DRAFT — NOT LEGAL ADVICE`, in `docs/legal/drafts/`.
 6. Safety features must never be paywalled. Privacy/deletion controls must never be paywalled.
 7. When the code contradicts this spec, stop and report the contradiction instead of guessing.

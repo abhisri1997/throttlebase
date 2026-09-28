@@ -17,30 +17,32 @@ Provide a single rider platform that supports:
 
 ### Ride and Route Experience
 
-- Create and manage rides with lifecycle controls
-- Join rides with role-aware participation
-- Share, bookmark, and reuse routes
-- Upload GPS traces and review ride history
-
-### Rider Identity and Social Layer
-
-- Rider profiles with stats and identity details
-- Posts, comments, likes, follows, and groups
-- Ride reviews, @mention notifications, and social feedback loops
-
-### Engagement and Operations
-
-- Rewards: badges, achievements, leaderboard
-- Notifications, settings, privacy controls, and delivery preferences
-- Account security surfaces: login activity and session revocation
-- Support ticketing for riders plus admin ticket triage and reply workflow
+- Create rides from scratch or from a saved route, with stops suggested along the way
+- Join rides with role-aware participation (captain, co-captain, rider)
+- Find routes from one place to another, in either direction, filtered by distance and highlights
+- Save a ride you rode as a route, with stop notes and highlights
+- Share and bookmark routes; tell others whether the road was as described
+- Ride history and stats recorded automatically from the phone, counting riding time only
 
 ### Live Group Coordination
 
-- Live session start/end lifecycle
-- Realtime presence and location sharing
-- Incident reporting and acknowledgment flow
-- Ride-detail room updates for joins and stop-request handling before entering full live navigation
+- Roll call at the start point, then roll-out
+- Each rider starts, arrives and finishes their own ride; early starts and early exits are shown to the group
+- Full-screen turn-by-turn navigation with the crew on the map, rerouting when off course
+- Regroup proposals for riders left behind
+- Incident and SOS reporting with acknowledgement
+- Ride-detail updates for joins and stop requests before entering navigation
+
+### Rider Identity and Social Layer
+
+- Passwordless sign-in (Google, Apple, email code) and a unique username
+- Rider profiles with ride stats
+- Posts, comments, likes, follows, @mentions, ride reviews
+
+### Engagement and Operations
+
+- In-app notifications, settings, privacy controls and per-type delivery preferences
+- Held back from the closed beta, code kept: groups; rewards (badges, achievements, leaderboard); account security (sign-in activity, session revocation); support ticketing with admin triage. See `project-status.md`
 
 ## Success Principles
 
