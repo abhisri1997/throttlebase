@@ -6,13 +6,14 @@
  * motion access; the ride carries on exactly the same either way.
  */
 import * as ExpoLocation from "expo-location";
-import { Alert, Platform } from "react-native";
+import { Alert, AppState, Platform, type NativeEventSubscription } from "react-native";
 import { dominantActivity, freshActivity, type MotionActivityLabel, type MotionReading } from "./motionReading";
 
 const WHY_MOTION = "Motion access lets ThrottleBase tell a stop from a traffic jam. Your ride goes on either way.";
 
 let _latest: MotionReading | null = null;
 let _subscription: ExpoLocation.LocationSubscription | null = null;
+let _appStateSubscription: NativeEventSubscription | null = null;
 let _starting: Promise<void> | null = null;
 // Bumped on stop, so a watch still starting when the ride ends lets go at once.
 let _generation = 0;
@@ -46,12 +47,19 @@ const watch = async (): Promise<void> => {
   const subscription = await ExpoLocation.watchMotionActivityAsync(
     (reading) => {
       const activity = dominantActivity(reading);
-      _latest = activity ? { activity, receivedAtMs: Date.now() } : null;
+      _latest = activity ? { activity, receivedAtMs: Date.now(), endedAtMs: null } : null;
     },
     (message) => console.warn("[Motion] updates failed:", message),
   );
   if (generation === _generation) {
     _subscription = subscription;
+    // The sensors stop reporting in the background, so the last reading says
+    // nothing about what the rider does after that (getting off, say).
+    _appStateSubscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active" && _latest && _latest.endedAtMs === null) {
+        _latest = { ..._latest, endedAtMs: Date.now() };
+      }
+    });
   } else {
     subscription.remove();
   }
@@ -72,6 +80,8 @@ export const stopMotionWatch = (): void => {
   _generation += 1;
   _subscription?.remove();
   _subscription = null;
+  _appStateSubscription?.remove();
+  _appStateSubscription = null;
   _latest = null;
 };
 
