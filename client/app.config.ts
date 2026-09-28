@@ -104,6 +104,10 @@ const config: ExpoConfig = {
                 locationAlwaysPermission:
                     'ThrottleBase needs background location to keep sharing your position during an active group ride.',
                 locationWhenInUsePermission: 'ThrottleBase needs your location to show you on the ride map.',
+                // Motion tells a stop from a traffic jam on the ride history.
+                motionUsagePermission:
+                    'ThrottleBase uses motion to tell when you stop and get off the bike from waiting in traffic.',
+                isAndroidMotionActivityEnabled: true,
                 isAndroidBackgroundLocationEnabled: true,
                 isAndroidForegroundServiceEnabled: true,
                 isIosBackgroundLocationEnabled: true,

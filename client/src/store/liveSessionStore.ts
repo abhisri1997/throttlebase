@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { activityAt } from "../services/motionActivityService";
 import {
   liveSessionSocket,
   type IncidentCreatedEvent,
@@ -385,9 +386,13 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
       return;
     }
 
+    // A simulated fix isn't where the rider is, so the phone's motion says nothing about it.
+    const fixAtMs = input.captured_at ? Date.parse(input.captured_at) : Date.now();
+    const activity = input.simulated ? undefined : activityAt(fixAtMs);
     liveSessionSocket.emit("location:update", {
       rideId,
       ...input,
+      ...(activity ? { activity } : {}),
     });
   },
 

@@ -7,7 +7,8 @@
  *
  * Lifecycle:
  *   1. App detects rider is participant of an active ride → startTracking(rideId, token)
- *   2. Location updates emitted to live-session socket every ~5s
+ *   2. Location updates emitted to live-session socket every ~5s, each with the
+ *      phone's motion reading when it has a recent one
  *   3. Ride ends / rider leaves / app logs out → stopTracking()
  */
 
@@ -15,6 +16,7 @@ import * as ExpoLocation from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import { Platform } from "react-native";
 import { liveSessionSocket } from "./liveSessionSocket";
+import { activityAt, startMotionWatch, stopMotionWatch } from "./motionActivityService";
 
 const BACKGROUND_LOCATION_TASK = "THROTTLEBASE_BG_LOCATION";
 
@@ -33,6 +35,7 @@ const finiteNonNegative = (value: number | null | undefined): number | undefined
 const toLocationUpdate = (rideId: string, position: ExpoLocation.LocationObject) => {
   const speedMps = finiteNonNegative(position.coords.speed);
   const heading = finiteNonNegative(position.coords.heading);
+  const activity = activityAt(position.timestamp);
 
   return {
     rideId,
@@ -43,6 +46,7 @@ const toLocationUpdate = (rideId: string, position: ExpoLocation.LocationObject)
     heading_deg: heading === undefined ? undefined : heading % 360,
     accuracy_m: finiteNonNegative(position.coords.accuracy),
     captured_at: new Date(position.timestamp).toISOString(),
+    ...(activity ? { activity } : {}),
   };
 };
 
@@ -223,6 +227,9 @@ export const startTracking = async (
   await startForegroundTracking();
   await startBackgroundTracking();
   startHeartbeat();
+  // After the location prompts, so the dialogs don't stack; never awaited, so
+  // a rider who says no (or never answers) rides on regardless.
+  void startMotionWatch();
 
   console.log("[BgLocation] tracking started for ride:", rideId);
 };
@@ -233,6 +240,7 @@ export const startTracking = async (
 export const stopTracking = async (): Promise<void> => {
   stopHeartbeat();
   stopForegroundTracking();
+  stopMotionWatch();
   await stopBackgroundTracking();
 
   if (_activeRideId) {

@@ -137,6 +137,7 @@ Sign-in is passwordless: Google, Apple, or a one-time email code.
 ### `/live` namespace
 
 - Client -> server: `session:join`, `session:leave`, `presence:heartbeat`, `location:update`, `incident:create`
+  - `location:update` may carry `activity` (`automotive` | `cycling` | `walking` | `running` | `stationary`): the phone's motion reading at the fix, sent only when recent. Stored on the track sample and used to tell stops from jams.
 - Server -> client: `session:state`, `presence:update`, `location:broadcast`, `incident:created`, `session:ended`, `session:error`, `rider:progress` (a rider started, finished or resumed), `ride:arrival` (to the arriving rider only: `arrived` / `left`, with `autoFinishAfterMs`)
 
 ### `/rides` namespace
