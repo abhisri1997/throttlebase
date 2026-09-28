@@ -2,6 +2,7 @@ export const JOB_TYPES = {
   RIDE_STATS_RECOMPUTE: "ride_stats.recompute",
   REWARDS_RECOMPUTE: "rewards.recompute",
   CLEANUP_EXPIRED_SESSIONS: "cleanup.expired_sessions",
+  ACCOUNT_PURGE: "account.purge",
   LIVE_SESSION_STARTED: "live_session.started",
   LIVE_SESSION_ENDED: "live_session.ended",
   LIVE_INCIDENT_REPORTED: "live_session.incident_reported",

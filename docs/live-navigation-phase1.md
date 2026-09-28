@@ -23,13 +23,13 @@ Phase 1 now includes lightweight multi-rider awareness by rendering peer live-lo
 
 ## Files Involved
 
-- `client/app/ride/[id]/navigation.tsx`
-- `client/src/features/navigation/components/NavigationInstructionOverlay.tsx`
-- `client/src/features/navigation/components/NavigationBottomSheet.tsx`
-- `client/src/features/navigation/services/navigationRouteService.ts`
-- `client/src/features/navigation/types/navigation.ts`
-- `client/src/store/liveSessionStore.ts`
-- `client/src/services/liveSessionSocket.ts`
+- Screen: `client/app/ride/[id]/navigation.tsx`
+- Components (`client/src/features/navigation/components/`): `ManeuverBanner`, `NavigationBottomSheet`, `NavigationRouteLayer`, `PeerMarkers`, `RiderPuck`, `WaypointMarker`, `CrewSelfCard`, `ArrivalPrompt`
+- Hooks (`client/src/features/navigation/hooks/`): `useNavigationSession`, `useNavigationFix`, `useSimulatedNavigationFix`, `useNavigationCamera`, `usePlannedRoute`, `useLiveLeg`, `useTripProgress`, `useRideLiveSession`, `useRideParticipants`, `useRideTrack`, `useWaypointReports`, `useScreenAwake`, `useAppIsActive`, `useTracksViewChanges`, `useNavigationMapTheme`
+- Pure logic with tests (`client/src/features/navigation/core/`): guidance, maneuver, instruction text, route progress, trip plan, trip summary, camera policy, crew list and roles, roll call, regroup, late join, peer appearance, GPS simulator, geometry
+- Route fetching: `client/src/features/navigation/services/navigationRouteService.ts` (through `/api/maps/directions`)
+- Types: `client/src/features/navigation/types/navigation.ts`
+- Live state: `client/src/store/liveSessionStore.ts`, `client/src/services/liveSessionSocket.ts`
 
 ## Phase 1 UX and Stability Fixes
 
@@ -51,47 +51,29 @@ Phase 1 now includes lightweight multi-rider awareness by rendering peer live-lo
 
 ## Phase 2 Requirement Map
 
-This section maps the current codebase against the existing Phase 2 contract already captured in `ai-assistant.md` under `Phase 2 — Socket Gateway and Presence`.
+Status of the Phase 2 socket-gateway contract, reviewed against the code on 2026-09-28.
 
-| Phase 2 requirement                               | Current state                  | Evidence                                                                                                                    | Remaining work                                                                                |
-| ------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Add realtime gateway modules and server bootstrap | Implemented                    | `server/src/realtime/gateway.ts`, `server/src/realtime/auth.ts`, `server/src/realtime/session-room.ts`, `server/src/app.ts` | None for baseline bootstrap                                                                   |
-| Authenticated `/live` namespace                   | Implemented                    | `createLiveGateway()` + `authenticateLiveSocket()`                                                                          | None for baseline auth                                                                        |
-| Room key `ride:<rideId>:session:<sessionId>`      | Implemented                    | `server/src/realtime/session-room.ts`                                                                                       | None                                                                                          |
-| `session:join` and `session:leave` events         | Implemented                    | Server gateway handlers + `client/src/store/liveSessionStore.ts`                                                            | None for baseline transport                                                                   |
-| `presence:heartbeat` event                        | Implemented                    | Gateway heartbeat handler + client heartbeat timer                                                                          | None                                                                                          |
-| `location:update` event                           | Implemented                    | Gateway schema validation + `upsertLocation()` in store                                                                     | None                                                                                          |
-| `incident:create` event                           | Implemented                    | Gateway incident handler + client socket service/store                                                                      | None                                                                                          |
-| `session:state` broadcast                         | Implemented                    | `socket.emit("session:state", ...)` on join                                                                                 | None                                                                                          |
-| `presence:update` broadcast                       | Implemented                    | Gateway emits on join, heartbeat, leave, disconnect                                                                         | None                                                                                          |
-| `location:broadcast` broadcast                    | Implemented                    | Gateway emits updated location payloads                                                                                     | None                                                                                          |
-| `incident:created` broadcast                      | Implemented                    | Gateway emits created incident to room                                                                                      | None                                                                                          |
-| `session:ended` broadcast                         | Partially implemented          | REST controller emits `session:ended` to room, client store handles it                                                      | Payload shape differs from the earlier Phase 2 note (`endedAt`, `endedBy` are not sent today) |
-| Broadcast cadence at 2-5 seconds                  | Implemented for current client | Navigation and ride detail location tracking use a 4-second interval/watch cadence                                          | Future tuning may be needed for battery and network tiers                                     |
-| Persist sampled points every N updates            | Implemented                    | `nextShouldPersistSample()` persists every third update                                                                     | None for baseline sampling                                                                    |
-| Drop stale or out-of-order location updates       | Not implemented                | No freshness guard in `updateLivePresenceLocation()`                                                                        | Add server-side timestamp thresholding and ordering checks                                    |
-| Reconnect works with token refresh                | Partially implemented          | Client reconnects and auto-rejoins ride context                                                                             | Explicit token refresh / socket auth rebind flow is still missing                             |
-| Presence transitions online/offline reliably      | Implemented with hardening     | Heartbeat, leave, disconnect, and presence sweep support are present                                                        | Validate under mobile background/network churn                                                |
-| No unauthorized room joins                        | Implemented                    | JWT socket auth + participant check via `getLiveSession()`                                                                  | None for baseline authorization                                                               |
+| Phase 2 requirement | State | Evidence | Remaining work |
+| --- | --- | --- | --- |
+| Realtime gateway and server bootstrap | Done | `server/src/realtime/gateway.ts`, `auth.ts`, `session-room.ts`, `server/src/app.ts` | None |
+| Authenticated `/live` namespace | Done | `createLiveGateway()` + `authenticateLiveSocket()`, same token verifier as HTTP | None |
+| Room key `ride:<rideId>:session:<sessionId>` | Done | `buildLiveRoomKey()` in `session-room.ts` | None |
+| `session:join` / `session:leave` | Done | Gateway handlers + `liveSessionStore.ts` | None |
+| `presence:heartbeat` | Done | Gateway handler + client heartbeat timer | None |
+| `location:update` | Done | Zod-validated in the gateway; sent by the background tracker about every 5 s with the motion reading | None |
+| `incident:create` | Done | Gateway handler + store | None |
+| `session:state`, `presence:update`, `location:broadcast`, `incident:created` | Done | Gateway emits | None |
+| `session:ended` | Done | REST controller emits `{ rideId, sessionId, endedAt, endedBy, reason }` | None |
+| Sampled persistence | Done | `realtime/sampleThrottle.ts`: keep a sample per 20 m, per 30 s, or on a motion-reading change | None |
+| Drop stale or out-of-order updates | Done | `updateLivePresenceLocation()` drops fixes older than 2 min, more than 30 s ahead, or out of order | None |
+| Reconnect with token refresh | Partial | Client reconnects and rejoins | Socket.IO auto-reconnect reuses the token from the last `connect()`; refresh the token on `connect_error` or before reconnecting |
+| Presence online/offline | Done, needs field QA | Heartbeat, leave, disconnect, presence sweep job | Validate under background and network churn |
+| No unauthorized room joins | Done | Socket auth + confirmed-participant check | None |
 
-## What Is Already Scaffolded for the Next Navigation Step
+Added since the original contract: `rider:progress`, `ride:arrival`, `regroup:requested`, `regroup:decided`, `waypoint:reached` (see `api-endpoints.md`).
 
-- The client already has a shared socket transport layer in `client/src/services/liveSessionSocket.ts`.
-- The ride detail screen now has a separate lightweight socket transport in `client/src/services/rideSocket.ts` for non-navigation realtime updates.
-- The Zustand store already tracks session state, presence, live locations, incidents, and ended-session reason in `client/src/store/liveSessionStore.ts`.
-- The navigation screen already consumes live session status and presence summary, so it has the right entry point for richer map overlays.
-- The backend already persists sampled live locations and incidents, so later map/history features do not need a new transport foundation.
+## Still Open for Navigation UX
 
-## What Still Needs Implementation Before Phase 2 Is Truly Complete for Navigation UX
-
-- Decide which riders should be emphasized in navigation mode: all riders, captain only, nearest riders, or incident-related riders.
-- Add server-side stale/out-of-order location rejection so the map does not regress on delayed packets.
-- Add reconnect behavior that survives token refresh instead of assuming the original socket auth payload remains valid.
-- Normalize the `session:ended` payload if the client should show actor/time metadata in navigation mode.
-- Add explicit QA around background/resume, poor network transitions, and multi-rider load.
-
-## Recommended Phase 2 Start Point
-
-1. Add stale-location rejection on the server.
-2. Normalize realtime payload contracts where the implementation has drifted from the earlier note.
-3. Add mobile reconnection testing around token refresh and background resume.
+- Reconnect that survives an access-token refresh.
+- Field QA for background/resume, poor networks and multi-rider load. The first real-phone ride for per-rider progress is pending.
+- Server-pushed updates for worker-side changes (auto-finish, idle end); today the client learns of them by polling.

@@ -90,6 +90,9 @@ test("searching routes by place", { skip: !CONNECTION }, async (t) => {
      ON CONFLICT (id) DO NOTHING`,
     [SAVER, SEARCHER],
   );
+  // Routes from an earlier run on the same database would show up in the
+  // searches below; start from the saver owning none.
+  await admin.query(`DELETE FROM routes WHERE creator_id = $1`, [SAVER]);
 
   const forward = await insertRoute(admin, {
     title: "Wayanad weekend",

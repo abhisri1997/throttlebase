@@ -1,125 +1,134 @@
 # Technical Overview - ThrottleBase
 
-## Purpose
+What each feature does and where it lives. For structure and flows see `architecture.md`; for contracts see `api-endpoints.md` and `database-design.md`; for status see `project-status.md`.
 
-This document summarizes how the current ThrottleBase system is built and operated at a practical implementation level.
+## Stack
 
-For deeper detail:
+| Layer | Choice |
+| --- | --- |
+| Server | Node.js 22+, TypeScript (strict, ES modules), Express 5, run with `tsx` |
+| Validation | Zod 4 |
+| Auth | `jose` (ES256 JWTs), Google and Apple identity tokens, emailed one-time codes (`nodemailer` for SMTP) |
+| Data | PostgreSQL 17 + PostGIS on Supabase, raw SQL through `pg` |
+| Realtime | Socket.IO 4, namespaces `/live` and `/rides` |
+| Background work | `jobs` table + worker process on `node-cron` |
+| Maps | Google Maps Platform (Directions, Geocoding, Places) behind a server proxy |
+| Client | Expo SDK 57, React Native 0.86, Expo Router, TanStack Query, Zustand, NativeWind, `react-native-maps` |
+| Device | `expo-location` + `expo-task-manager` (background tracking), motion activity readings, `expo-secure-store` |
 
-- architecture and flows: `architecture.md`
-- schema details: `database-design.md`
-- endpoint inventory: `api-endpoints.md`
-- active delivery status: `project-status.md`
+## Features
 
-## Runtime Stack
+### Sign-in and account
 
-- Server: Node.js 22+, TypeScript, Express 5
-- Client: Expo, React Native, Expo Router
-- Data: PostgreSQL + PostGIS
-- Realtime: Socket.IO namespace `/live`
-- Async processing: DB-backed queue + worker poll/lease model
-- Android native prebuild: Expo config plugin `client/plugins/with-android-jdk17.js` rehydrates `org.gradle.java.home` so generated Gradle projects consistently run on JDK 17 even when the host default JDK is newer
+- Passwordless: Google, Apple (off until `APPLE_CLIENT_IDS` is set), or a 6-digit email code. No passwords or two-factor.
+- New riders accept the current terms and privacy versions; the server records consent.
+- Onboarding picks a unique username (`^[a-z0-9_]{3,20}$`). The app keeps a rider in onboarding until they have one.
+- Account deletion is soft for 30 days, then the cleanup job hard-deletes.
+- Code: `server/src/core/auth/`, `server/src/core/riders/`, `server/src/adapters/http/`, `client/app/(auth)/`, `client/src/services/authService.ts`.
 
-## Backend Module Boundaries
+### Rides
 
-The server follows a layered feature structure:
+- Lifecycle `draft → scheduled → active → completed | cancelled`. Captain, co-captains, riders.
+- Plan from scratch or from a saved route (`rides.route_id`, optionally reversed; `road_via` keeps directions on the route's roads).
+- Duration comes from Google Directions at creation.
+- Stops: any participant requests; captain or co-captain approves. Place suggestions along the route by category (`POST /api/stop-suggestions`).
+- Auto start point: each rider can set their own start (`start_location_override`).
+- Private and active rides are visible to participants only.
+- Code: `server/src/services/ride.service.ts`, `ride.controller.ts`, `client/app/(modals)/create-ride.tsx`, `client/app/ride/[id].tsx`, `client/src/features/rides/`.
 
-- Schemas: Zod contracts and request validation
-- Controllers: request/response orchestration
-- Services: domain logic and SQL orchestration
-- Routes: endpoint and middleware composition
-- Realtime: socket auth, room semantics, event handling
-- Worker processors: asynchronous domain workloads
+### Live group ride
 
-This keeps permission checks and state transitions in service logic while controllers remain thin.
+- Captain or co-captain starts a session; a roll call at the start point comes before roll-out.
+- Each rider has their own ride inside the group ride: start early, arrive, finish, resume (see `architecture.md` → Per-rider ride lifecycle).
+- Presence heartbeats, live positions, incidents (SOS, crash, medical, mechanical) with acknowledgement and escalation.
+- Regroup: propose a waiting point for a rider left behind (`POST /api/rides/:id/regroup`, `regroup:*` events).
+- Ending with riders still out needs explicit confirmation (`409 UNFINISHED_RIDERS`).
+- Timeline and replay endpoints read `ride_live_events` and `ride_live_location_samples`.
+- Code: `server/src/services/live-session.service.ts`, `ride-progress.service.ts`, `server/src/core/ride-progress/`, `server/src/realtime/`, `client/src/store/liveSessionStore.ts`.
 
-## Core Functional Domains
+### Tracking and ride stats
 
-### Auth and Rider Identity
+- The app tracks whenever the rider is riding a ride — any screen, foreground or background. The tracker polls `GET /api/rides/riding`.
+- About one fix every 5 s, with the phone's motion reading when recent. Readings end when the app goes to background, so a stale "in vehicle" reading cannot hide a stop.
+- The server keeps a sample per 20 m, per 30 s, or when the motion reading changes.
+- Stats count riding only: stops and walking are neither distance nor time; one fast fix while walking is never top speed. A sparse track with no sustained riding counts as zero riding.
+- Profile totals (`riders.total_*`) come from `ride_history_stats`.
+- Operator scripts: `npm run rides:recompute-riding` (recompute stats), `npm run routes:name-ends` (name route ends).
+- Code: `client/src/services/backgroundLocationService.ts`, `motionActivityService.ts`, `server/src/realtime/sampleThrottle.ts`, `server/src/core/ride-progress/segmentRide.ts`, `ridingStats.ts`, `server/src/services/stats.service.ts`.
 
-- Register/login flows with JWT identity context
-- Email-or-username login with login-activity capture on successful auth
-- JWTs are session-bound; API/socket auth validates active non-revoked session records
-- Rider profile CRUD and privacy-aware public views
-- Follow/follower context support in rider/community flows
+### Full-screen navigation
 
-### Security and Account Protection
+`client/app/ride/[id]/navigation.tsx`, with components, hooks and pure logic under `client/src/features/navigation/`.
 
-- Passwordless sign-in (Google, Apple, email code); no passwords or TOTP two-factor
-- Session inventory and rider-initiated session revocation endpoints
-- Login activity audit trail with device fingerprint and IP capture
-- Admin access gating via rider-level `is_admin` flag and middleware
-- Production API security hardening: `X-Powered-By` removed, strict CORS origin allowlist, and browser security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy)
-- CORS origin rejections are fail-closed with generic `403` JSON responses (no stack traces or local path disclosure)
-- Swagger docs exposure is now fail-closed by default (enabled only when `ENABLE_SWAGGER_DOCS=true`, with production basic-auth guard)
-- Swagger/docs hardening includes explicit spec endpoint controls (`/openapi.json`, `/swagger.json`) and no root redirect to docs from API app routes
-- Cross-origin hardening includes explicit COOP/COEP/CORP response headers for API responses
+- Road-following route in order: rider's location → start → approved stops → destination. Falls back to the start point when location is unknown.
+- Directions through `/api/maps/directions`; identical in-flight or recent requests are shared (`navigationRouteService.ts`).
+- Turn-by-turn maneuver banner, ETA and remaining distance, trip progress.
+- Off-route detection reroutes from the rider's position, prefers the fastest alternative, and falls back to a destination-only detour.
+- Refetch cadence: on the first fix, then after ≥ 40 m and ≥ 12 s of movement, and every 25 s.
+- Polylines use turn-aware thinning with a point cap, so lines never cut through buildings.
+- Crew bottom sheet: tap a rider to focus them; recenter returns to self-follow. Peer markers keep stable keys.
+- Camera follows GPS course with compass fallback, with movement and heading deadbands on Android.
+- Keep-awake only while this screen is focused and the app is active.
+- Arrival prompt with auto-finish countdown.
+- Dev GPS simulator (`gpsSimulator.ts`, `useSimulatedNavigationFix.ts`) records a real ride from the desk.
+- Location permission is checked passively on mount (no automatic prompt); prompting on mount caused an Android remount loop (see `postmortems/android-ride-detail-flicker-crash.md`).
 
-### Rides and Routes
+### Routes
 
-- Ride lifecycle with participant roles
-- Route creation and sharing
-- GPS trace ingestion for ride analytics and history
-- Visibility controls for private/active ride access
+- Create, bookmark, share. Visibility `private`, `specific_riders`, `public`.
+- Save a completed ride as a route from your own recorded track: ends named by reverse geocode, stops carried over with optional notes, highlights chosen from a fixed list.
+- Search from one place to another, in either direction, by name or proximity, with distance and highlight filters.
+- "Was the road as described?" feedback after a ride on a route; aggregated on the route.
+- Code: `server/src/core/routes/`, `server/src/services/route.service.ts`, `route-from-ride.service.ts`, `road-feedback.service.ts`, `client/src/features/routes/`.
 
-### Community and Engagement
+### Community
 
-- Feed posts, comments, likes, follows, groups
-- Async @mention detection on post/comment creation with in-app notification creation
-- Post and comment composers provide username suggestions while typing @mentions
-- Rendered @mentions in posts/comments navigate to rider profiles
-- Ride reviews linked to completed participation
-- Rewards and leaderboard views aligned to analytics aggregates
+- Feed posts, comments, likes, follows, ride reviews.
+- @mentions resolve by username after the write, create in-app notifications, and queue push/email jobs. Composers suggest usernames; rendered mentions link to profiles; notifications deep-link to the post or comment.
+- Groups exist behind `FEATURE_GROUPS`.
+- Code: `server/src/services/community.service.ts`, `mention.service.ts`, `client/app/(tabs)/feed.tsx`, `client/app/post/[id].tsx`.
 
-### Notifications and Support
+### Notifications, settings, privacy
 
-- In-app notifications with per-type in-app/push/email preferences
-- Mention notifications deep-link into the relevant post, including comment highlight context when available
-- Push/email delivery jobs are queued and preference-aware, but provider integration is still stubbed
-- Rider settings and privacy surfaces
-- Support ticket submission, self-history, rider follow-up replies, and rider-side closure controls
-- Admin support inbox with ticket filtering, status updates, and optional agent replies
+- In-app notifications with per-type preferences for in-app, push and email.
+- **Push and email delivery are stubs**: jobs are queued and preference-checked, nothing is sent. The beta relies on in-app notifications.
+- Settings (theme, units, language), privacy (profile and history visibility, leaderboard opt-in, invite permission), blocking.
 
-### Live Session and Navigation
+### Held back from the beta
 
-- Ride-scoped live session lifecycle APIs
-- Realtime presence/location/incident events over `/live`
-- Lightweight ride-room subscriptions over `/rides` for join and stop-request updates on ride detail
-- Ride-room subscription authorization enforces ride visibility/participation checks
-- Client store-driven live controls and participant map behavior
-- Full-screen navigation crew list can focus a selected rider's live location on the map, with recenter restoring self-follow
-- Ride detail screen automatically refreshes ride and live-session state while active so participants see session-start transitions without leaving the screen
-- Ride detail and full-screen navigation maps now share canonical route composition as current rider location -> start point -> approved stops -> destination, with origin fallback to start when device location is unavailable
-- Full-screen navigation reroute refresh now uses interval/ref-based checks with movement cooldown (40m plus minimum elapsed window) and periodic refresh, preventing rapid re-fetch loops during active tracking
-- Navigation route geometry now applies adaptive, shape-preserving simplification with a point cap before map render, reducing route-draw latency on long directions responses
-- Full-screen navigation now re-routes from the rider’s live location when off-route, prefers the fastest Google Directions alternative by ETA, and falls back to a destination-only detour when the waypoint chain is no longer routable
-- Full-screen navigation exit now follows stack-aware back navigation to prevent duplicate ride-detail screen instances
-- Ride detail live map auto-fit now performs a single initial fit per live-room session instead of repeated animated refits on every location update, improving interaction stability
-- Ride detail preview map render path is hardened for interaction stability via stricter preview-polyline simplification/cap, non-dashed polyline rendering, and reduced camera-computation options (no rotate/pitch)
-- Android ride-detail preview map additionally uses lightweight cached preview rendering plus memoized marker/polyline inputs to reduce repeated map-surface invalidation during live updates
-- Ride-detail map header now uses stable callback props and deep memo-equality for preview route/marker props, while preview GPS sampling pauses after origin freeze to avoid unnecessary parent rerenders on Android
-- Shared navigation route fetching now deduplicates identical in-flight requests and reuses very recent identical results, reducing redundant Directions work during screen rerenders and transient activity churn
-- Full-screen navigation first-draw latency is reduced by early GPS seeding (last-known/current-position bootstrap), and route rendering fidelity is maintained with turn-aware road-safe polyline simplification
-- Android full-screen navigation markers keep stable rider-based identity and disable `tracksViewChanges` for custom marker views, reducing marker flicker under live location churn
-- Android full-screen navigation camera follow now applies movement/heading deadbands with a longer refresh cadence, and Android live markers render with native pin markers to reduce flicker/jank from rapid custom-marker re-renders
-- Screen wake lock is scoped to full-screen navigation only: keep-awake activates while `ride/[id]/navigation` is focused and app state is active, and is released on blur/background/unmount with guarded calls
-- Full-screen navigation location tracking now uses passive foreground-permission checks (no automatic mount-time permission prompt), preventing Android `GrantPermissionsActivity` lifecycle interruptions from destabilizing the navigation screen
-- Live socket disconnects when a session ends to prevent stale connected state on completed rides
-- Worker-backed presence sweep, incident escalation scheduling, and lifecycle notification fanout
-- Navigation Phase 1 full-screen route and map UX base
+Code kept, off by default. Each needs both the server `FEATURE_*` and client `EXPO_PUBLIC_FEATURE_*` flag.
 
-## Data and Persistence
+- Rank: badges, achievements, leaderboard. Badges keep being awarded.
+- Support: tickets, threaded replies, admin triage.
+- Account security: sign-in activity and device sessions with revocation.
+- Groups.
 
-- PostgreSQL is the transactional source of truth.
-- PostGIS supports geospatial route and location workloads.
-- Denormalized counters/aggregates are maintained for read-heavy screens.
-- Queue jobs are persisted in DB and leased by workers with retry/backoff behavior.
-- Security data includes login-activity records, tracked sessions, and rider admin flags.
+## Security posture
 
-## Operational Guidance
+- Passwordless auth with ES256 access tokens (15 min) and rotating, family-tracked refresh tokens (30 days).
+- Strict CORS allowlist for HTTP and sockets; security headers on every response; generic error bodies.
+- Swagger fails closed: off unless `ENABLE_SWAGGER_DOCS=true`, and then behind basic auth.
+- Admin actions gated by token roles from `rider_roles`.
+- Rate limits: auth (Postgres-backed counters), Maps proxy and stop suggestions (`express-rate-limit`, per rider).
+- Google spend capped by daily ceilings.
+- RLS is defined but not enforced (the API connects to Supabase as `postgres`). Authorization is in service SQL.
 
-- Treat service-layer role checks and state transitions as security-critical.
-- Keep API docs (`/api-docs`) aligned whenever contracts change.
-- Validate async paths (queue + processor) when changing lifecycle behavior.
-- Distinguish what is fully shipped versus stubbed integration, especially for notification delivery providers.
-- Keep docs synchronized with code for major module or flow changes.
+## Configuration
+
+- Server: `server/.env.example` is the reference, including database URLs, JWT keys, identity providers, auth policy and rate limits, consent versions, email driver, CORS, Swagger, Google key and ceilings, feature flags. Configuration is validated at boot (`server/src/composition/env.ts`).
+- Ride progress tunables: `RIDE_EARLY_START_WINDOW_MIN`, `RIDE_ARRIVAL_RADIUS_M`, `RIDE_ARRIVAL_EXIT_RADIUS_M`, `RIDE_ARRIVAL_MAX_ACCURACY_M`, `RIDE_AUTO_FINISH_DWELL_MIN`, `RIDE_IDLE_AUTO_END_MIN`.
+- Live location freshness: `LIVE_LOCATION_MAX_AGE_MS`, `LIVE_LOCATION_MAX_FUTURE_SKEW_MS`.
+- Client: `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_SHARE_BASE_URL`, `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `EXPO_PUBLIC_ENABLE_APPLE_SIGN_IN`, `EXPO_PUBLIC_TERMS_VERSION`, `EXPO_PUBLIC_ENABLE_LIVE_SESSION`, `EXPO_PUBLIC_FEATURE_*`. `EXPO_PUBLIC_API_URL` picks the backend: EAS `development` and `preview` profiles use `https://api-dev.throttlebase.in`, `production` uses `https://api.throttlebase.in`. With no value, a dev build talks to the API on the Metro host (port 5001, `10.0.2.2` on the Android emulator) and a release build falls back to the development API, never production (`client/src/adapters/http/baseUrl.ts`).
+
+## Testing
+
+| Command | Scope |
+| --- | --- |
+| `cd server && npm test` | `test.ts`: end-to-end live-session script (sockets, processors) against the configured database |
+| `cd server && npm run test:unit` | Node test runner over `src/**/*.test.ts` |
+| `cd server && npm run test:integration` | Postgres integration tests; need `TEST_DATABASE_URL` pointing at a throwaway PostGIS database |
+| `cd server && npm run lint:boundaries` | Architecture boundary rules only |
+| `cd server && npm run typecheck` | `tsc --noEmit` |
+| `cd client && npm test` | Node test runner over `src/**/*.test.ts` (pure modules in `src/core`, `src/features/*/core`, `src/services`) |
+| `cd client && npx tsc --noEmit` | Client typecheck |
+| `npm run lint` / `npm run lint:boundaries` | ESLint and architecture boundary rules, in either package |

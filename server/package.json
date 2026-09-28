@@ -15,10 +15,12 @@
     "lint:boundaries": "eslint . --config eslint.boundaries.config.js --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "migrate": "tsx src/adapters/postgres/migrate.ts",
+    "migrate:prod": "NODE_ENV=production tsx src/adapters/postgres/migrate.ts",
+    "migrate:dev": "NODE_ENV=development tsx src/adapters/postgres/migrate.ts",
     "migrate:dry-run": "tsx src/adapters/postgres/migrate.ts --dry-run",
     "routes:name-ends": "tsx src/adapters/postgres/nameRouteEnds.ts",
     "migrate:baseline": "tsx src/adapters/postgres/migrate.ts --baseline-existing",
-    "test:integration": "tsx --test \"src/adapters/postgres/*.integration.test.ts\"",
+    "test:integration": "tsx --test --test-concurrency=1 \"src/adapters/postgres/*.integration.test.ts\"",
     "rides:recompute-riding": "tsx src/adapters/postgres/recomputeRiding.ts"
   },
   "keywords": [],
