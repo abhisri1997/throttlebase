@@ -4,6 +4,7 @@
  */
 import { apiClient } from "../../../api/client";
 import type { RouteHighlight } from "../core/saveRoute";
+import type { StopChoice, StopToSave } from "../core/stopChoices";
 
 export type RouteVisibility = "public" | "private";
 
@@ -16,6 +17,8 @@ export interface RoutePreview {
   distance_km: number;
   duration_s: number;
   stops: { ride_stop_id: string; name: string | null; distance_from_start_km: number }[];
+  /** Every stop the rider can keep, in road order. Missing from servers older than this app. */
+  stop_choices?: StopChoice[];
 }
 
 export const fetchRoutePreview = async (rideId: string): Promise<RoutePreview> => {
@@ -27,8 +30,8 @@ export interface SaveRideAsRouteInput {
   title: string;
   visibility: RouteVisibility;
   highlights: RouteHighlight[];
-  /** Only stops with a note; every note is optional. */
-  stop_notes: { ride_stop_id: string; note: string }[];
+  /** The stops to keep, by key, with the rider's note and (for a stop they found) name. */
+  stops: StopToSave[];
 }
 
 export interface SavedRideRoute {

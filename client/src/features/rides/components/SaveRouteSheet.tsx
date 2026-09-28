@@ -10,6 +10,14 @@ import {
   type RouteVisibility,
 } from "../api/rideRoute";
 import {
+  initialStopEdits,
+  keptStopsForSave,
+  stopChoiceDetail,
+  type StopChoice,
+  type StopEdit,
+} from "../core/stopChoices";
+import { splitPlaceName } from "../../routes/core/routeSummary";
+import {
   MAX_ROUTE_TITLE_LENGTH,
   MAX_STOP_NOTE_LENGTH,
   ROUTE_HIGHLIGHTS,
@@ -26,6 +34,9 @@ interface SaveRouteSheetProps {
   onClose: () => void;
   onOpenRoute: (routeId: string) => void;
 }
+
+/** Same limit as the server's. */
+const MAX_STOP_NAME_LENGTH = 255;
 
 const VISIBILITY_OPTIONS: { value: RouteVisibility; label: string; hint: string }[] = [
   { value: "public", label: "Public", hint: "Anyone can find it in Routes and ride it." },
@@ -95,13 +106,32 @@ interface SaveRouteFormProps {
   onSaved: (routeId: string) => void;
 }
 
+/** A server older than this app lists only the planned stops ridden past. */
+const choicesOf = (preview: RoutePreview): StopChoice[] =>
+  preview.stop_choices ??
+  preview.stops.map((stop) => ({
+    key: `planned:${stop.ride_stop_id}`,
+    kind: "planned",
+    status: "visited",
+    ride_stop_id: stop.ride_stop_id,
+    name: stop.name,
+    distance_from_start_km: stop.distance_from_start_km,
+    stopped_s: null,
+    walked_away: false,
+    suggested: true,
+  }));
+
 function SaveRouteForm({ rideId, preview, initialTitle, onClose, onSaved }: SaveRouteFormProps) {
   const { colors } = useTheme();
   const queryClient = useQueryClient();
   const [title, setTitle] = useState(initialTitle);
   const [highlights, setHighlights] = useState<RouteHighlight[]>([]);
-  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [choices] = useState<StopChoice[]>(() => choicesOf(preview));
+  const [stopEdits, setStopEdits] = useState<Record<string, StopEdit>>(() => initialStopEdits(choices));
   const [visibility, setVisibility] = useState<RouteVisibility>("public");
+
+  const editStop = (key: string, change: Partial<StopEdit>) =>
+    setStopEdits((current) => ({ ...current, [key]: { ...current[key]!, ...change } }));
 
   const save = useMutation({
     mutationFn: (validTitle: string) =>
@@ -109,9 +139,7 @@ function SaveRouteForm({ rideId, preview, initialTitle, onClose, onSaved }: Save
         title: validTitle,
         visibility,
         highlights,
-        stop_notes: Object.entries(notes)
-          .map(([ride_stop_id, note]) => ({ ride_stop_id, note: note.trim() }))
-          .filter((entry) => entry.note.length > 0),
+        stops: keptStopsForSave(choices, stopEdits),
       }),
     onSuccess: ({ route }) => {
       void queryClient.invalidateQueries({ queryKey: ["routes"] });
@@ -168,25 +196,16 @@ function SaveRouteForm({ rideId, preview, initialTitle, onClose, onSaved }: Save
         })}
       </View>
 
-      {preview.stops.length > 0 ? (
+      {choices.length > 0 ? (
         <>
-          <Text style={[styles.label, { color: colors.textMuted }]}>Notes on stops · optional</Text>
-          {preview.stops.map((stop, index) => (
-            <View key={stop.ride_stop_id} style={[styles.stop, { borderColor: colors.border }]}>
-              <Text style={[styles.stopName, { color: colors.text }]}>
-                {index + 1}. {stop.name ?? "Stop"}
-                <Text style={{ color: colors.textMuted }}>  · {formatDistance(stop.distance_from_start_km * 1000)}</Text>
-              </Text>
-              <TextInput
-                value={notes[stop.ride_stop_id] ?? ""}
-                onChangeText={(note) => setNotes((current) => ({ ...current, [stop.ride_stop_id]: note }))}
-                maxLength={MAX_STOP_NOTE_LENGTH}
-                placeholder='e.g. Last fuel for 60 km'
-                placeholderTextColor={colors.textMuted}
-                accessibilityLabel={`Note for ${stop.name ?? `stop ${index + 1}`}`}
-                style={[styles.noteInput, { color: colors.text, borderColor: colors.border }]}
-              />
-            </View>
+          <Text style={[styles.label, { color: colors.textMuted }]}>Stops · tick the ones worth keeping</Text>
+          {choices.map((choice) => (
+            <StopChoiceRow
+              key={choice.key}
+              choice={choice}
+              edit={stopEdits[choice.key]!}
+              onChange={(change) => editStop(choice.key, change)}
+            />
           ))}
         </>
       ) : null}
@@ -224,6 +243,76 @@ function SaveRouteForm({ rideId, preview, initialTitle, onClose, onSaved }: Save
         />
       </View>
     </ScrollView>
+  );
+}
+
+interface StopChoiceRowProps {
+  choice: StopChoice;
+  edit: StopEdit;
+  onChange: (change: Partial<StopEdit>) => void;
+}
+
+/** One stop: keep it or not, what happened there, and the rider's note (and name, for one they found). */
+function StopChoiceRow({ choice, edit, onChange }: StopChoiceRowProps) {
+  const { colors } = useTheme();
+  const isSkipped = choice.status === "skipped";
+  const isFound = choice.kind === "discovered";
+  const place = splitPlaceName(choice.name ?? (isFound ? "A stop you found" : "Stop"));
+
+  return (
+    <View style={[styles.stop, { borderColor: colors.border, opacity: isSkipped ? 0.6 : 1 }]}>
+      <TouchableOpacity
+        accessibilityRole='checkbox'
+        accessibilityState={{ checked: edit.kept, disabled: isSkipped }}
+        accessibilityLabel={`${place.name}. ${stopChoiceDetail(choice)}`}
+        disabled={isSkipped}
+        onPress={() => onChange({ kept: !edit.kept })}
+        style={styles.stopHeader}
+      >
+        {isSkipped ? null : (
+          <View
+            style={[
+              styles.checkbox,
+              { borderColor: edit.kept ? colors.primary : colors.border },
+              edit.kept ? { backgroundColor: colors.primary } : null,
+            ]}
+          >
+            {edit.kept ? <Text style={styles.checkmark}>✓</Text> : null}
+          </View>
+        )}
+        <View style={styles.stopText}>
+          <Text style={[styles.stopName, { color: colors.text }]} numberOfLines={1}>
+            {isFound ? "New: " : ""}
+            {place.name}
+          </Text>
+          <Text style={[styles.hint, { color: colors.textMuted }]}>{stopChoiceDetail(choice)}</Text>
+        </View>
+      </TouchableOpacity>
+      {edit.kept && !isSkipped ? (
+        <>
+          {isFound ? (
+            <TextInput
+              value={edit.name}
+              onChangeText={(name) => onChange({ name })}
+              maxLength={MAX_STOP_NAME_LENGTH}
+              placeholder={`Name it (${place.name})`}
+              placeholderTextColor={colors.textMuted}
+              accessibilityLabel='Name for this stop'
+              style={[styles.noteInput, { color: colors.text, borderColor: colors.border }]}
+            />
+          ) : null}
+          <TextInput
+            value={edit.note}
+            onChangeText={(note) => onChange({ note })}
+            maxLength={MAX_STOP_NOTE_LENGTH}
+            placeholder='Note · optional, e.g. Park at the gate'
+            placeholderTextColor={colors.textMuted}
+            accessibilityLabel={`Note for ${place.name}`}
+            style={[styles.noteInput, { color: colors.text, borderColor: colors.border }]}
+          />
+        </>
+      ) : null}
+    </View>
   );
 }
 
@@ -269,6 +358,10 @@ const styles = StyleSheet.create({
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, minHeight: 36, justifyContent: "center" },
   chipText: { fontSize: 13, fontWeight: "600" },
   stop: { borderWidth: 1, borderRadius: 12, padding: 10, gap: 6, marginBottom: 6 },
+  stopHeader: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 44 },
+  stopText: { flex: 1, gap: 2 },
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  checkmark: { color: "white", fontSize: 13, fontWeight: "800" },
   stopName: { fontSize: 14, fontWeight: "600" },
   noteInput: { minHeight: 40, borderTopWidth: 1, borderStyle: "dashed", paddingTop: 6, fontSize: 14 },
   option: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 6 },

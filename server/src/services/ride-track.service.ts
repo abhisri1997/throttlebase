@@ -5,6 +5,7 @@
 import { query } from "../config/db.js";
 import type { WaypointReachedInput } from "../schemas/live-session.schemas.js";
 import { buildTrack, type TrackSample } from "../utils/track.js";
+import { ridingSummary } from "../core/ride-progress/ridingStats.js";
 import { LiveSessionError, getLiveSession } from "./live-session.service.js";
 
 /** Keeps one request bounded; at one sample per 20 m this is well over 400 km. */
@@ -28,6 +29,19 @@ export interface RiderTrackResponse {
     ended_at: string | null;
   };
   waypoint_arrivals: WaypointArrival[];
+  /** Riding against stopped: stops are where the rider got off, or waited 5+ minutes beside the bike. */
+  riding: {
+    riding_time_s: number;
+    riding_distance_m: number;
+    stopped_s: number;
+    stops: {
+      started_at: string | null;
+      ended_at: string | null;
+      duration_s: number;
+      walked_away: boolean;
+      planned: boolean;
+    }[];
+  };
 }
 
 const toIso = (value: unknown): string | null => {
@@ -101,8 +115,14 @@ export const getRiderTrack = async (
   const sessionRow = sessionResult.rows[0];
   if (!sessionRow) throw new LiveSessionError("No live session found for this ride", 404);
 
-  const [samples, arrivalsResult] = await Promise.all([
+  const [samples, plannedStopsResult, arrivalsResult] = await Promise.all([
     loadRiderSamples(String(sessionRow.id), riderId),
+    query(
+      `SELECT id, ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng
+       FROM ride_stops
+       WHERE ride_id = $1 AND status = 'approved' AND location IS NOT NULL`,
+      [rideId],
+    ),
     query(
       `SELECT DISTINCT ON (payload->>'waypoint_id')
               payload->>'waypoint_id' AS waypoint_id,
@@ -118,6 +138,10 @@ export const getRiderTrack = async (
   ]);
 
   const track = buildTrack(samples);
+  const riding = ridingSummary(
+    samples,
+    plannedStopsResult.rows.map((row) => ({ id: String(row.id), lat: Number(row.lat), lng: Number(row.lng) })),
+  );
 
   const waypointArrivals = arrivalsResult.rows
     .flatMap((row): WaypointArrival[] => {
@@ -150,6 +174,18 @@ export const getRiderTrack = async (
       ended_at: msToIso(track.endedAtMs),
     },
     waypoint_arrivals: waypointArrivals,
+    riding: {
+      riding_time_s: riding.ridingTimeS,
+      riding_distance_m: riding.ridingDistanceM,
+      stopped_s: riding.stoppedS,
+      stops: riding.stops.map((stop) => ({
+        started_at: msToIso(stop.startedAtMs),
+        ended_at: msToIso(stop.endedAtMs),
+        duration_s: stop.durationS,
+        walked_away: stop.walkedAway,
+        planned: stop.planned,
+      })),
+    },
   };
 };
 

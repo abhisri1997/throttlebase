@@ -526,7 +526,9 @@ router.get(
  *     summary: The caller's own travelled GPS track for a ride (confirmed participants)
  *     description: >
  *       Built from the caller's live location samples, cleaned of GPS spikes and
- *       inaccurate fixes. Includes the time each waypoint was reached.
+ *       inaccurate fixes. Includes the time each waypoint was reached, and
+ *       riding against stopped time: riding { riding_time_s, riding_distance_m, stopped_s,
+ *       stops: [{ started_at, ended_at, duration_s, walked_away, planned }] }.
  *     tags: [Rides]
  *     security:
  *       - bearerAuth: []

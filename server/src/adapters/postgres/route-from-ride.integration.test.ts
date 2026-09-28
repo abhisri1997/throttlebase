@@ -368,4 +368,49 @@ test("saving a finished ride as a route", { skip: !CONNECTION }, async (t) => {
 
     assert.equal(await routeFromRide!.rebuildRouteFromRide(drawn.rows[0].id as string), null);
   });
+
+  await t.test("the save sheet offers a stop the rider found, and the route keeps it under the rider's name", async () => {
+    const { rideId, sessionId } = await createRide(admin, "completed");
+    const { parked } = await recordRideWithWalkOff(admin, sessionId, RIDER);
+
+    const preview = await routeFromRide!.previewRouteFromRide(rideId, RIDER, { nameArea: fakeNameArea });
+    const found = preview.stop_choices.find((choice) => choice.kind === "discovered");
+    assert.ok(found, "the walk-off is offered as a stop");
+    assert.equal(found.status, "found");
+    assert.equal(found.suggested, true, "ticked: the rider walked off");
+    assert.equal(found.walked_away, true);
+    assert.equal(found.name, "South Gate, Testville", "named by its area");
+    assert.ok(found.stopped_s! > 500);
+    assert.deepEqual(preview.stops, [], "the older list keeps to planned stops");
+
+    const saved = await routeFromRide!.saveRouteFromRide(
+      rideId,
+      RIDER,
+      {
+        title: "Found it",
+        visibility: "public",
+        stops: [{ key: found.key, name: "Campus cafe", note: "Chai at the gate" }],
+      },
+      { nameArea: fakeNameArea },
+    );
+
+    const detail = await routes!.getRouteById(saved.route.id, RIDER);
+    assert.deepEqual(detail?.stops.map((stop) => [stop.name, stop.note]), [["Campus cafe", "Chai at the gate"]]);
+    assert.ok(metresBetween(detail!.stops[0]!, parked) < 25, "where the bike was");
+  });
+
+  await t.test("a stop the rider leaves unticked is not on the route, planned or found", async () => {
+    const { rideId, sessionId } = await createRide(admin, "completed");
+    const { building } = await recordRideWithWalkOff(admin, sessionId, RIDER);
+    await addStop(admin, rideId, 1, "Building 37", building.lat, building.lng);
+
+    const saved = await routeFromRide!.saveRouteFromRide(rideId, RIDER, {
+      title: "No stops",
+      visibility: "public",
+      stops: [],
+    });
+
+    const detail = await routes!.getRouteById(saved.route.id, RIDER);
+    assert.deepEqual(detail?.stops, []);
+  });
 });

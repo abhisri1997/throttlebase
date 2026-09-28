@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ridingStats } from "./ridingStats.js";
-import { at, INDOOR_ACCURACY_M, ride, track, wait, walkOutAndBack, type Leg } from "./testTracks.js";
+import { ridingStats, ridingSummary } from "./ridingStats.js";
+import { at, INDOOR_ACCURACY_M, M_PER_DEG_LNG, ORIGIN, ride, track, wait, walkOutAndBack, type Leg } from "./testTracks.js";
 
 test("a ride's stats count the riding, not the walk at a stop", () => {
   const stats = ridingStats(track(ride(3000), wait(1), walkOutAndBack(300), wait(1), ride(3000)));
@@ -24,4 +24,24 @@ test("the top speed comes from the riding, never a walking fix", () => {
 
 test("a ride with no fixes has no stats", () => {
   assert.deepEqual(ridingStats([]), { distanceKm: 0, ridingTimeS: 0, avgSpeedKmh: 0, maxSpeedKmh: 0 });
+});
+
+test("a finished ride says how long was riding, how long was stopped, and where", () => {
+  const planned = { id: "cafe", lat: ORIGIN.lat, lng: ORIGIN.lng + 3000 / M_PER_DEG_LNG };
+
+  const summary = ridingSummary(
+    track(ride(3000), walkOutAndBack(300), ride(3000), wait(7), ride(3000)),
+    [planned],
+  );
+
+  assert.ok(Math.abs(summary.ridingTimeS - 810) < 15, `rode ${summary.ridingTimeS} s`);
+  assert.ok(Math.abs(summary.ridingDistanceM - 9000) < 120, `rode ${summary.ridingDistanceM} m, not the walk`);
+  assert.deepEqual(
+    summary.stops.map((stop) => [Math.round(stop.durationS / 60), stop.walkedAway, stop.planned]),
+    [
+      [7, true, true],
+      [7, false, false],
+    ],
+  );
+  assert.equal(summary.stoppedS, summary.stops[0]!.durationS + summary.stops[1]!.durationS);
 });

@@ -79,6 +79,21 @@ export const SaveRouteFromRideSchema = z.object({
     )
     .max(50)
     .default([]),
+  /**
+   * The stops to keep, by the key the preview gave them, with an optional note
+   * and, for a stop the rider found, a name. Left out, the route keeps the
+   * planned stops ridden past, with stop_notes (what older apps send).
+   */
+  stops: z
+    .array(
+      z.object({
+        key: z.string().trim().min(1).max(80),
+        note: z.string().trim().max(MAX_STOP_NOTE_LENGTH).optional(),
+        name: z.string().trim().max(255).optional(),
+      }),
+    )
+    .max(50)
+    .optional(),
 });
 
 export type SaveRouteFromRideInput = z.infer<typeof SaveRouteFromRideSchema>;

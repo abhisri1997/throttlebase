@@ -71,6 +71,7 @@ import type { LiveSessionParticipant } from "../../src/services/liveSessionSocke
 import { StartMyRideCard } from "../../src/features/rides/components/StartMyRideCard";
 import { SaveRouteCard } from "../../src/features/rides/components/SaveRouteCard";
 import { RoadFeedbackCard } from "../../src/features/rides/components/RoadFeedbackCard";
+import { rideSummaryLabel } from "../../src/features/rides/core/rideSummary";
 import { useEndRideWithWarning } from "../../src/features/rides/hooks/useEndRideWithWarning";
 
 const fetchRideDetails = async (id: string) => {
@@ -1205,10 +1206,7 @@ useEffect(() => {
         : EMPTY_LINE,
     [track],
   );
-  const trackSummaryLabel =
-    track && track.coordinates.length > 1
-      ? `You rode ${formatDistance(track.distanceMeters)} in ${formatDuration(track.durationSeconds)}`
-      : null;
+  const trackSummaryLabel = track && track.coordinates.length > 1 ? rideSummaryLabel(track) : null;
   const arrivalLabel = useCallback(
     (waypointId: string): string | undefined => {
       const reachedAt = track?.arrivals[waypointId];
