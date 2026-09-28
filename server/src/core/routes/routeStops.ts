@@ -26,6 +26,20 @@ export interface RouteStopDraft {
   distanceFromStartKm: number;
 }
 
+/**
+ * Moves each planned stop the rider parked for to where the bike was. A stop is
+ * often somewhere a bike can't go (a campus, a market, a temple); the route
+ * sends the next ride to the parking, and keeps the place's name.
+ */
+export const placeAtParking = (
+  rideStops: readonly RideStopForRoute[],
+  parkings: readonly { plannedStopId: string | null; parkedAt: LatLng }[],
+): RideStopForRoute[] =>
+  rideStops.map((stop) => {
+    const parking = parkings.find((entry) => entry.plannedStopId === stop.id);
+    return parking ? { ...stop, lat: parking.parkedAt.lat, lng: parking.parkedAt.lng } : stop;
+  });
+
 export const buildRouteStops = (input: {
   /** The saved route's line, GeoJSON order: [longitude, latitude]. */
   coordinates: readonly [number, number][];

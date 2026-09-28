@@ -67,6 +67,7 @@ export const loadRiderSamples = async (sessionId: string, riderId: string): Prom
     `SELECT ST_Y(location::geometry) AS lat,
             ST_X(location::geometry) AS lng,
             accuracy_m,
+            speed_kmh,
             captured_at
      FROM ride_live_location_samples
      WHERE session_id = $1
@@ -80,6 +81,7 @@ export const loadRiderSamples = async (sessionId: string, riderId: string): Prom
     lng: Number(row.lng),
     accuracyM: row.accuracy_m != null ? Number(row.accuracy_m) : null,
     capturedAtMs: new Date(row.captured_at).getTime(),
+    speedKmh: row.speed_kmh != null ? Number(row.speed_kmh) : null,
   }));
 };
 

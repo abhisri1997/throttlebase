@@ -7,7 +7,12 @@
  */
 import pool, { query } from "../config/db.js";
 import { routeFromTrack } from "../core/routes/routeFromTrack.js";
-import { buildRouteStops, type RideStopForRoute, type RouteStopDraft } from "../core/routes/routeStops.js";
+import {
+  buildRouteStops,
+  placeAtParking,
+  type RideStopForRoute,
+  type RouteStopDraft,
+} from "../core/routes/routeStops.js";
 import type { SaveRouteFromRideInput } from "../schemas/route.schemas.js";
 import { reverseGeocodeArea } from "./maps.service.js";
 import { resolveMapsProvider } from "./maps/resolveProvider.js";
@@ -147,9 +152,14 @@ const prepareRoute = async (
   notes: SaveRouteFromRideRequest["stop_notes"],
   deps: SaveRouteFromRideDeps,
 ): Promise<PreparedRoute> => {
-  const sessionResult = await query(`SELECT id FROM ride_live_sessions WHERE ride_id = $1`, [rideId]);
+  const [sessionResult, plannedStops] = await Promise.all([
+    query(`SELECT id FROM ride_live_sessions WHERE ride_id = $1`, [rideId]),
+    loadRideStops(rideId),
+  ]);
   const sessionId = sessionResult.rows[0]?.id;
-  const geometry = sessionId ? routeFromTrack(await loadRiderSamples(String(sessionId), riderId)) : null;
+  const geometry = sessionId
+    ? routeFromTrack(await loadRiderSamples(String(sessionId), riderId), plannedStops)
+    : null;
   if (!geometry) {
     throw new LiveSessionError("Not enough of this ride was recorded to make a route", 422);
   }
@@ -160,11 +170,9 @@ const prepareRoute = async (
   const end = { lat: endLat, lng: endLng };
   const nameArea = deps.nameArea ?? noAreaName;
   // Named before any transaction, so no Google call holds a database connection.
-  const [startArea, endArea, rideStops] = await Promise.all([
-    nameOrNull(nameArea, start),
-    nameOrNull(nameArea, end),
-    loadRideStops(rideId),
-  ]);
+  const [startArea, endArea] = await Promise.all([nameOrNull(nameArea, start), nameOrNull(nameArea, end)]);
+  // A stop the rider got off at sits where the bike was parked.
+  const rideStops = placeAtParking(plannedStops, geometry.stops);
 
   return {
     geometry,
@@ -225,6 +233,87 @@ export const previewRouteFromRide = async (
       distance_from_start_km: stop.distanceFromStartKm,
     })),
   };
+};
+
+export interface RouteRebuild {
+  routeId: string;
+  before: { distanceKm: number; durationS: number };
+  after: { distanceKm: number; durationS: number };
+}
+
+/**
+ * Rebuilds a route saved from a ride with the current rules (riding only,
+ * stops where the bike was parked), from the saver's own track. Its title,
+ * names, highlights and stop notes stay. Null for a route with no ride, or
+ * whose ride has no track left to build from.
+ */
+export const rebuildRouteFromRide = async (
+  routeId: string,
+  options: { dryRun?: boolean } = {},
+): Promise<RouteRebuild | null> => {
+  const routeResult = await query(
+    `SELECT ride_id, creator_id, start_name, end_name, distance_km, ridden_duration_s FROM routes WHERE id = $1`,
+    [routeId],
+  );
+  const row = routeResult.rows[0];
+  if (!row?.ride_id) return null;
+
+  let prepared: PreparedRoute;
+  try {
+    // No naming: the route keeps the names it has.
+    prepared = await prepareRoute(
+      String(row.ride_id),
+      String(row.creator_id),
+      { start_point_name: row.start_name ?? null, end_point_name: row.end_name ?? null },
+      [],
+      {},
+    );
+  } catch (error) {
+    if (error instanceof LiveSessionError && error.statusCode === 422) return null;
+    throw error;
+  }
+
+  // Stops come from the same ride stops, so a note finds its stop by name.
+  const noteRows = await query(`SELECT name, note FROM route_stops WHERE route_id = $1 AND note IS NOT NULL`, [routeId]);
+  const notesByName = new Map<string, string>(noteRows.rows.map((note) => [String(note.name), String(note.note)]));
+  const stops = prepared.stops.map((stop) => ({ ...stop, note: (stop.name && notesByName.get(stop.name)) || null }));
+  const rebuild: RouteRebuild = {
+    routeId,
+    before: { distanceKm: Number(row.distance_km ?? 0), durationS: Number(row.ridden_duration_s ?? 0) },
+    after: { distanceKm: prepared.geometry.distanceKm, durationS: prepared.geometry.durationS },
+  };
+  if (options.dryRun) return rebuild;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `UPDATE routes
+       SET geojson = $2, distance_km = $3, ridden_duration_s = $4,
+           start_point = ST_SetSRID(ST_MakePoint($5, $6), 4326)::geography,
+           end_point = ST_SetSRID(ST_MakePoint($7, $8), 4326)::geography
+       WHERE id = $1`,
+      [
+        routeId,
+        JSON.stringify({ type: "LineString", coordinates: prepared.geometry.coordinates }),
+        prepared.geometry.distanceKm,
+        prepared.geometry.durationS,
+        prepared.start.lng,
+        prepared.start.lat,
+        prepared.end.lng,
+        prepared.end.lat,
+      ],
+    );
+    await client.query(`DELETE FROM route_stops WHERE route_id = $1`, [routeId]);
+    await insertStops(client, routeId, stops);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+  return rebuild;
 };
 
 export const saveRouteFromRide = async (

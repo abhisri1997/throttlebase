@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildRouteStops, type RideStopForRoute } from "./routeStops.js";
+import { buildRouteStops, placeAtParking, type RideStopForRoute } from "./routeStops.js";
 
 /** A straight route due north, ~11.1 km per 0.1° of latitude. */
 const LINE: [number, number][] = [
@@ -72,4 +72,23 @@ test("notes attach to their stop, trimmed, and a blank note is no note", () => {
 
   assert.equal(stops[0]!.note, "Last fuel for 60 km");
   assert.equal(stops[1]!.note, null);
+});
+
+test("a planned stop the rider parked for sits where the bike was, not where they walked to", () => {
+  // Infosys Building 37 is inside a campus bikes can't enter; the bike waited at the gate.
+  const building = stop("infosys", 12.95, 77.603);
+  const gate = { lat: 12.95, lng: 77.6005 };
+
+  const placed = placeAtParking([building, stop("cafe", 13.05)], [
+    { plannedStopId: "infosys", parkedAt: gate },
+    { plannedStopId: null, parkedAt: { lat: 13.0, lng: 77.6 } },
+  ]);
+
+  assert.deepEqual(
+    placed.map((s) => [s.id, s.name, s.lat, s.lng]),
+    [
+      ["infosys", "Stop infosys", 12.95, 77.6005],
+      ["cafe", "Stop cafe", 13.05, 77.6],
+    ],
+  );
 });
