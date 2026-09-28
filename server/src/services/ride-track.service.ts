@@ -4,7 +4,7 @@
  */
 import { query } from "../config/db.js";
 import type { WaypointReachedInput } from "../schemas/live-session.schemas.js";
-import { buildTrack, type TrackSample } from "../utils/track.js";
+import { buildTrack, toMotionActivity, type TrackSample } from "../utils/track.js";
 import { ridingSummary } from "../core/ride-progress/ridingStats.js";
 import { LiveSessionError, getLiveSession } from "./live-session.service.js";
 
@@ -82,6 +82,7 @@ export const loadRiderSamples = async (sessionId: string, riderId: string): Prom
             ST_X(location::geometry) AS lng,
             accuracy_m,
             speed_kmh,
+            activity,
             captured_at
      FROM ride_live_location_samples
      WHERE session_id = $1
@@ -96,6 +97,7 @@ export const loadRiderSamples = async (sessionId: string, riderId: string): Prom
     accuracyM: row.accuracy_m != null ? Number(row.accuracy_m) : null,
     capturedAtMs: new Date(row.captured_at).getTime(),
     speedKmh: row.speed_kmh != null ? Number(row.speed_kmh) : null,
+    activity: toMotionActivity(row.activity),
   }));
 };
 

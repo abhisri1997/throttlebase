@@ -264,7 +264,7 @@ export const createLiveGateway = (httpServer: HttpServer) => {
         }
 
         const capturedAtMs = payload.captured_at ? Date.parse(payload.captured_at) : Date.now();
-        const point: TrackPoint = { lat: payload.lat, lng: payload.lon, capturedAtMs };
+        const point: TrackPoint = { lat: payload.lat, lng: payload.lon, capturedAtMs, activity: payload.activity ?? null };
         // Decide before awaiting anything: this handler runs concurrently for
         // every update in a batch, and each must see the decisions of the ones
         // before it.
@@ -290,6 +290,7 @@ export const createLiveGateway = (httpServer: HttpServer) => {
               heading_deg: payload.heading_deg,
               accuracy_m: payload.accuracy_m,
               captured_at: payload.captured_at,
+              activity: payload.activity,
             },
             { persistSample: reservation !== null },
           );

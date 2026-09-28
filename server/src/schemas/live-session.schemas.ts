@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MOTION_ACTIVITIES } from "../utils/track.js";
 
 export const SessionStatusSchema = z.enum([
   "starting",
@@ -29,6 +30,8 @@ export const LiveLocationUpdateSchema = z.object({
   heading_deg: z.number().gte(0).lt(360).optional(),
   accuracy_m: z.number().nonnegative().optional(),
   captured_at: z.string().datetime().optional(),
+  /** The phone's motion reading at the fix, when it had a recent one. */
+  activity: z.enum(MOTION_ACTIVITIES).optional(),
   /**
    * A dev simulation rather than a real fix. Broadcast and kept as a track
    * sample like any other, so a simulated ride is recorded; while it runs the

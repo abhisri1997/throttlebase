@@ -26,6 +26,16 @@ test("keeps a fix every 30 s even when standing still", () => {
   assert.equal(shouldPersistSample(at(0, 0), at(2, 30)), true);
 });
 
+test("keeps a fix where the phone's motion reading changed, though the rider barely moved", () => {
+  // Getting off the bike: the moment the rider starts walking is worth a point.
+  const riding = { ...at(0, 0), activity: "automotive" as const };
+
+  assert.equal(shouldPersistSample(riding, { ...at(5, 8), activity: "walking" }), true);
+  assert.equal(shouldPersistSample(riding, { ...at(5, 8), activity: "automotive" }), false);
+  assert.equal(shouldPersistSample(riding, at(5, 8)), false, "no reading is no change");
+  assert.equal(shouldPersistSample(at(0, 0), { ...at(5, 8), activity: "walking" }), true, "the first reading is news");
+});
+
 test("ignores a fix older than the last sample", () => {
   assert.equal(shouldPersistSample(at(0, 10), at(500, 8)), false);
 });
