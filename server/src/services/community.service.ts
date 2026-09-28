@@ -26,11 +26,45 @@ export const createPost = async (riderId: string, data: CreatePostInput) => {
   return result.rows[0];
 };
 
+/**
+ * A rider who deletes their account disappears from the community at once:
+ * their posts, comments, likes and follows are hidden from everyone, though
+ * the rows stay until the account purge removes them 30 days later
+ * (workers/processors/account-purge.processor.ts).
+ *
+ * Posts therefore count likes and comments live, leaving out deleted riders,
+ * rather than returning the stored like_count / comment_count columns.
+ */
+const VISIBLE_POST_COLUMNS = `
+  p.id, p.rider_id, p.content, p.media_urls, p.shared_route_id,
+  p.created_at, p.updated_at,
+  r.display_name AS author_name,
+  (SELECT count(*)::int
+     FROM likes l JOIN riders lr ON lr.id = l.rider_id
+    WHERE l.post_id = p.id AND lr.deleted_at IS NULL) AS like_count,
+  (SELECT count(*)::int
+     FROM comments c JOIN riders cr ON cr.id = c.rider_id
+    WHERE c.post_id = p.id AND cr.deleted_at IS NULL) AS comment_count`;
+
+/** Refuses to act on a post nobody can see: missing, or its author deleted. */
+const assertPostVisible = async (postId: string): Promise<void> => {
+  const result = await query(
+    `SELECT 1
+     FROM posts p JOIN riders r ON r.id = p.rider_id
+     WHERE p.id = $1 AND r.deleted_at IS NULL`,
+    [postId],
+  );
+  if (result.rows.length === 0) {
+    throw new Error("Post not found");
+  }
+};
+
 export const getFeed = async (limit = 50, offset = 0) => {
   const result = await query(
-    `SELECT p.*, r.display_name AS author_name
+    `SELECT ${VISIBLE_POST_COLUMNS}
      FROM posts p
      JOIN riders r ON p.rider_id = r.id
+     WHERE r.deleted_at IS NULL
      ORDER BY p.created_at DESC
      LIMIT $1 OFFSET $2`,
     [limit, offset],
@@ -40,9 +74,9 @@ export const getFeed = async (limit = 50, offset = 0) => {
 
 export const getPostById = async (postId: string) => {
   const result = await query(
-    `SELECT p.*, r.display_name AS author_name
+    `SELECT ${VISIBLE_POST_COLUMNS}
      FROM posts p JOIN riders r ON p.rider_id = r.id
-     WHERE p.id = $1`,
+     WHERE p.id = $1 AND r.deleted_at IS NULL`,
     [postId],
   );
   if (result.rows.length === 0) {
@@ -82,6 +116,7 @@ export const addComment = async (
   riderId: string,
   data: CreateCommentInput,
 ) => {
+  await assertPostVisible(postId);
   const result = await query(
     `INSERT INTO comments (post_id, rider_id, content, mentions)
      VALUES ($1, $2, $3, $4)
@@ -99,8 +134,13 @@ export const addComment = async (
 export const getComments = async (postId: string) => {
   const result = await query(
     `SELECT c.*, r.display_name AS author_name
-     FROM comments c JOIN riders r ON c.rider_id = r.id
+     FROM comments c
+     JOIN riders r ON c.rider_id = r.id
+     JOIN posts p ON p.id = c.post_id
+     JOIN riders post_author ON post_author.id = p.rider_id
      WHERE c.post_id = $1
+       AND r.deleted_at IS NULL
+       AND post_author.deleted_at IS NULL
      ORDER BY c.created_at ASC`,
     [postId],
   );
@@ -112,7 +152,7 @@ export const getCommentById = async (commentId: string) => {
     `SELECT c.*, r.display_name AS author_name
      FROM comments c
      JOIN riders r ON c.rider_id = r.id
-     WHERE c.id = $1`,
+     WHERE c.id = $1 AND r.deleted_at IS NULL`,
     [commentId],
   );
 
@@ -157,6 +197,7 @@ export const deleteComment = async (commentId: string, riderId: string) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const likePost = async (postId: string, riderId: string) => {
+  await assertPostVisible(postId);
   const result = await query(
     `INSERT INTO likes (post_id, rider_id) VALUES ($1, $2)
      ON CONFLICT (post_id, rider_id) DO NOTHING RETURNING id`,
@@ -192,6 +233,11 @@ export const unlikePost = async (postId: string, riderId: string) => {
 
 export const followRider = async (followerId: string, followingId: string) => {
   if (followerId === followingId) throw new Error("Cannot follow yourself");
+  const target = await query(
+    `SELECT 1 FROM riders WHERE id = $1 AND deleted_at IS NULL`,
+    [followingId],
+  );
+  if (target.rows.length === 0) throw new Error("Rider not found");
   const result = await query(
     `INSERT INTO follows (follower_id, following_id) VALUES ($1, $2)
      ON CONFLICT DO NOTHING RETURNING follower_id`,
@@ -221,7 +267,7 @@ export const getFollowers = async (riderId: string, viewerId?: string) => {
                 AND vf.following_id = r.id
             ) AS is_following
      FROM follows f JOIN riders r ON f.follower_id = r.id
-     WHERE f.following_id = $1
+     WHERE f.following_id = $1 AND r.deleted_at IS NULL
      ORDER BY f.created_at DESC`,
     [riderId, viewerId ?? null],
   );
@@ -238,7 +284,7 @@ export const getFollowing = async (riderId: string, viewerId?: string) => {
                 AND vf.following_id = r.id
             ) AS is_following
      FROM follows f JOIN riders r ON f.following_id = r.id
-     WHERE f.follower_id = $1
+     WHERE f.follower_id = $1 AND r.deleted_at IS NULL
      ORDER BY f.created_at DESC`,
     [riderId, viewerId ?? null],
   );

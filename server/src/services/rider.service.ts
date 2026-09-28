@@ -62,8 +62,10 @@ const PROFILE_COLUMNS = `
   phone_number, weight_kg, total_rides, total_distance_km,
   total_ride_time_sec, created_at, updated_at,
   ST_AsGeoJSON(location_coords)::json AS location_coords,
-  (SELECT COUNT(*) FROM follows WHERE following_id = riders.id)::int AS follower_count,
-  (SELECT COUNT(*) FROM follows WHERE follower_id = riders.id)::int AS following_count
+  (SELECT COUNT(*) FROM follows f JOIN riders fr ON fr.id = f.follower_id
+    WHERE f.following_id = riders.id AND fr.deleted_at IS NULL)::int AS follower_count,
+  (SELECT COUNT(*) FROM follows f JOIN riders fr ON fr.id = f.following_id
+    WHERE f.follower_id = riders.id AND fr.deleted_at IS NULL)::int AS following_count
 `;
 
 /**

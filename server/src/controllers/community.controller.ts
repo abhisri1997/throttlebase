@@ -171,6 +171,10 @@ export const addComment = async (
       res.status(400).json({ errors: error.issues });
       return;
     }
+    if (error.message === "Post not found") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
     console.error("Error adding comment:", error);
     res.status(500).json({ error: "Internal server error" });
   }
@@ -276,6 +280,10 @@ export const likePost = async (req: Request, res: Response): Promise<void> => {
 
     res.json({ message: "Post liked" });
   } catch (error: any) {
+    if (error.message === "Post not found") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
     console.error("Error liking post:", error);
     res.status(500).json({ error: "Internal server error" });
   }
@@ -313,6 +321,10 @@ export const follow = async (req: Request, res: Response): Promise<void> => {
   } catch (error: any) {
     if (error.message === "Cannot follow yourself") {
       res.status(400).json({ error: error.message });
+      return;
+    }
+    if (error.message === "Rider not found") {
+      res.status(404).json({ error: error.message });
       return;
     }
     console.error("Error following:", error);
