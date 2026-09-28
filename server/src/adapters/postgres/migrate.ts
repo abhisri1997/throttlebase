@@ -127,8 +127,7 @@ export const runMigrations = async (
     } catch (error) {
       await client.query("ROLLBACK");
       throw new Error(
-        `Migration ${filename} failed and was rolled back: ${
-          error instanceof Error ? error.message : String(error)
+        `Migration ${filename} failed and was rolled back: ${error instanceof Error ? error.message : String(error)
         }`,
         { cause: error },
       );
@@ -146,12 +145,13 @@ const main = async (): Promise<void> => {
   // shell win, and a missing .env is fine.
   dotenv.config();
 
-  const connectionString =
-    process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL;
+  const connectionString = process.env.NODE_ENV === "production"
+    ? process.env.PROD_DATABASE_URL
+    : process.env.DEV_DATABASE_URL;
 
   if (!connectionString) {
     throw new Error(
-      "Set MIGRATION_DATABASE_URL (preferred) or DATABASE_URL before running migrations.",
+      "Set PROD_DATABASE_URL (prod) or DEV_DATABASE_URL (dev) before running migrations.",
     );
   }
 

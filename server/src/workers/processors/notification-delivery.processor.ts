@@ -9,6 +9,10 @@
  * Current implementation is a stub that logs intent and marks delivery
  * as attempted. Integrate with FCM/APNs/SMTP by replacing the stub
  * sections below once credentials are available.
+ *
+ * It runs in every environment, production included. Logs and job results
+ * (kept in the jobs table) carry IDs only — never an email address, a push
+ * token, or the message's title, subject or body.
  */
 
 import { query } from "../../config/db.js";
@@ -124,8 +128,9 @@ export const processNotificationPush = async (
   //     data: payload.data,
   //   });
   //
+  // IDs only: never the device token or the message text.
   console.log(
-    `[push-processor] STUB: Would send push to rider ${riderId} (token: ${pushToken}) — ${payload.title}`,
+    `[push-processor] STUB: push not sent (no provider) rider=${riderId} notification=${payload.notificationId ?? "-"} type=${notificationType}`,
   );
 
   return {
@@ -186,8 +191,10 @@ export const processNotificationEmail = async (
   //     text: payload.body,
   //   });
   //
+  // IDs only: never the address or the message text. The result is stored in
+  // the jobs table, so it follows the same rule.
   console.log(
-    `[email-processor] STUB: Would send email to ${email} — subject: "${payload.subject}"`,
+    `[email-processor] STUB: email not sent (no provider) rider=${riderId} notification=${payload.notificationId ?? "-"} type=${notificationType}`,
   );
 
   return {
@@ -198,7 +205,6 @@ export const processNotificationEmail = async (
     delivered: false,
     skipped: true,
     reason: "provider_not_configured",
-    email,
     handledAt: new Date().toISOString(),
   };
 };

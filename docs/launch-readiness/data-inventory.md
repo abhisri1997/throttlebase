@@ -316,7 +316,9 @@ Legend:
 ### E1. Account deletion
 
 - 🟡 `DELETE /api/riders/me` exists (`server/src/adapters/http/riderAccountRoutes.ts:93`; `server/src/core/riders/deleteAccount.ts`). It deletes identities, revokes all sessions, and anonymises the profile.
-- ⚠️ Rides, tracks, posts, comments, likes, follows, memberships and notifications stay for 30 days under "Deleted rider". Then the cleanup job hard-deletes everything and cascades into other riders' data. See D1.
+- ✅ The 30-day hard delete that cascaded into other riders' data is removed (security hotfix; `server/src/adapters/postgres/account-cleanup.integration.test.ts`). Production had 469 cleanup runs and 0 riders deleted, so no past damage.
+- ❌ Until the E1 purge lands, a deleted rider's posts, comments, likes, follows and tracks are kept indefinitely and still shown in the feed as "Deleted rider" (community queries have no `deleted_at` filter). See D1 and [plans/account-deletion.md](plans/account-deletion.md).
+- ⚠️ IT Rules 2021 Rule 3(1)(h) requires keeping registration information for 180 days after an account is cancelled. `deleteAccount` erases the email and identities immediately; the plan adds a sealed 180-day registration record. ⚖️
 - ⚠️ A second, shadowed `DELETE /me` (`server/src/controllers/rider.controller.ts:153-172`) returns "You have 30 days to recover it". It is unreachable because the auth router is mounted first (`server/src/app.ts:196-200`), but the two contradict each other.
 - ❌ No re-auth or recent-token requirement.
 - ❌ No Sign in with Apple token revocation.

@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { UpdateRiderSchema } from "../schemas/rider.schemas.js";
 import * as RiderService from "../services/rider.service.js";
+import { toPublicRider } from "../services/publicRider.js";
 import { query } from "../config/db.js";
 
 /**
@@ -72,9 +73,7 @@ export const getPublicProfile = async (
       is_following = followCheck.rows.length > 0;
     }
 
-    // Return public profile (strip sensitive fields)
-    const { email, is_admin, phone_number, weight_kg, ...publicProfile } = rider;
-    res.json({ rider: { ...publicProfile, is_following } });
+    res.json({ rider: toPublicRider(rider, is_following) });
   } catch (error: any) {
     console.error("Get public profile error:", error.message);
     res.status(500).json({ error: "Internal server error" });
