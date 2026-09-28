@@ -13,12 +13,17 @@ export interface MotionReading {
   activity: MotionActivityLabel;
   /** When the app got it: on iOS the reading's own time is when the activity began. */
   receivedAtMs: number;
+  /**
+   * When the sensors stopped reporting (the app went to the background), or
+   * null while they still are. Until then a reading holds: they only report
+   * changes, so ten minutes in a jam is one "automotive" reading.
+   */
+  endedAtMs: number | null;
 }
 
 /**
- * The sensors report on change and pause while the app is in the background,
- * so a reading further than this from a fix's time may not be what the rider
- * was doing then.
+ * Fixes can arrive in batches from before a reading, so one this long before
+ * it still counts: the activity was likely under way by then.
  */
 export const MOTION_READING_FRESH_MS = 2 * 60_000;
 
@@ -48,6 +53,11 @@ export const dominantActivity = ({ activities }: Pick<MotionActivityObject, "act
   return [...confident].sort((a, b) => confidenceOf(b) - confidenceOf(a))[0] ?? null;
 };
 
-/** The reading to send with a fix taken at this time, if it was close enough in time to trust. */
-export const freshActivity = (reading: MotionReading | null, fixAtMs: number): MotionActivityLabel | undefined =>
-  reading && Math.abs(fixAtMs - reading.receivedAtMs) <= MOTION_READING_FRESH_MS ? reading.activity : undefined;
+/**
+ * The reading to send with a fix taken at this time: from shortly before it
+ * arrived until the sensors next change or stop reporting.
+ */
+export const freshActivity = (reading: MotionReading | null, fixAtMs: number): MotionActivityLabel | undefined => {
+  if (!reading || fixAtMs < reading.receivedAtMs - MOTION_READING_FRESH_MS) return undefined;
+  return reading.endedAtMs === null || fixAtMs <= reading.endedAtMs ? reading.activity : undefined;
+};

@@ -188,14 +188,28 @@ test("a jump no motorcycle could make adds no distance", () => {
   assert.ok(ridingDistanceM < 6_200, `rode ${ridingDistanceM} m`);
 });
 
-test("a track with no riding in it is left as it is", () => {
-  const samples = track(walkOutAndBack(100));
+test("a walk with no riding in it is no riding at all", () => {
+  const { riding, stops, ridingTimeS, ridingDistanceM } = segmentRide(track(walkOutAndBack(100)));
 
-  const { riding, stops } = segmentRide(samples);
+  assert.deepEqual(riding, []);
+  assert.deepEqual(stops, []);
+  assert.equal(ridingTimeS, 0);
+  assert.equal(ridingDistanceM, 0);
+});
 
-  assert.equal(stops.length, 0);
-  assert.equal(riding.length, 1);
-  assert.equal(riding[0]!.length, samples.length);
+test("a few fixes far apart count only the steps covered at riding pace", () => {
+  // The phone barely reported: one step ridden at 30 km/h, and a long silence
+  // that covered 400 m in an hour (the phone left somewhere, not a ride).
+  const sparse: Leg = (from) => {
+    const rode = { ...from, eastM: from.eastM + 5_000, tMs: from.tMs + 10 * 60_000 };
+    const idle = { ...rode, eastM: rode.eastM + 400, tMs: rode.tMs + 60 * 60_000 };
+    return { samples: [at(rode, null, RIDING_ACCURACY_M), at(idle, null, RIDING_ACCURACY_M)], end: idle };
+  };
+
+  const { ridingTimeS, ridingDistanceM } = segmentRide(track(sparse));
+
+  assert.ok(Math.abs(ridingTimeS - 600) < 5, `rode ${ridingTimeS} s, not the hour of silence`);
+  assert.ok(Math.abs(ridingDistanceM - 5_000) < 30, `rode ${ridingDistanceM} m`);
 });
 
 /* ---------------------------- motion readings ----------------------------- */

@@ -262,6 +262,31 @@ const stopBetween = (
   };
 };
 
+/**
+ * Riding in a track too sparse for sustained stretches: each step between two
+ * fixes covered at riding pace. Long silences covered slower than that (the
+ * phone left somewhere, or switched off) are not riding, however far apart.
+ */
+const stepsAtRidingPace = (points: readonly TrackSample[]): TrackSample[][] => {
+  const stretches: TrackSample[][] = [];
+  let first = -1;
+  points.forEach((point, index) => {
+    if (index === 0) return;
+    const previous = points[index - 1]!;
+    const seconds = secondsBetween(previous, point);
+    const metres = haversineMeters(previous, point);
+    const isRidden =
+      seconds > 0 && metres / seconds <= MAX_PLAUSIBLE_SPEED_MPS && (metres / seconds) * 3.6 >= RIDING_KMH;
+    if (isRidden && first === -1) first = index - 1;
+    if (!isRidden && first !== -1) {
+      stretches.push(points.slice(first, index));
+      first = -1;
+    }
+  });
+  if (first !== -1) stretches.push(points.slice(first));
+  return stretches;
+};
+
 const summarize = (riding: TrackSample[][], stops: RideStop[]): SegmentedRide => ({
   riding,
   stops,
@@ -274,7 +299,8 @@ const summarize = (riding: TrackSample[][], stops: RideStop[]): SegmentedRide =>
 /**
  * Splits a track into riding and stops. Waiting before the ride and walking
  * about after it are left out: the ride runs from pulling away to parking.
- * A track with no sustained riding at all is returned whole, as riding.
+ * A track with no sustained riding at all, as when the phone barely reported,
+ * counts only the steps covered at riding pace; a walk counts as nothing.
  */
 export const segmentRide = (
   samples: readonly TrackSample[],
@@ -282,7 +308,7 @@ export const segmentRide = (
 ): SegmentedRide => {
   const points = cleanTrack(samples);
   const spans = ridingSpans(points);
-  if (spans.length === 0) return summarize(points.length > 0 ? [points] : [], []);
+  if (spans.length === 0) return summarize(stepsAtRidingPace(points), []);
 
   const riding: TrackSample[][] = [];
   const stops: RideStop[] = [];
