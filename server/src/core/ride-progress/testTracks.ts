@@ -2,7 +2,7 @@
  * Synthetic tracks for tests, recorded the way the app records them: a fix
  * every ~20 m of movement and none while standing still. Test-only.
  */
-import type { TrackSample } from "../../utils/track.js";
+import type { MotionActivity, TrackSample } from "../../utils/track.js";
 
 export const ORIGIN = { lat: 12.9, lng: 77.6 };
 export const M_PER_DEG_LAT = 111_320;
@@ -65,6 +65,25 @@ export const crawl = (metres: number, kmh: number): Leg => move(metres, kmh, EAS
 export const wait =
   (minutes: number): Leg =>
   (from) => ({ samples: [], end: { ...from, tMs: from.tMs + minutes * 60_000 } });
+/**
+ * Hardly moving: a fix a minute, each a few metres on. Edging through a
+ * standstill, or shuffling about beside the bike.
+ */
+export const inch =
+  (minutes: number, metresPerMinute = 3): Leg =>
+  (from) => {
+    const samples = Array.from({ length: minutes }, (_, i) =>
+      at(
+        { ...from, eastM: from.eastM + metresPerMinute * (i + 1), tMs: from.tMs + 60_000 * (i + 1) },
+        1,
+        RIDING_ACCURACY_M,
+      ),
+    );
+    return {
+      samples,
+      end: { ...from, eastM: from.eastM + metresPerMinute * minutes, tMs: from.tMs + 60_000 * minutes },
+    };
+  };
 /** Off the bike: walks away from the road and back to it, indoors. */
 export const walkOutAndBack = (metres: number, kmh = 5): Leg => {
   const out = move(metres, kmh, NORTH, INDOOR_ACCURACY_M);
@@ -75,6 +94,14 @@ export const walkOutAndBack = (metres: number, kmh = 5): Leg => {
     return { samples: [...there.samples, ...home.samples], end: home.end };
   };
 };
+
+/** The same leg, with the phone's motion sensors reading this at every fix. */
+export const doing =
+  (activity: MotionActivity, leg: Leg): Leg =>
+  (from) => {
+    const { samples, end } = leg(from);
+    return { samples: samples.map((sample) => ({ ...sample, activity })), end };
+  };
 
 export const track = (...legs: Leg[]): TrackSample[] => {
   const start: Cursor = { eastM: 0, northM: 0, tMs: Date.UTC(2026, 8, 25, 14, 45) };

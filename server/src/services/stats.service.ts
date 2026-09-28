@@ -1,6 +1,6 @@
 import { query } from "../config/db.js";
 import { ridingStats } from "../core/ride-progress/ridingStats.js";
-import type { TrackSample } from "../utils/track.js";
+import { toMotionActivity, type TrackSample } from "../utils/track.js";
 import { enqueueRewardsRecompute } from "./jobs.service.js";
 
 interface TracePoint {
@@ -10,6 +10,7 @@ interface TracePoint {
   altitude_m: string | number | null;
   speed_kmh: string | number | null;
   accuracy_m: string | number | null;
+  activity: string | null;
   recorded_at: string;
 }
 
@@ -43,6 +44,7 @@ const toTrackSample = (point: TracePoint): TrackSample => ({
   accuracyM: toNumber(point.accuracy_m),
   capturedAtMs: new Date(point.recorded_at).getTime(),
   speedKmh: toNumber(point.speed_kmh),
+  activity: toMotionActivity(point.activity),
 });
 
 /** Altitude is never sent over the socket today, so this stays zero until it is. */
@@ -183,6 +185,7 @@ export const recomputeRideHistoryStats = async (
             NULL::numeric AS altitude_m,
             s.speed_kmh,
             s.accuracy_m,
+            s.activity,
             s.captured_at AS recorded_at
      FROM ride_live_location_samples s
      JOIN ride_live_sessions ls ON ls.id = s.session_id

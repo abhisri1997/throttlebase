@@ -2,9 +2,11 @@
  * Which live location updates to keep as track samples. Updates arrive every
  * few seconds — from the navigation screen and the background tracker alike —
  * but a ride history only needs a point per stretch of road, so a sample is
- * kept once the rider has moved far enough or enough time has passed.
+ * kept once the rider has moved far enough, enough time has passed, or the
+ * phone's motion reading changed (getting off the bike barely moves it).
  */
 import { haversineMeters } from "../utils/polyline.js";
+import type { MotionActivity } from "../utils/track.js";
 
 export const SAMPLE_MIN_DISTANCE_METERS = 20;
 /** Even standing still, keep a point this often so the track's timing stays honest. */
@@ -14,7 +16,11 @@ export interface TrackPoint {
   lat: number;
   lng: number;
   capturedAtMs: number;
+  activity?: MotionActivity | null;
 }
+
+const isNewActivity = (previous: TrackPoint, next: TrackPoint): boolean =>
+  Boolean(next.activity) && next.activity !== previous.activity;
 
 export const shouldPersistSample = (
   previous: TrackPoint | undefined,
@@ -27,7 +33,8 @@ export const shouldPersistSample = (
 
   return (
     haversineMeters(previous, next) >= SAMPLE_MIN_DISTANCE_METERS ||
-    next.capturedAtMs - previous.capturedAtMs >= SAMPLE_MAX_INTERVAL_MS
+    next.capturedAtMs - previous.capturedAtMs >= SAMPLE_MAX_INTERVAL_MS ||
+    isNewActivity(previous, next)
   );
 };
 

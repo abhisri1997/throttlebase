@@ -1248,7 +1248,8 @@ export const updateLivePresenceLocation = async (
            speed_kmh,
            heading_deg,
            accuracy_m,
-           captured_at
+           captured_at,
+           activity
          )
          VALUES (
            $1,
@@ -1257,7 +1258,8 @@ export const updateLivePresenceLocation = async (
            $5,
            $6,
            $7,
-           $8::timestamptz
+           $8::timestamptz,
+           $9
          )`,
         [
           session.id,
@@ -1268,6 +1270,7 @@ export const updateLivePresenceLocation = async (
           input.heading_deg ?? null,
           input.accuracy_m ?? null,
           capturedAt,
+          input.activity ?? null,
         ],
       );
     }

@@ -1,11 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { segmentRide, STOP_MIN_S } from "./segmentRide.js";
+import { segmentRide, STOP_MIN_S, WALKED_AWAY_M } from "./segmentRide.js";
 import { haversineMeters } from "../../utils/polyline.js";
 
 import {
   at,
   crawl,
+  doing,
+  inch,
   INDOOR_ACCURACY_M,
   M_PER_DEG_LAT,
   M_PER_DEG_LNG,
@@ -194,4 +196,76 @@ test("a track with no riding in it is left as it is", () => {
   assert.equal(stops.length, 0);
   assert.equal(riding.length, 1);
   assert.equal(riding[0]!.length, samples.length);
+});
+
+/* ---------------------------- motion readings ----------------------------- */
+
+test("a rider who walked off indoors is at a stop, though GPS barely moved", () => {
+  const legs = (activity?: "walking"): Leg[] => {
+    const shuffle = walkOutAndBack(20);
+    const onFoot = activity ? doing(activity, shuffle) : shuffle;
+    return [ride(3000), wait(2), onFoot, wait(2), onFoot, wait(2), ride(3000)];
+  };
+
+  const { stops } = segmentRide(track(...legs("walking")));
+
+  assert.equal(stops.length, 1);
+  assert.equal(stops[0]!.walkedAway, true, "the phone felt the walking");
+  assert.ok(stops[0]!.farthestM < WALKED_AWAY_M, `GPS put them ${stops[0]!.farthestM} m from the bike`);
+  assert.equal(segmentRide(track(...legs())).stops[0]!.walkedAway, false, "GPS alone can't tell");
+});
+
+test("one walking reading is not enough to say the rider got off", () => {
+  const { stops } = segmentRide(track(ride(3000), wait(3), doing("walking", inch(1)), wait(3), ride(3000)));
+
+  assert.equal(stops.length, 1);
+  assert.equal(stops[0]!.walkedAway, false, "one reading could be the rider shifting on the bike");
+});
+
+test("walking at a stop makes it one, though the rider rode on from further along the parking", () => {
+  // Riding ends, the bike rolls ~60 m on to its spot, and the rider rides off from there.
+  const rollIn: Leg = (from) => {
+    const creep = { ...from, eastM: from.eastM + 25, tMs: from.tMs + 11_000 };
+    const spot = { ...from, eastM: from.eastM + 58, tMs: from.tMs + 52_000 };
+    return { samples: [at(creep, 2, RIDING_ACCURACY_M), at(spot, 0, RIDING_ACCURACY_M)], end: spot };
+  };
+  const pause = walkOutAndBack(20);
+
+  const withReadings = segmentRide(track(ride(3000), rollIn, wait(3), doing("walking", pause), wait(3), ride(3000)));
+  const gpsOnly = segmentRide(track(ride(3000), rollIn, wait(3), pause, wait(3), ride(3000)));
+
+  assert.equal(withReadings.stops.length, 1);
+  assert.equal(withReadings.stops[0]!.walkedAway, true);
+  assert.equal(gpsOnly.stops.length, 0, "without the readings it looks like a jam");
+});
+
+test("a standstill the phone felt as riding is part of the ride, though GPS alone would call it a stop", () => {
+  const withReadings = segmentRide(track(ride(3000), doing("automotive", inch(6)), ride(3000)));
+  const gpsOnly = segmentRide(track(ride(3000), inch(6), ride(3000)));
+
+  assert.equal(withReadings.stops.length, 0, "the rider never got off");
+  assert.equal(withReadings.riding.length, 1);
+  assert.ok(minutes(withReadings.ridingTimeS) > 14, `rode ${minutes(withReadings.ridingTimeS)} min`);
+  assert.equal(gpsOnly.stops.length, 1, "edging a few metres in six minutes reads as a stop");
+});
+
+test("readings of standing still say nothing either way", () => {
+  const { stops } = segmentRide(track(ride(3000), doing("stationary", inch(6)), ride(3000)));
+
+  assert.equal(stops.length, 1, "GPS decides, as without readings");
+  assert.equal(stops[0]!.walkedAway, false);
+});
+
+test("walking readings on a pause under five minutes still leave it part of the ride", () => {
+  const { stops } = segmentRide(track(ride(3000), wait(1), doing("walking", walkOutAndBack(20)), wait(2), ride(3000)));
+
+  assert.equal(stops.length, 0);
+});
+
+test("a long stop beside the bike stays a stop when the phone felt the ride either side of it", () => {
+  // Nothing is recorded while parked, so the only readings in the pause are
+  // from pulling away: they say nothing about the eight minutes before.
+  const { stops } = segmentRide(track(doing("automotive", ride(3000)), wait(8), doing("automotive", ride(3000))));
+
+  assert.equal(stops.length, 1);
 });

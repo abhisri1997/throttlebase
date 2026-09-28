@@ -9,9 +9,20 @@
  *
  * Riding is told from walking by sustained speed: a phone indoors reads the
  * odd fast fix while its owner walks, so one fast fix never counts as riding.
+ *
+ * Where the phone's motion sensors said what the rider was doing, that is
+ * extra evidence about a pause in riding; without readings, GPS decides alone.
+ *   - Walking (or running) during the pause: the rider got off. They walked
+ *     away even if GPS barely moved (indoors, say), and the pause is a stop
+ *     if they came back to where they parked, even if not to the exact spot.
+ *   - Only automotive or cycling during the pause, with a reading every couple
+ *     of minutes: the rider stayed on the bike in traffic, so it is riding,
+ *     however long it lasted.
+ *   - Anything else (standing still, a mix without enough walking) says
+ *     nothing either way.
  */
 import { haversineMeters, type LatLng } from "../../utils/polyline.js";
-import { cleanTrack, MAX_PLAUSIBLE_SPEED_MPS, type TrackSample } from "../../utils/track.js";
+import { cleanTrack, MAX_PLAUSIBLE_SPEED_MPS, type MotionActivity, type TrackSample } from "../../utils/track.js";
 
 /** Faster than anyone walks... */
 export const RIDING_KMH = 12;
@@ -27,6 +38,13 @@ export const STOP_RETURN_M = 50;
 const PARKING_WINDOW_S = 90;
 /** Further than this from the bike, the rider walked off somewhere. */
 export const WALKED_AWAY_M = 75;
+/** Fewer walking readings than this could be the rider shifting about on the bike. */
+export const ON_FOOT_MIN_READINGS = 2;
+/**
+ * Longer than this without a reading and the rider could have got off and back
+ * on unseen: the phone records nothing while the bike stands still.
+ */
+export const ON_BIKE_MAX_UNHEARD_S = 2 * 60;
 /** A planned stop the rider came this close to on foot is the one they stopped for... */
 const PLANNED_STOP_REACHED_M = 150;
 /** ...or one they parked this close to. */
@@ -44,6 +62,7 @@ export interface RideStop {
   durationS: number;
   /** How far the rider went from the bike. */
   farthestM: number;
+  /** Went far from the bike, or the phone felt them walking. */
   walkedAway: boolean;
   /** The planned stop this was, or null for one the rider found. */
   plannedStopId: string | null;
@@ -153,6 +172,27 @@ const matchPlannedStop = (
   return candidates[0]?.id ?? null;
 };
 
+const ON_FOOT: readonly MotionActivity[] = ["walking", "running"];
+const ON_BIKE: readonly MotionActivity[] = ["automotive", "cycling"];
+
+type PauseEvidence = "on_foot" | "on_bike" | "none";
+
+/** On the bike at every reading, with no silence long enough to have got off in. */
+const isOnBikeThroughout = (riddenTo: TrackSample, pause: readonly TrackSample[]): boolean => {
+  const readings = pause.filter((point) => point.activity);
+  if (readings.length === 0) return false;
+  if (!readings.every((point) => point.activity && ON_BIKE.includes(point.activity))) return false;
+  const heardAt = [riddenTo, ...readings, pause[pause.length - 1]!].map((point) => point.capturedAtMs);
+  return heardAt.slice(1).every((atMs, index) => (atMs - heardAt[index]!) / 1000 <= ON_BIKE_MAX_UNHEARD_S);
+};
+
+/** What the motion readings during a pause, after riding ended, say the rider did there. */
+const pauseEvidence = (riddenTo: TrackSample, pause: readonly TrackSample[]): PauseEvidence => {
+  const onFoot = pause.filter((point) => point.activity && ON_FOOT.includes(point.activity)).length;
+  if (onFoot >= ON_FOOT_MIN_READINGS) return "on_foot";
+  return isOnBikeThroughout(riddenTo, pause) ? "on_bike" : "none";
+};
+
 interface FoundStop {
   stop: RideStop;
   /** The last fix at the bike: where riding picks up again. */
@@ -197,10 +237,15 @@ const stopBetween = (
     haversineMeters(fix, left) < haversineMeters(closest, left) ? fix : closest,
   );
   const visited = points.slice(parkedIndex, leftIndex + 1);
+  // The fix riding ended on was still riding; the pause is what came after it.
+  const evidence = pauseEvidence(riddenTo, visited.slice(1));
+  if (evidence === "on_bike") return null;
+
   const farthestM = Math.max(...visited.map((point) => haversineMeters(bike, point)));
+  const walkedAway = farthestM >= WALKED_AWAY_M || evidence === "on_foot";
   // Without walking off, only riding on from the very spot riding stopped is
   // a stop; creeping on through a standstill is a jam.
-  if (farthestM < WALKED_AWAY_M && haversineMeters(riddenTo, left) > STOP_RETURN_M) return null;
+  if (!walkedAway && haversineMeters(riddenTo, left) > STOP_RETURN_M) return null;
 
   const parkedAt = { lat: bike.lat, lng: bike.lng };
   return {
@@ -211,7 +256,7 @@ const stopBetween = (
       endedAtMs: left.capturedAtMs,
       durationS: Math.round(durationS),
       farthestM: Math.round(farthestM),
-      walkedAway: farthestM >= WALKED_AWAY_M,
+      walkedAway,
       plannedStopId: matchPlannedStop(parkedAt, visited, plannedStops),
     },
   };
