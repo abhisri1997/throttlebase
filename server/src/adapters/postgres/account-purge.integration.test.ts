@@ -142,6 +142,14 @@ test("purging a deleted account removes only that rider's data", { skip: !CONNEC
     stayersPost,
     LEAVER,
   ]);
+  // The app keeps like and comment counts on each post; start them true.
+  await admin.query(
+    `UPDATE posts
+        SET like_count = (SELECT count(*) FROM likes l WHERE l.post_id = posts.id),
+            comment_count = (SELECT count(*) FROM comments c WHERE c.post_id = posts.id)
+      WHERE id IN ($1, $2)`,
+    [leaversPost, stayersPost],
+  );
   await admin.query(
     `INSERT INTO follows (follower_id, following_id) VALUES ($1, $2), ($2, $1)`,
     [LEAVER, STAYER],
@@ -289,6 +297,21 @@ test("purging a deleted account removes only that rider's data", { skip: !CONNEC
   await t.test("the stayer's own post, route and follow list are intact", async () => {
     assert.equal(await countOf(admin, `SELECT count(*) FROM posts WHERE id = $1`, [stayersPost]), 1);
     assert.equal(await countOf(admin, `SELECT count(*) FROM routes WHERE id = $1`, [stayersRoute]), 1);
+  });
+
+  await t.test("the stayer's post no longer counts the leaver's like and comment", async () => {
+    const post = await admin.query(
+      `SELECT like_count, comment_count,
+              (SELECT count(*) FROM likes WHERE post_id = $1) AS likes,
+              (SELECT count(*) FROM comments WHERE post_id = $1) AS comments
+       FROM posts WHERE id = $1`,
+      [stayersPost],
+    );
+    const counts = post.rows[0];
+    assert.equal(Number(counts.like_count), Number(counts.likes));
+    assert.equal(Number(counts.comment_count), Number(counts.comments));
+    assert.equal(Number(counts.like_count), 0);
+    assert.equal(Number(counts.comment_count), 0);
   });
 
   await t.test("a rider deleted 10 days ago is not purged yet", async () => {
