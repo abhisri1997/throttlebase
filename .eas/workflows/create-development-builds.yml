@@ -1,0 +1,11 @@
+name: Create Development Builds
+
+jobs:
+  build_android:
+    type: build # This job type creates a development build for Android
+    params:
+      platform: android
+  build_ios:
+    type: build # This job type creates a development build for iOS
+    params:
+      platform: ios

@@ -12,12 +12,20 @@ For product scope, architecture, and current status, see `ai-assistant.md` and `
 ## Commands
 
 Server (`cd server`):
+
 - Dev: `npm run dev` (nodemon + tsx, API only) or `npm run dev:all` (API + worker)
 - Test: `npm test`
 - Build/typecheck: `npx tsc --noEmit`
 
 Client (`cd client`):
+
 - Dev: `npx expo start`
 - Typecheck: `npx tsc --noEmit`
 
 No lint/format tooling is configured in either package yet.
+
+## Launch readiness
+
+- Follow docs/launch-readiness/LAUNCH_READINESS.md for compliance/launch work.
+- Background research: docs/launch-readiness/compliance-report.md.
+- Legal text is draft-only. Never modify infra or secrets.
