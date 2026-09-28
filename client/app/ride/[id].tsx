@@ -52,7 +52,7 @@ import {
   simplifyPolyline,
 } from "../../src/features/navigation/services/navigationRouteService";
 import { NavigationRouteLayer } from "../../src/features/navigation/components/NavigationRouteLayer";
-import { buildTripPlan } from "../../src/features/navigation/core/tripPlan";
+import { buildTripPlan, rideRoadVia } from "../../src/features/navigation/core/tripPlan";
 import {
   buildRollCall,
   summarizeRollCall,
@@ -70,6 +70,8 @@ import type { LatLng, RouteLeg } from "../../src/features/navigation/types/navig
 import type { LiveSessionParticipant } from "../../src/services/liveSessionSocket";
 import { StartMyRideCard } from "../../src/features/rides/components/StartMyRideCard";
 import { SaveRouteCard } from "../../src/features/rides/components/SaveRouteCard";
+import { RoadFeedbackCard } from "../../src/features/rides/components/RoadFeedbackCard";
+import { rideSummaryLabel } from "../../src/features/rides/core/rideSummary";
 import { useEndRideWithWarning } from "../../src/features/rides/hooks/useEndRideWithWarning";
 
 const fetchRideDetails = async (id: string) => {
@@ -1165,7 +1167,8 @@ useEffect(() => {
   // The ride as planned — start, approved stops, destination. Fetched once per
   // plan and cached, so opening navigation from here costs no second request.
   const waypoints = useMemo(() => buildTripPlan(ride), [ride]);
-  const plannedRoute = usePlannedRoute(waypoints);
+  const roadVia = useMemo(() => rideRoadVia(ride), [ride]);
+  const plannedRoute = usePlannedRoute(waypoints, roadVia);
   const rideStartPoint = waypoints?.[0]?.coordinate ?? null;
 
   // Who has actually made it to the start. Riders only report a position once
@@ -1203,10 +1206,7 @@ useEffect(() => {
         : EMPTY_LINE,
     [track],
   );
-  const trackSummaryLabel =
-    track && track.coordinates.length > 1
-      ? `You rode ${formatDistance(track.distanceMeters)} in ${formatDuration(track.durationSeconds)}`
-      : null;
+  const trackSummaryLabel = track && track.coordinates.length > 1 ? rideSummaryLabel(track) : null;
   const arrivalLabel = useCallback(
     (waypointId: string): string | undefined => {
       const reachedAt = track?.arrivals[waypointId];
@@ -1678,6 +1678,10 @@ useEffect(() => {
             </View>
           </View>
           {/* Only once there is a recorded track to build the route from. */}
+          {/* The card itself checks this rider was on the ride. */}
+          {ride.status === "completed" && ride.route_id && ride.road_via != null ? (
+            <RoadFeedbackCard rideId={id!} />
+          ) : null}
           {ride.status === "completed" && trackCoordinates.length > 1 ? (
             <SaveRouteCard rideId={id!} rideTitle={ride.title} />
           ) : null}

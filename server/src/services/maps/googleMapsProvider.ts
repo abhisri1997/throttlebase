@@ -16,6 +16,8 @@ import {
   type SearchAlongRouteParams,
   type SearchNearbyParams,
 } from "./mapsProvider.js";
+import { planDirectionsWaypoints } from "../../core/routes/roadVia.js";
+import { areaNameFromGeocode } from "./areaName.js";
 
 /**
  * The only module in the codebase that talks to Google.
@@ -111,7 +113,10 @@ interface GoogleDirectionsResponse {
 interface GoogleGeocodeResponse {
   status?: string;
   error_message?: string;
-  results?: Array<{ formatted_address?: string }>;
+  results?: Array<{
+    formatted_address?: string;
+    address_components?: Array<{ long_name?: string; types?: string[] }>;
+  }>;
 }
 
 interface GooglePlace {
@@ -256,6 +261,13 @@ export const createGoogleMapsProvider = ({
     async getDirections(request: DirectionsRequest): Promise<DirectionsResult> {
       const waypoints = request.waypoints ?? [];
       const hasStopovers = waypoints.length > 0;
+      const plannedWaypoints = planDirectionsWaypoints({
+        origin: request.origin,
+        destination: request.destination,
+        stopovers: waypoints,
+        via: request.via ?? [],
+      });
+      const followsRoad = plannedWaypoints.some((waypoint) => waypoint.isVia);
 
       const params = new URLSearchParams({
         origin: toCoordParam(request.origin),
@@ -264,18 +276,24 @@ export const createGoogleMapsProvider = ({
         key: apiKey,
       });
 
-      if (hasStopovers) {
-        params.set("waypoints", waypoints.map(toCoordParam).join("|"));
+      if (plannedWaypoints.length > 0) {
+        params.set(
+          "waypoints",
+          plannedWaypoints
+            .map(({ point, isVia }) => (isVia ? `via:${toCoordParam(point)}` : toCoordParam(point)))
+            .join("|"),
+        );
       }
 
-      // Google returns traffic and alternatives only for requests without
-      // stopovers, yet still bills `departure_time` at the Directions Advanced
-      // rate. Only ask where the answer can actually come back.
+      // Google returns traffic only for requests without stopovers (pass-through
+      // points are fine), yet still bills `departure_time` at the Directions
+      // Advanced rate. Only ask where the answer can actually come back.
       if (!hasStopovers && request.trafficAware) {
         params.set("departure_time", "now");
       }
 
-      if (!hasStopovers && request.preferFastest) {
+      // A ride following a road has its road chosen; there is nothing faster to pick.
+      if (!hasStopovers && !followsRoad && request.preferFastest) {
         params.set("alternatives", "true");
       }
 
@@ -324,6 +342,24 @@ export const createGoogleMapsProvider = ({
       assertLegacyStatus("reverse-geocode", payload);
 
       return payload.results?.[0]?.formatted_address ?? null;
+    },
+
+    async reverseGeocodeArea(coords: LatLngLiteral): Promise<string | null> {
+      const params = new URLSearchParams({
+        latlng: toCoordParam(coords),
+        key: apiKey,
+      });
+
+      const payload = await requestGoogleJson<GoogleGeocodeResponse>(
+        "reverse-geocode-area",
+        `${GEOCODE_URL}?${params.toString()}`,
+        { method: "GET" },
+        fetchImpl,
+      );
+
+      assertLegacyStatus("reverse-geocode-area", payload);
+
+      return areaNameFromGeocode(payload.results ?? []);
     },
 
     async autocompletePlaces(request: AutocompleteRequest): Promise<PlacePrediction[]> {

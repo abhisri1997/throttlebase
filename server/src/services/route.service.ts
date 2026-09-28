@@ -1,5 +1,14 @@
 import { query } from "../config/db.js";
+import {
+  MAX_SEARCH_RADIUS_KM,
+  rankRouteMatches,
+  type RouteDirection,
+  type RouteSearchQuery,
+  type SearchPlace,
+} from "../core/routes/routeSearch.js";
+import { roadViaPoints, routeLine } from "../core/routes/roadVia.js";
 import { enqueueRideStatsRecompute } from "./jobs.service.js";
+import { getRouteRoadFeedback, type RouteRoadFeedback } from "./road-feedback.service.js";
 import type {
   CreateRouteInput,
   GpsTraceBatchInput,
@@ -27,9 +36,71 @@ export interface Route {
   visibility: string;
   proposal_status: string | null;
   created_at: string;
+  start_name: string | null;
+  end_name: string | null;
+  start_lat: number | null;
+  start_lng: number | null;
+  end_lat: number | null;
+  end_lng: number | null;
+  highlights: string[];
+  ridden_duration_s: number | null;
+  /** Names of the stops in order, for "via Mysuru · Gundlupet". */
+  via: string[];
   // JOIN fields
   creator_name?: string;
 }
+
+export interface RouteStop {
+  position: number;
+  name: string | null;
+  lat: number;
+  lng: number;
+  note: string | null;
+  distance_from_start_km: number | null;
+}
+
+export type RouteWithStops = Route & {
+  /** How riders who followed this road found it. */
+  road_feedback: RouteRoadFeedback;
+  stops: RouteStop[];
+  /** Points that hold a ride to this road, start to end; see core/routes/roadVia. */
+  road_via: [number, number][];
+};
+
+/** Every route read uses these, so points come back as numbers, not PostGIS hex. */
+export const ROUTE_COLUMNS = `
+  r.id, r.creator_id, r.ride_id, r.parent_route_id, r.title, r.geojson,
+  r.distance_km, r.elevation_gain_m, r.elevation_loss_m, r.difficulty,
+  r.visibility, r.proposal_status, r.created_at,
+  r.start_name, r.end_name,
+  ST_Y(r.start_point::geometry) AS start_lat, ST_X(r.start_point::geometry) AS start_lng,
+  ST_Y(r.end_point::geometry) AS end_lat, ST_X(r.end_point::geometry) AS end_lng,
+  r.highlights, r.ridden_duration_s,
+  ARRAY(
+    SELECT rs.name FROM route_stops rs
+    WHERE rs.route_id = r.id AND rs.name IS NOT NULL
+    ORDER BY rs.position
+  ) AS via`;
+
+export const listRouteStops = async (routeId: string): Promise<RouteStop[]> => {
+  const result = await query(
+    `SELECT position, name, note,
+            ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng,
+            distance_from_start_km
+     FROM route_stops
+     WHERE route_id = $1
+     ORDER BY position`,
+    [routeId],
+  );
+  return result.rows.map((row) => ({
+    position: Number(row.position),
+    name: row.name ?? null,
+    lat: Number(row.lat),
+    lng: Number(row.lng),
+    note: row.note ?? null,
+    distance_from_start_km: row.distance_from_start_km != null ? Number(row.distance_from_start_km) : null,
+  }));
+};
 
 // ---------------------------------------------------------------------------
 // Routes CRUD
@@ -67,10 +138,10 @@ export const createRoute = async (
 export const getRouteById = async (
   routeId: string,
   viewerId: string,
-): Promise<Route | null> => {
+): Promise<RouteWithStops | null> => {
   // Fetch route with creator name, respecting visibility
   const result = await query(
-    `SELECT r.*, rd.display_name AS creator_name
+    `SELECT ${ROUTE_COLUMNS}, rd.display_name AS creator_name
      FROM routes r
      JOIN riders rd ON r.creator_id = rd.id
      WHERE r.id = $1
@@ -84,13 +155,20 @@ export const getRouteById = async (
        )`,
     [routeId, viewerId],
   );
-  return result.rows.length ? (result.rows[0] as Route) : null;
+  const route = result.rows[0] as Route | undefined;
+  if (!route) return null;
+  return {
+    ...route,
+    road_feedback: await getRouteRoadFeedback(routeId),
+    stops: await listRouteStops(routeId),
+    road_via: roadViaPoints(routeLine(route.geojson)),
+  };
 };
 
 /** Public routes, plus the viewer's own private ones so "only me" stays findable. */
 export const listVisibleRoutes = async (viewerId: string): Promise<Route[]> => {
   const result = await query(
-    `SELECT r.*, rd.display_name AS creator_name
+    `SELECT ${ROUTE_COLUMNS}, rd.display_name AS creator_name
      FROM routes r
      JOIN riders rd ON r.creator_id = rd.id
      WHERE r.visibility = 'public' OR r.creator_id = $1
@@ -212,4 +290,90 @@ export const getRideGpsTraces = async (
     [rideId, riderId],
   );
   return result.rows;
+};
+
+// ---------------------------------------------------------------------------
+// Search
+// ---------------------------------------------------------------------------
+
+/** Enough for any real search; the ranking keeps the best of them. */
+const MAX_SEARCH_CANDIDATES = 300;
+const MAX_SEARCH_RESULTS = 50;
+
+export type RouteSearchResult = Route & {
+  match: { direction: RouteDirection; start_gap_km: number | null; end_gap_km: number | null };
+};
+
+/** "Wayanad, Kerala" → "%wayanad%", with LIKE's wildcards escaped. */
+const likePattern = (name: string | null): string | null => {
+  const term = name?.split(",")[0]?.trim().toLowerCase();
+  return term ? `%${term.replace(/[\\%_]/g, (char) => `\\${char}`)}%` : null;
+};
+
+/**
+ * Routes that answer a from/to search. SQL shortlists the ones the viewer can
+ * see that are within the largest radius of a searched place or named after
+ * it; rankRouteMatches then applies each route's own radius, direction and
+ * filters, and orders them.
+ */
+export const searchRoutes = async (viewerId: string, search: RouteSearchQuery): Promise<RouteSearchResult[]> => {
+  const params: unknown[] = [viewerId];
+  const param = (value: unknown): string => {
+    params.push(value);
+    return `$${params.length}`;
+  };
+
+  const placeConditions = ([search.from, search.to] as (SearchPlace | null)[])
+    .filter((place): place is SearchPlace => place !== null)
+    .map((place) => {
+      const point = `ST_SetSRID(ST_MakePoint(${param(place.lng)}::float8, ${param(place.lat)}::float8), 4326)::geography`;
+      const radius = param(MAX_SEARCH_RADIUS_KM * 1000);
+      const conditions = [
+        `ST_DWithin(r.start_point, ${point}, ${radius})`,
+        `ST_DWithin(r.end_point, ${point}, ${radius})`,
+      ];
+      const pattern = likePattern(place.name);
+      if (pattern) {
+        const like = param(pattern);
+        conditions.push(
+          `r.start_name ILIKE ${like}`,
+          `r.end_name ILIKE ${like}`,
+          `EXISTS (SELECT 1 FROM route_stops rs WHERE rs.route_id = r.id AND rs.name ILIKE ${like})`,
+        );
+      }
+      return `(${conditions.join(" OR ")})`;
+    });
+
+  const result = await query(
+    `SELECT ${ROUTE_COLUMNS}, rd.display_name AS creator_name
+     FROM routes r
+     JOIN riders rd ON r.creator_id = rd.id
+     WHERE (r.visibility = 'public' OR r.creator_id = $1)
+       ${placeConditions.length > 0 ? `AND (${placeConditions.join(" OR ")})` : ""}
+     ORDER BY r.created_at DESC
+     LIMIT ${MAX_SEARCH_CANDIDATES}`,
+    params,
+  );
+  const routes = result.rows as Route[];
+
+  const matches = rankRouteMatches(
+    routes.map((route) => ({
+      id: route.id,
+      distance_km: route.distance_km != null ? Number(route.distance_km) : null,
+      start: route.start_lat != null ? { lat: Number(route.start_lat), lng: Number(route.start_lng) } : null,
+      end: route.end_lat != null ? { lat: Number(route.end_lat), lng: Number(route.end_lng) } : null,
+      start_name: route.start_name,
+      end_name: route.end_name,
+      stop_names: route.via ?? [],
+      highlights: route.highlights ?? [],
+    })),
+    search,
+  );
+
+  const byId = new Map(routes.map((route) => [route.id, route]));
+  const round = (km: number | null) => (km === null ? null : Math.round(km * 10) / 10);
+  return matches.slice(0, MAX_SEARCH_RESULTS).map((match) => ({
+    ...byId.get(match.id)!,
+    match: { direction: match.direction, start_gap_km: round(match.startGapKm), end_gap_km: round(match.endGapKm) },
+  }));
 };

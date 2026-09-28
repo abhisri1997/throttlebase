@@ -9,6 +9,7 @@ import { calculateGeometricMedian } from "../utils/geo.js";
 import { haversineMeters } from "../utils/polyline.js";
 import { snapToNearestPlace } from "./meetingPoint.service.js";
 import { enqueueRideStatsRecompute } from "./jobs.service.js";
+import { getRouteById } from "./route.service.js";
 
 /** Rides a rider can still join. */
 const JOINABLE_RIDE_STATUSES: ReadonlySet<string> = new Set(["scheduled", "active"]);
@@ -53,6 +54,59 @@ export interface RideStop {
 }
 
 export type RideStatusFilter = "all" | "draft" | "scheduled" | "active";
+
+interface RideRoute {
+  routeId: string;
+  reversed: boolean;
+  /** Null when the ride only borrows the route's ends and stops. */
+  roadVia: LngLat[] | null;
+}
+
+/** A ride planned on a route the captain cannot see, one since deleted, or no route at all. */
+export class RideRouteUnavailableError extends Error {
+  constructor() {
+    super("Route not found");
+    this.name = "RideRouteUnavailableError";
+  }
+}
+
+/**
+ * A route's road can only be followed the way it was recorded. Its points lie
+ * on the carriageway going that way, so riding it the other way round Google
+ * would U-turn to reach each one.
+ */
+export class RoadNotFollowableError extends Error {
+  constructor() {
+    super("A route ridden the other way round cannot follow its road");
+    this.name = "RoadNotFollowableError";
+  }
+}
+
+type LngLat = [number, number];
+
+/**
+ * The points that hold a ride to its route's road, checking the captain may
+ * use the route. An empty list still means "follows the road": the road is
+ * one Google picks on its own.
+ */
+const resolveRoadVia = async (captainId: string, routeId: string): Promise<LngLat[]> => {
+  const route = await getRouteById(routeId, captainId);
+  if (!route) throw new RideRouteUnavailableError();
+  return route.road_via;
+};
+
+const resolveRideRoute = async (
+  captainId: string,
+  route: NonNullable<CreateRideInput["route"]>,
+): Promise<RideRoute> => {
+  const reversed = route.direction === "reverse";
+  // Unless the app says otherwise, a ride follows the road wherever it can.
+  const followRoad = route.follow_road ?? !reversed;
+  if (followRoad && reversed) throw new RoadNotFollowableError();
+
+  const roadVia = await resolveRoadVia(captainId, route.route_id);
+  return { routeId: route.route_id, reversed, roadVia: followRoad ? roadVia : null };
+};
 
 /**
  * A participant joining or leaving usually shifts the geometric median by a few
@@ -120,6 +174,10 @@ export const createRide = async (
   captainId: string,
   data: CreateRideInput,
 ): Promise<Ride | null> => {
+  // Checked before anything is written, so a route the captain cannot use
+  // leaves no half-made ride behind.
+  const rideRoute = data.route ? await resolveRideRoute(captainId, data.route) : null;
+
   const client = await pool.connect();
 
   try {
@@ -190,6 +248,15 @@ export const createRide = async (
       paramIndex++;
       columns.push("start_point_auto");
       values.push(true);
+    }
+
+    if (rideRoute) {
+      columns.push("route_id", "route_reversed", "road_via");
+      values.push(
+        rideRoute.routeId,
+        rideRoute.reversed,
+        rideRoute.roadVia ? JSON.stringify(rideRoute.roadVia) : null,
+      );
     }
 
     const placeholders = values.map((_, i) => `$${i + 1}`);
@@ -279,6 +346,7 @@ export const getRideById = async (
             ST_AsGeoJSON(r.end_point)::json AS end_point_geojson,
             r.start_point_name,
             r.end_point_name,
+            (SELECT rt.title FROM routes rt WHERE rt.id = r.route_id) AS route_title,
             (
               SELECT json_agg(
                 json_build_object(
@@ -406,7 +474,7 @@ export const updateRideInfo = async (
 ): Promise<Ride | null> => {
   // Verify the caller is captain or co-captain
   const authCheck = await query(
-    `SELECT r.status FROM rides r WHERE r.id = $1 AND (
+    `SELECT r.status, r.route_id, r.route_reversed FROM rides r WHERE r.id = $1 AND (
       r.captain_id = $2 OR EXISTS (
         SELECT 1 FROM ride_participants WHERE ride_id = $1 AND rider_id = $2 AND role = 'co_captain'
       )
@@ -474,6 +542,21 @@ export const updateRideInfo = async (
     paramIdx++;
     setClauses.push(`requirements = $${paramIdx}`);
     values.push(JSON.stringify(fields.requirements));
+  }
+
+  // Following the road is re-derived from the route, never taken from the app.
+  if (fields.follow_route_road !== undefined) {
+    const { route_id: routeId, route_reversed: reversed } = authCheck.rows[0];
+    if (fields.follow_route_road && !routeId) throw new RideRouteUnavailableError();
+    if (fields.follow_route_road && reversed) throw new RoadNotFollowableError();
+
+    paramIdx++;
+    setClauses.push(`road_via = $${paramIdx}`);
+    values.push(
+      fields.follow_route_road
+        ? JSON.stringify(await resolveRoadVia(captainId, routeId))
+        : null,
+    );
   }
 
   // Handle spatial coordinates — convert to PostGIS points

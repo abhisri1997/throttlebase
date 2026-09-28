@@ -16,8 +16,10 @@
     "typecheck": "tsc --noEmit",
     "migrate": "tsx src/adapters/postgres/migrate.ts",
     "migrate:dry-run": "tsx src/adapters/postgres/migrate.ts --dry-run",
+    "routes:name-ends": "tsx src/adapters/postgres/nameRouteEnds.ts",
     "migrate:baseline": "tsx src/adapters/postgres/migrate.ts --baseline-existing",
-    "test:integration": "tsx --test \"src/adapters/postgres/*.integration.test.ts\""
+    "test:integration": "tsx --test \"src/adapters/postgres/*.integration.test.ts\"",
+    "rides:recompute-riding": "tsx src/adapters/postgres/recomputeRiding.ts"
   },
   "keywords": [],
   "author": "",

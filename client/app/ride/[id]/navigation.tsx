@@ -22,7 +22,7 @@ import {
   formatDuration,
 } from "../../../src/features/navigation/core/format";
 import { waypointLabel } from "../../../src/features/navigation/core/guidance";
-import { buildTripPlan, type TripWaypoint } from "../../../src/features/navigation/core/tripPlan";
+import { buildTripPlan, rideRoadVia, type TripWaypoint } from "../../../src/features/navigation/core/tripPlan";
 import {
   groupTargetIndex,
   shouldOfferCatchUp,
@@ -152,7 +152,8 @@ export default function RideNavigationScreen() {
 
   // The ride as one trip: start, approved stops in planned order, destination.
   const waypoints = useMemo(() => buildTripPlan(live.ride), [live.ride]);
-  const plannedRoute = usePlannedRoute(waypoints);
+  const roadVia = useMemo(() => rideRoadVia(live.ride), [live.ride]);
+  const plannedRoute = usePlannedRoute(waypoints, roadVia);
 
   const liveFix = useNavigationFix({
     isEnabled: !isSimulated && isAppActive && live.isTracking,
@@ -477,6 +478,7 @@ export default function RideNavigationScreen() {
     target: targetWaypoint,
     fix,
     isActive: isAppActive && isFocused,
+    via: roadVia,
   });
 
   const progress = useTripProgress({

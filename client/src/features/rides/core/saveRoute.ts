@@ -1,6 +1,8 @@
 /**
- * Naming a route saved from a ride, and explaining why a save failed.
+ * Naming a route saved from a ride, choosing its highlights, and explaining
+ * why a save failed.
  */
+import { placesHeadline } from "../../routes/core/routeSummary";
 
 /** The server's limit on a route title. */
 export const MAX_ROUTE_TITLE_LENGTH = 255;
@@ -11,6 +13,18 @@ export const defaultRouteTitle = (rideTitle: string | undefined | null): string 
   const trimmed = rideTitle?.trim() ?? "";
   return trimmed ? trimmed.slice(0, MAX_ROUTE_TITLE_LENGTH) : FALLBACK_TITLE;
 };
+
+/** Where the route goes, which says more than the ride's own name. */
+export const suggestedRouteTitle = (
+  startName: string | null,
+  endName: string | null,
+  rideTitle: string | undefined | null,
+): string => placesHeadline(startName, endName)?.slice(0, MAX_ROUTE_TITLE_LENGTH) ?? defaultRouteTitle(rideTitle);
+
+export { ROUTE_HIGHLIGHTS, toggleHighlight, type RouteHighlight } from "../../routes/core/highlights";
+
+/** A stop note is a line or two, matching the server's limit. */
+export const MAX_STOP_NOTE_LENGTH = 280;
 
 /** The title to send, or null when there is nothing to name it by. */
 export const validRouteTitle = (input: string): string | null => {

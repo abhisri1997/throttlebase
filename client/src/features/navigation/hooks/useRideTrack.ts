@@ -3,6 +3,7 @@ import { z } from "zod";
 import { apiClient } from "../../../api/client";
 import { decodePolyline } from "../core/geometry";
 import type { LatLng } from "../types/navigation";
+import type { RidingSplit } from "../../rides/core/rideSummary";
 
 const RideTrackResponseSchema = z.object({
   track: z.object({
@@ -16,6 +17,14 @@ const RideTrackResponseSchema = z.object({
       reached_at: z.string(),
     }),
   ),
+  /** Riding against stopped; missing from servers older than this app. */
+  riding: z
+    .object({
+      riding_time_s: z.number().nonnegative(),
+      riding_distance_m: z.number().nonnegative(),
+      stopped_s: z.number().nonnegative(),
+    })
+    .optional(),
 });
 
 export interface RideTrack {
@@ -24,6 +33,8 @@ export interface RideTrack {
   durationSeconds: number;
   /** Waypoint id → epoch ms at which this rider reached it. */
   arrivals: Readonly<Record<string, number>>;
+  /** The riding alone, stops left out; null from an older server. */
+  riding: RidingSplit | null;
 }
 
 const isNotFound = (error: unknown): boolean =>
@@ -46,6 +57,13 @@ const fetchRideTrack = async (rideId: string): Promise<RideTrack | null> => {
       distanceMeters: parsed.track.distance_m,
       durationSeconds: parsed.track.duration_s,
       arrivals: Object.fromEntries(arrivals),
+      riding: parsed.riding
+        ? {
+            ridingTimeS: parsed.riding.riding_time_s,
+            ridingDistanceM: parsed.riding.riding_distance_m,
+            stoppedS: parsed.riding.stopped_s,
+          }
+        : null,
     };
   } catch (error: unknown) {
     // A ride that never went live has no track; that is not a failure.

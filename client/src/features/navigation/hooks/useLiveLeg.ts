@@ -11,7 +11,7 @@ import {
   DEFAULT_ROUTE_REROUTE_COOLDOWN_MS,
   fetchLiveLeg,
 } from "../services/navigationRouteService";
-import type { NavigationFix, NavigationRoute, RouteLeg } from "../types/navigation";
+import type { LatLng, NavigationFix, NavigationRoute, RouteLeg } from "../types/navigation";
 
 /**
  * Traffic changes slowly; refreshing the ETA more often than this only bills
@@ -45,6 +45,8 @@ interface UseLiveLegInput {
   isActive: boolean;
   /** Overrides how often the ETA is refreshed for traffic. */
   trafficRefreshMs?: number;
+  /** The saved route's road the ride follows, if any. */
+  via?: readonly LatLng[];
 }
 
 export interface LiveLegState {
@@ -67,6 +69,7 @@ export const useLiveLeg = ({
   fix,
   isActive,
   trafficRefreshMs = LIVE_LEG_TRAFFIC_REFRESH_MS,
+  via = [],
 }: UseLiveLegInput): LiveLegState => {
   const [route, setRoute] = useState<NavigationRoute | null>(null);
   const [progress, setProgress] = useState<LegProgress | null>(null);
@@ -82,6 +85,8 @@ export const useLiveLeg = ({
   fixRef.current = fix;
   const targetRef = useRef(target);
   targetRef.current = target;
+  const viaRef = useRef(via);
+  viaRef.current = via;
 
   const targetId = target?.id ?? null;
   const hasFix = fix !== null;
@@ -104,7 +109,8 @@ export const useLiveLeg = ({
       setStatus(reason === "reroute" ? "rerouting" : "loading");
     }
 
-    const next = await fetchLiveLeg(currentFix.coordinate, currentTarget.coordinate);
+    // The server drops road points already passed or beyond this leg's target.
+    const next = await fetchLiveLeg(currentFix.coordinate, currentTarget.coordinate, viaRef.current);
 
     // A newer request, a new target, or unmounting supersedes this response.
     if (requestId !== requestIdRef.current) return;

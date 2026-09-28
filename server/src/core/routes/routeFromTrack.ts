@@ -1,10 +1,13 @@
 /**
  * Turns the track a rider actually rode into a route others can browse and
- * plan rides on: cleaned of GPS noise, measured, and simplified so a long
- * ride is not stored (and listed) as thousands of points.
+ * plan rides on: only the riding (never a walk at a stop), cleaned of GPS
+ * noise, measured, and simplified so a long ride is not stored (and listed)
+ * as thousands of points.
  */
 import { haversineMeters, type LatLng } from "../../utils/polyline.js";
-import { cleanTrack, type TrackSample } from "../../utils/track.js";
+import type { TrackSample } from "../../utils/track.js";
+import { segmentRide, type PlannedStopPoint, type RideStop } from "../ride-progress/segmentRide.js";
+import { simplifyToAtMost } from "./simplifyLine.js";
 
 /** Shorter than this is a rider who started and stopped, not a route. */
 export const MIN_ROUTE_DISTANCE_M = 500;
@@ -12,69 +15,17 @@ export const MIN_ROUTE_DISTANCE_M = 500;
 export const MAX_ROUTE_POINTS = 1000;
 /** A point this close to the straight line between its neighbours adds nothing. */
 const INITIAL_TOLERANCE_M = 10;
-const TOLERANCE_GROWTH = 1.5;
-
-const EARTH_RADIUS_M = 6_371_000;
 
 export interface RouteGeometry {
   /** GeoJSON order: [longitude, latitude]. */
   coordinates: [number, number][];
+  /** Road ridden, stops and walks left out. */
   distanceKm: number;
+  /** Time on the bike, stops left out. */
+  durationS: number;
+  /** Where the rider got off, each at the spot the bike was parked. */
+  stops: RideStop[];
 }
-
-interface Planar {
-  x: number;
-  y: number;
-}
-
-/** Metres on a flat plane around `origin`; accurate enough across one ride. */
-const projector = (origin: LatLng) => {
-  const toRad = Math.PI / 180;
-  const lngScale = Math.cos(origin.lat * toRad) * EARTH_RADIUS_M * toRad;
-  const latScale = EARTH_RADIUS_M * toRad;
-  return (point: LatLng): Planar => ({
-    x: (point.lng - origin.lng) * lngScale,
-    y: (point.lat - origin.lat) * latScale,
-  });
-};
-
-const distanceToSegment = (p: Planar, a: Planar, b: Planar): number => {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const lengthSq = dx * dx + dy * dy;
-  if (lengthSq === 0) return Math.hypot(p.x - a.x, p.y - a.y);
-  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSq));
-  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
-};
-
-/** Douglas–Peucker, with an explicit stack: a long ride would overflow recursion. */
-const simplify = (points: readonly Planar[], toleranceM: number): number[] => {
-  const keep = new Array<boolean>(points.length).fill(false);
-  keep[0] = true;
-  keep[points.length - 1] = true;
-
-  const stack: [number, number][] = [[0, points.length - 1]];
-  while (stack.length > 0) {
-    const [first, last] = stack.pop()!;
-    let farthest = -1;
-    let farthestDistance = toleranceM;
-
-    for (let i = first + 1; i < last; i += 1) {
-      const distance = distanceToSegment(points[i]!, points[first]!, points[last]!);
-      if (distance > farthestDistance) {
-        farthest = i;
-        farthestDistance = distance;
-      }
-    }
-
-    if (farthest !== -1) {
-      keep[farthest] = true;
-      stack.push([first, farthest], [farthest, last]);
-    }
-  }
-
-  return keep.flatMap((isKept, index) => (isKept ? [index] : []));
-};
 
 /**
  * Douglas–Peucker slows sharply on jittery input, so it is given at most this
@@ -104,27 +55,22 @@ const thinForSimplify = (points: readonly LatLng[]): LatLng[] => {
   return [...thinned, spaced[spaced.length - 1]!];
 };
 
-export const routeFromTrack = (samples: readonly TrackSample[]): RouteGeometry | null => {
-  const points = cleanTrack(samples);
-  if (points.length < 2) return null;
-
-  const distanceM = points.reduce(
-    (total, point, index) => (index === 0 ? total : total + haversineMeters(points[index - 1]!, point)),
-    0,
-  );
-  if (distanceM < MIN_ROUTE_DISTANCE_M) return null;
+export const routeFromTrack = (
+  samples: readonly TrackSample[],
+  plannedStops: readonly PlannedStopPoint[] = [],
+): RouteGeometry | null => {
+  const ride = segmentRide(samples, plannedStops);
+  // Each stop ends back where the bike was parked, so the stretches join up.
+  const points = ride.riding.flat();
+  if (points.length < 2 || ride.ridingDistanceM < MIN_ROUTE_DISTANCE_M) return null;
 
   const candidates = thinForSimplify(points);
-  const planar = candidates.map(projector(candidates[0]!));
-  let tolerance = INITIAL_TOLERANCE_M;
-  let kept = simplify(planar, tolerance);
-  while (kept.length > MAX_ROUTE_POINTS) {
-    tolerance *= TOLERANCE_GROWTH;
-    kept = simplify(planar, tolerance);
-  }
+  const kept = simplifyToAtMost(candidates, MAX_ROUTE_POINTS, INITIAL_TOLERANCE_M);
 
   return {
     coordinates: kept.map((index) => [candidates[index]!.lng, candidates[index]!.lat]),
-    distanceKm: Math.round(distanceM / 10) / 100,
+    distanceKm: Math.round(ride.ridingDistanceM / 10) / 100,
+    durationS: ride.ridingTimeS,
+    stops: ride.stops,
   };
 };

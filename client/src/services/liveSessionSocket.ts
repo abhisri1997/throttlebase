@@ -1,6 +1,7 @@
 import { io, type Socket } from "socket.io-client";
 import { resolveBaseUrl } from "../adapters/http/baseUrl";
 import type { FinishReason, RiderProgress } from "../features/rides/core/riderProgress";
+import type { MotionActivityLabel } from "./motionReading";
 
 export type LiveSessionParticipant = {
   rider_id: string;
@@ -129,6 +130,8 @@ export type LiveSocketClientEvents = {
     heading_deg?: number;
     accuracy_m?: number;
     captured_at?: string;
+    /** The phone's motion reading at the fix, when it had a recent one. */
+    activity?: MotionActivityLabel;
   }) => void;
   "waypoint:reached": (payload: {
     rideId: string;

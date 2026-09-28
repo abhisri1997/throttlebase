@@ -3,6 +3,7 @@ import { authenticate } from "../middleware/auth.middleware.js";
 import * as rideController from "../controllers/ride.controller.js";
 import * as liveSessionController from "../controllers/live-session.controller.js";
 import * as rideProgressController from "../controllers/ride-progress.controller.js";
+import * as roadFeedbackController from "../controllers/road-feedback.controller.js";
 
 const router = Router();
 
@@ -525,7 +526,9 @@ router.get(
  *     summary: The caller's own travelled GPS track for a ride (confirmed participants)
  *     description: >
  *       Built from the caller's live location samples, cleaned of GPS spikes and
- *       inaccurate fixes. Includes the time each waypoint was reached.
+ *       inaccurate fixes. Includes the time each waypoint was reached, and
+ *       riding against stopped time: riding { riding_time_s, riding_distance_m, stopped_s,
+ *       stops: [{ started_at, ended_at, duration_s, walked_away, planned }] }.
  *     tags: [Rides]
  *     security:
  *       - bearerAuth: []
@@ -601,6 +604,109 @@ router.get("/:id/track", authenticate, liveSessionController.getTrack);
  *         description: Not enough of the ride was recorded to make a route
  */
 router.post("/:id/route", authenticate, liveSessionController.saveRouteFromMyRide);
+
+/**
+ * @swagger
+ * /api/rides/{id}/route/preview:
+ *   get:
+ *     summary: What saving the caller's ride as a route would produce, without saving
+ *     description: >
+ *       The route's area names, distance, ride time and the stops it would keep,
+ *       for the save sheet. When the caller already saved this ride,
+ *       saved_route_id points at that route.
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Ride ID
+ *     responses:
+ *       200:
+ *         description: "{ saved_route_id, start_name, end_name, distance_km, duration_s, stops: [{ ride_stop_id, name, distance_from_start_km }] }"
+ *       403:
+ *         description: Not a confirmed participant
+ *       404:
+ *         description: Ride not found
+ *       409:
+ *         description: The ride is not completed yet
+ *       422:
+ *         description: Not enough of the ride was recorded to make a route
+ */
+router.get("/:id/route/preview", authenticate, liveSessionController.previewRouteFromMyRide);
+
+/**
+ * @swagger
+ * /api/rides/{id}/road-feedback:
+ *   get:
+ *     summary: Whether the caller is asked "Was the road as described?" for this ride
+ *     description: >
+ *       Asked of confirmed riders once a ride that followed a saved route's
+ *       road is completed. Includes the caller's answer when they gave one.
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: "{ can_answer, route_id, route_title, feedback: { as_described, reasons, note } | null }"
+ *       404:
+ *         description: Ride not found
+ *   put:
+ *     summary: Answer (or change the answer to) "Was the road as described?"
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [as_described]
+ *             properties:
+ *               as_described:
+ *                 type: boolean
+ *               reasons:
+ *                 type: array
+ *                 description: Only when not as described
+ *                 items:
+ *                   type: string
+ *                   enum: [rough_surface, heavy_traffic, road_works, not_scenic, poorly_lit, harder_than_described]
+ *               note:
+ *                 type: string
+ *                 maxLength: 280
+ *     responses:
+ *       200:
+ *         description: "{ feedback: { as_described, reasons, note } }"
+ *       400:
+ *         description: Validation failed
+ *       403:
+ *         description: Not a confirmed rider on this ride
+ *       404:
+ *         description: Ride not found
+ *       409:
+ *         description: The ride is not over, or did not follow a saved route's road
+ */
+router.get("/:id/road-feedback", authenticate, roadFeedbackController.getRoadFeedback);
+router.put("/:id/road-feedback", authenticate, roadFeedbackController.putRoadFeedback);
 
 /**
  * @swagger

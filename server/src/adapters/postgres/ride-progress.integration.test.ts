@@ -24,6 +24,7 @@ const liveSession = CONNECTION ? await import("../../services/live-session.servi
 const rideProgress = CONNECTION ? await import("../../services/ride-progress.service.js") : null;
 const stats = CONNECTION ? await import("../../services/stats.service.js") : null;
 const rides = CONNECTION ? await import("../../services/ride.service.js") : null;
+const rideTrack = CONNECTION ? await import("../../services/ride-track.service.js") : null;
 
 const CAPTAIN = "cccccccc-0000-0000-0000-000000000001";
 const RIDER_A = "aaaaaaaa-0000-0000-0000-00000000000a";
@@ -262,5 +263,39 @@ test("per-rider ride progress", { skip: !CONNECTION }, async (t) => {
     const rideRow = await admin.query(`SELECT status FROM rides WHERE id = $1`, [rideId]);
     assert.equal(rideRow.rows[0].status, "completed", "someone rode it, so it completes");
     assert.equal((await progressOf(admin, rideId, RIDER_A)).finish_reason, "group_ended");
+  });
+
+  await t.test("a fix's motion reading is stored with it and loaded back into the track", async () => {
+    const rideId = await createRide(admin, "Motion");
+    await rideProgress!.startOwnRide(rideId, RIDER_A);
+    const fix = { lon: DEST.lon, accuracy_m: 8 };
+    await liveSession!.updateLivePresenceLocation(
+      rideId,
+      RIDER_A,
+      { ...fix, lat: latNorthBy(3_000), captured_at: secondsAgo(60), activity: "walking" },
+      { persistSample: true },
+    );
+    // An older app, or no recent reading: no activity at all.
+    await liveSession!.updateLivePresenceLocation(
+      rideId,
+      RIDER_A,
+      { ...fix, lat: latNorthBy(2_900), captured_at: secondsAgo(30) },
+      { persistSample: true },
+    );
+
+    const session = await admin.query(`SELECT id FROM ride_live_sessions WHERE ride_id = $1`, [rideId]);
+    const samples = await rideTrack!.loadRiderSamples(String(session.rows[0].id), RIDER_A);
+
+    assert.deepEqual(
+      samples.map((sample) => sample.activity),
+      ["walking", null],
+    );
+    await assert.rejects(
+      admin.query(`UPDATE ride_live_location_samples SET activity = 'flying' WHERE session_id = $1`, [
+        session.rows[0].id,
+      ]),
+      /ride_live_location_samples_activity_known/,
+      "the database refuses a reading it does not know",
+    );
   });
 });

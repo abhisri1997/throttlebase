@@ -47,11 +47,12 @@ Sign-in is passwordless: Google, Apple, or a one-time email code.
 
 ## Routes
 
-- `GET /api/routes` (public routes, plus the caller's own private ones)
+- `GET /api/routes` (public routes, plus the caller's own private ones). Each route carries `start_name`, `end_name`, `start_lat`/`start_lng`, `end_lat`/`end_lng`, `via` (stop names in order), `highlights` and `ridden_duration_s`
+- `GET /api/routes/search?from_lat&from_lng&from_name&to_lat&to_lng&to_name&min_km&max_km&highlights=a,b` — routes from one place to another, all parts optional. A place matches a route end named after it (or a stop) or within the route's radius (15% of its length, 5 to 25 km). Same-direction routes first, then ones ridden the other way; each result has `match: { direction, start_gap_km, end_gap_km }`. Up to 50
 - `POST /api/routes`
 - `POST /api/routes/traces`
 - `GET /api/routes/traces/:rideId`
-- `GET /api/routes/:id`
+- `GET /api/routes/:id` — the route plus `stops` (position, name, lat/lng, optional `note`, `distance_from_start_km`)
 - `POST /api/routes/:id/bookmark`
 - `DELETE /api/routes/:id/bookmark`
 - `POST /api/routes/:id/share`
@@ -122,7 +123,8 @@ Sign-in is passwordless: Google, Apple, or a one-time email code.
 - `POST /api/rides/:id/live/end` — `409 UNFINISHED_RIDERS` with the riders still out unless `confirm_unfinished: true`
 - `POST /api/rides/:id/live/me/start` — start your own ride, up to 60 min early; opens the session if nobody has
 - `POST /api/rides/:id/live/me/finish` — finish your own ride: `arrived` near the destination, `left_early` elsewhere
-- `POST /api/rides/:id/route` — save your own track on a completed ride as a route: `{ title, visibility }`; 201 created, 200 with the route already saved, 409 not completed, 422 too little recorded
+- `POST /api/rides/:id/route` — save your own track on a completed ride as a route: `{ title, visibility, highlights?, stop_notes?: [{ ride_stop_id, note }] }`. Highlights: `scenic_road`, `good_surface`, `quiet`, `well_lit`, `great_stops`, `twisties`, `night_ride_friendly`, `beginner_friendly`. The ends are named from the route's own first and last points; 201 created, 200 with the route already saved, 409 not completed, 422 too little recorded
+- `GET /api/rides/:id/route/preview` — what saving would produce, without saving: `{ saved_route_id, start_name, end_name, distance_km, duration_s, stops: [{ ride_stop_id, name, distance_from_start_km }] }`; `saved_route_id` is set when the ride was already saved
 - `POST /api/rides/:id/live/me/resume` — take back a finish while the group ride is live
 - `GET /api/rides/:id/live/session` — participants include `progress`, `finished_at`, `finish_reason`, `arrived_at`, `distance_to_destination_m`
 - `POST /api/rides/:id/live/incident`
@@ -135,6 +137,7 @@ Sign-in is passwordless: Google, Apple, or a one-time email code.
 ### `/live` namespace
 
 - Client -> server: `session:join`, `session:leave`, `presence:heartbeat`, `location:update`, `incident:create`
+  - `location:update` may carry `activity` (`automotive` | `cycling` | `walking` | `running` | `stationary`): the phone's motion reading at the fix, sent only when recent. Stored on the track sample and used to tell stops from jams.
 - Server -> client: `session:state`, `presence:update`, `location:broadcast`, `incident:created`, `session:ended`, `session:error`, `rider:progress` (a rider started, finished or resumed), `ride:arrival` (to the arriving rider only: `arrived` / `left`, with `autoFinishAfterMs`)
 
 ### `/rides` namespace

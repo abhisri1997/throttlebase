@@ -133,6 +133,7 @@ export const getDirections = (
     CACHE_CATEGORY_DIRECTIONS,
     `${request.origin.lat},${request.origin.lng}`,
     waypoints.map((point) => `${point.lat},${point.lng}`).join(";"),
+    (request.via ?? []).map((point) => `${point.lat},${point.lng}`).join(";"),
     `${request.destination.lat},${request.destination.lng}`,
     Boolean(request.preferFastest),
     Boolean(request.trafficAware),
@@ -174,6 +175,31 @@ export const reverseGeocode = (
     call: async () => ({
       formattedAddress: await deps.provider.reverseGeocode({ lat, lng }),
     }),
+  });
+};
+
+/** Area names change far more slowly than addresses are looked up. */
+const AREA_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const CACHE_CATEGORY_GEOCODE_AREA = "geocode_area";
+
+export interface AreaNameResult {
+  areaName: string | null;
+}
+
+/** The area a point is in, for naming a route's ends. Cached and budgeted like any Google call. */
+export const reverseGeocodeArea = (
+  coords: LatLngLiteral,
+  deps: MapsServiceDeps,
+): Promise<AreaNameResult> => {
+  const lat = Number(coords.lat.toFixed(GEOCODE_COORD_PRECISION));
+  const lng = Number(coords.lng.toFixed(GEOCODE_COORD_PRECISION));
+
+  return withCacheAndBudget<AreaNameResult>(deps, {
+    api: USAGE_API_GEOCODING,
+    cacheKey: hashKey(CACHE_CATEGORY_GEOCODE_AREA, lat, lng),
+    category: CACHE_CATEGORY_GEOCODE_AREA,
+    ttlMs: AREA_CACHE_TTL_MS,
+    call: async () => ({ areaName: await deps.provider.reverseGeocodeArea({ lat, lng }) }),
   });
 };
 

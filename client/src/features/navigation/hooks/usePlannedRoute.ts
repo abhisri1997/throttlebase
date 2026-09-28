@@ -1,12 +1,14 @@
 import { useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { buildTripGeometry, type TripGeometry } from "../core/routeProgress";
-import { tripPlanKey, type TripWaypoint } from "../core/tripPlan";
+import { roadViaKey, tripPlanKey, type TripWaypoint } from "../core/tripPlan";
 import { fetchPlannedRideRoute } from "../services/navigationRouteService";
-import type { NavigationRoute, RouteLeg } from "../types/navigation";
+import type { LatLng, NavigationRoute, RouteLeg } from "../types/navigation";
 
 /** How long an unused planned route stays cached — e.g. between ride detail and navigation. */
 const PLANNED_ROUTE_GC_MS = 60 * 60 * 1000;
+
+const NO_VIA: readonly LatLng[] = [];
 
 export const plannedRouteQueryKey = (planKey: string) => ["planned-route", planKey] as const;
 
@@ -29,8 +31,10 @@ export interface PlannedRouteState {
  */
 export const usePlannedRoute = (
   waypoints: readonly TripWaypoint[] | null,
+  /** The saved route's road the ride follows, if any. */
+  via: readonly LatLng[] = NO_VIA,
 ): PlannedRouteState => {
-  const planKey = waypoints ? tripPlanKey(waypoints) : "";
+  const planKey = waypoints ? `${tripPlanKey(waypoints)}#${roadViaKey(via)}` : "";
   const canFetch = Boolean(waypoints && waypoints.length >= 2);
   const queryClient = useQueryClient();
 
@@ -39,6 +43,7 @@ export const usePlannedRoute = (
     queryFn: async () => {
       const next = await fetchPlannedRideRoute(
         (waypoints ?? []).map((waypoint) => waypoint.coordinate),
+        via,
       );
 
       // A fallback means the proxy refused or was unreachable, not that the

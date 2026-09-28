@@ -9,9 +9,25 @@ export const MAX_TRACK_ACCURACY_METERS = 50;
 /** Faster than any motorcycle on a public road; a jump this quick is a bad fix. */
 export const MAX_PLAUSIBLE_SPEED_MPS = 250 / 3.6;
 
+/**
+ * What the phone's motion sensors said the rider was doing at a fix. Only the
+ * sensors can tell a rider standing beside the bike from one sitting on it in
+ * a jam; "unknown" readings are never sent.
+ */
+export const MOTION_ACTIVITIES = ["automotive", "cycling", "walking", "running", "stationary"] as const;
+export type MotionActivity = (typeof MOTION_ACTIVITIES)[number];
+
+/** A stored reading, or null for none (or one this code no longer knows). */
+export const toMotionActivity = (value: unknown): MotionActivity | null =>
+  MOTION_ACTIVITIES.find((activity) => activity === value) ?? null;
+
 export interface TrackSample extends LatLng {
   accuracyM: number | null;
   capturedAtMs: number;
+  /** The phone's own speed reading, when it gave one. */
+  speedKmh?: number | null;
+  /** The phone's motion reading, when it had a recent one. */
+  activity?: MotionActivity | null;
 }
 
 export interface RiderTrack {

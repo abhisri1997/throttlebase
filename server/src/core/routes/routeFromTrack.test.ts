@@ -101,3 +101,36 @@ test("a long winding ride is capped to a bounded number of points", () => {
   assert.ok(route);
   assert.ok(route.coordinates.length <= MAX_ROUTE_POINTS, `${route.coordinates.length} points`);
 });
+
+test("the route keeps how long the ride took, first fix to last", () => {
+  const route = routeFromTrack(straightRide(200));
+
+  assert.ok(route);
+  assert.equal(route.durationS, 199);
+});
+
+test("walking off at a stop is neither the route's road nor its riding time", () => {
+  // Ride north, park, walk 300 m east into a campus and back over ~10 min, ride on.
+  const rideIn = straightRide(100);
+  const parked = rideIn[rideIn.length - 1]!;
+  const walkStepDeg = 0.00018; // ~20 m of longitude
+  const walk = Array.from({ length: 30 }, (_, i) => {
+    const out = i < 15 ? i + 1 : 30 - i - 1;
+    return { ...sample(parked.lat, 77.6 + out * walkStepDeg, 99 + (i + 1) * 20), accuracyM: 20 };
+  });
+  const resumedAt = 99 + 31 * 20;
+  const rideOut = Array.from({ length: 100 }, (_, i) =>
+    sample(parked.lat + (i + 1) * STEP_DEG, 77.6, resumedAt + i),
+  );
+
+  const route = routeFromTrack([...rideIn, ...walk, ...rideOut]);
+
+  assert.ok(route);
+  assert.ok(
+    route.coordinates.every(([lng]) => lng < 77.6 + walkStepDeg),
+    "nothing from the walk is in the line",
+  );
+  assert.ok(Math.abs(route.distanceKm - 2.21) < 0.05, `rode ${route.distanceKm} km`);
+  assert.ok(Math.abs(route.durationS - 198) < 5, `rode ${route.durationS} s`);
+  assert.equal(route.stops.length, 1);
+});

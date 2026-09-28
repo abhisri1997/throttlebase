@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -21,6 +21,17 @@ import LocationPicker from "../../src/components/LocationPicker";
 import { PlannedStops } from "../../src/features/rides/components/PlannedStops";
 import type { PlannedStop } from "../../src/features/rides/types/stops";
 import { fetchNavigationRoute } from "../../src/features/navigation/services/navigationRouteService";
+import { rideRoadVia } from "../../src/features/navigation/core/tripPlan";
+import type { LatLng } from "../../src/features/navigation/types/navigation";
+import { RoutePlanCard } from "../../src/features/routes/components/RoutePlanCard";
+import { useRoutePlan } from "../../src/features/routes/hooks/useRoutePlan";
+import {
+  initialRideStops,
+  isRouteStopKept,
+  keepRouteStop,
+  parseRideDirection,
+  type RoutePlan,
+} from "../../src/features/routes/core/planRide";
 
 const createRide = async (payload: any) => {
   const { data } = await apiClient.post("/api/rides", payload);
@@ -50,7 +61,49 @@ const VEHICLE_TYPES = [
   "Commuter",
 ];
 
+const toLatLng = ([longitude, latitude]: [number, number]): LatLng => ({ latitude, longitude });
+
+/**
+ * Host a ride, from scratch or on a saved route (`routeId`, and `direction`
+ * "reverse" to ride it the other way round).
+ */
 export default function CreateRideModal() {
+  const params = useLocalSearchParams();
+  const routeId = typeof params.routeId === "string" && !params.editRide ? params.routeId : null;
+
+  if (!routeId) return <CreateRideForm plan={null} />;
+  return <CreateRideOnRoute routeId={routeId} direction={parseRideDirection(params.direction)} />;
+}
+
+/** Waits for the route, so the form starts filled in rather than filling in under the rider. */
+function CreateRideOnRoute({ routeId, direction }: { routeId: string; direction: ReturnType<typeof parseRideDirection> }) {
+  const { colors } = useTheme();
+  const router = useRouter();
+  const { plan, isLoading, isUnavailable } = useRoutePlan(routeId, direction);
+
+  if (plan) return <CreateRideForm plan={plan} />;
+
+  return (
+    <SafeAreaView className='flex-1 justify-center items-center px-6' style={{ backgroundColor: colors.bg }}>
+      {isLoading || !isUnavailable ? (
+        <ActivityIndicator color={colors.primary} />
+      ) : (
+        <>
+          <Text className='text-center mb-4' style={{ color: colors.text }}>
+            This route can't be planned on. It may have been deleted or made private.
+          </Text>
+          <TouchableOpacity accessibilityRole='button' onPress={() => router.back()} className='p-3'>
+            <Text className='font-bold' style={{ color: colors.primary }}>
+              Go back
+            </Text>
+          </TouchableOpacity>
+        </>
+      )}
+    </SafeAreaView>
+  );
+}
+
+function CreateRideForm({ plan }: { plan: RoutePlan | null }) {
   const { colors } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -59,8 +112,19 @@ export default function CreateRideModal() {
   const editMode = !!params.editRide;
   const existingRide = editMode ? JSON.parse(params.editRide as string) : null;
 
+  // A ride planned on a route: whether it follows the route's road.
+  const hasRoute = plan !== null || Boolean(existingRide?.route_id);
+  const canFollowRoad = plan ? plan.canFollowRoad : !existingRide?.route_reversed;
+  const initialFollowRoad = plan ? plan.defaults.followRoad : existingRide?.road_via != null;
+  const [followRoad, setFollowRoad] = useState<boolean>(initialFollowRoad);
+  const roadVia = useMemo<LatLng[]>(() => {
+    if (!followRoad) return [];
+    return plan ? plan.roadVia.map(toLatLng) : rideRoadVia(existingRide);
+    // existingRide is parsed from a route param, so it is stable for this screen.
+  }, [followRoad, plan]);
+
   // Core details
-  const [title, setTitle] = useState(existingRide?.title || "");
+  const [title, setTitle] = useState(existingRide?.title || plan?.title || "");
   const [description, setDescription] = useState(
     existingRide?.description || "",
   );
@@ -87,15 +151,15 @@ export default function CreateRideModal() {
 
   // Locations
   const [startCoords, setStartCoords] = useState<[number, number] | null>(
-    existingRide?.start_point_geojson?.coordinates || null,
+    existingRide?.start_point_geojson?.coordinates || plan?.start.coords || null,
   );
   const [startName, setStartName] = useState(
-    existingRide?.start_point_name || "",
+    existingRide?.start_point_name || plan?.start.name || "",
   );
   const [endCoords, setEndCoords] = useState<[number, number] | null>(
-    existingRide?.end_point_geojson?.coordinates || null,
+    existingRide?.end_point_geojson?.coordinates || plan?.end.coords || null,
   );
-  const [endName, setEndName] = useState(existingRide?.end_point_name || "");
+  const [endName, setEndName] = useState(existingRide?.end_point_name || plan?.end.name || "");
   const [autoStart, setAutoStart] = useState(
     existingRide?.start_point_auto || false,
   );
@@ -108,7 +172,7 @@ export default function CreateRideModal() {
       name: s.name || "",
       address: s.address || undefined,
       google_place_id: s.google_place_id || undefined,
-    })) || [],
+    })) || (plan ? initialRideStops(plan) : []),
   );
 
   /**
@@ -155,6 +219,7 @@ export default function CreateRideModal() {
           origin,
           destination,
           waypoints,
+          via: roadVia,
         });
 
         if (!cancelled && route) {
@@ -176,7 +241,7 @@ export default function CreateRideModal() {
       cancelled = true;
       clearTimeout(timerId);
     };
-  }, [startCoords, endCoords, stops, autoStart, existingRide?.estimated_duration_min]);
+  }, [startCoords, endCoords, stops, autoStart, roadVia, existingRide?.estimated_duration_min]);
 
   // Requirements
   const [minExperience, setMinExperience] = useState<string>("beginner");
@@ -217,6 +282,11 @@ export default function CreateRideModal() {
           google_place_id: s.google_place_id,
         }))
         : undefined,
+    // The server works out the road from the route; the app only says which.
+    ...(plan && !editMode
+      ? { route: { route_id: plan.routeId, direction: plan.direction, follow_road: canFollowRoad && followRoad } }
+      : {}),
+    ...(editMode && hasRoute && followRoad !== initialFollowRoad ? { follow_route_road: followRoad } : {}),
   });
 
   const mutation = useMutation({
@@ -442,6 +512,23 @@ export default function CreateRideModal() {
         >
           Route
         </Text>
+
+        {hasRoute ? (
+          <RoutePlanCard
+            title={plan?.title ?? existingRide?.route_title ?? "Saved route"}
+            isReversed={plan ? plan.direction === "reverse" : Boolean(existingRide?.route_reversed)}
+            canFollowRoad={canFollowRoad}
+            followRoad={followRoad}
+            onFollowRoadChange={setFollowRoad}
+            {...(plan
+              ? {
+                  stops: plan.stops,
+                  isStopKept: (stop) => isRouteStopKept(stops, stop),
+                  onStopKeptChange: (stop, keep) => setStops((current) => keepRouteStop(current, stop, keep)),
+                }
+              : {})}
+          />
+        ) : null}
 
         {/* Auto-start toggle */}
         <View
