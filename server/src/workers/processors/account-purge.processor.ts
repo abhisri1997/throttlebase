@@ -87,8 +87,35 @@ const findRidersDueForPurge = async (): Promise<string[]> => {
   return result.rows.map((row) => row.id as string);
 };
 
+/**
+ * Posts keep like and comment counts, which the app only moves when someone
+ * likes or comments through it. Take the rider's likes and comments off the
+ * counts on other riders' posts before deleting them, or those posts would
+ * go on counting a rider who is gone. (The rider's own posts are deleted.)
+ */
+const releasePostCounts = async (client: PoolClient, riderId: string): Promise<void> => {
+  await client.query(
+    `UPDATE posts p
+        SET like_count = GREATEST(p.like_count - mine.n, 0)
+       FROM (SELECT post_id, count(*)::int AS n FROM likes WHERE rider_id = $1 GROUP BY post_id) mine
+      WHERE p.id = mine.post_id
+        AND p.rider_id <> $1`,
+    [riderId],
+  );
+  await client.query(
+    `UPDATE posts p
+        SET comment_count = GREATEST(p.comment_count - mine.n, 0)
+       FROM (SELECT post_id, count(*)::int AS n FROM comments WHERE rider_id = $1 GROUP BY post_id) mine
+      WHERE p.id = mine.post_id
+        AND p.rider_id <> $1`,
+    [riderId],
+  );
+};
+
 const purgeRider = async (client: PoolClient, riderId: string): Promise<RowCounts> => {
   const counts: RowCounts = {};
+
+  await releasePostCounts(client, riderId);
 
   for (const { table, sql } of OWN_DATA_DELETES) {
     const result = await client.query(sql, [riderId]);
