@@ -11,9 +11,10 @@ import { createPool } from "./pool.js";
  * Applies numbered .sql files in order, once each, inside a transaction, and
  * records what ran in `schema_migrations`.
  *
- * Connects with MIGRATION_DATABASE_URL — a privileged role — rather than the
- * least-privilege role the API uses, because migrations create roles, grants
- * and policies that the app role deliberately cannot.
+ * Connects with DEV_DATABASE_URL or PROD_DATABASE_URL (chosen by NODE_ENV:
+ * `npm run migrate:dev` / `npm run migrate:prod`) — a privileged role —
+ * rather than the least-privilege role the API uses, because migrations
+ * create roles, grants and policies that the app role deliberately cannot.
  */
 
 const MIGRATIONS_DIR = join(
@@ -148,15 +149,29 @@ const main = async (): Promise<void> => {
   const dryRun = process.argv.includes("--dry-run");
   const baselineExisting = process.argv.includes("--baseline-existing");
 
-  const connectionString = process.env.NODE_ENV === "development"
-    ? process.env.DEV_DATABASE_URL
-    : process.env.PROD_DATABASE_URL;
+  // Development and production are separate databases. The target is named
+  // explicitly — `npm run migrate:dev` / `migrate:prod` set NODE_ENV — and
+  // anything else stops here, so an unset or mistyped NODE_ENV can never
+  // fall through to production.
+  const targets: Record<string, { label: string; variable: string }> = {
+    development: { label: "development", variable: "DEV_DATABASE_URL" },
+    production: { label: "production", variable: "PROD_DATABASE_URL" },
+  };
+  const target = targets[process.env.NODE_ENV ?? ""];
 
-  if (!connectionString) {
+  if (!target) {
     throw new Error(
-      "Set PROD_DATABASE_URL (prod) or DEV_DATABASE_URL (dev) before running migrations.",
+      `NODE_ENV must be "development" or "production" to choose a database (got "${process.env.NODE_ENV ?? ""}"). Use npm run migrate:dev or npm run migrate:prod.`,
     );
   }
+
+  const connectionString = process.env[target.variable];
+
+  if (!connectionString) {
+    throw new Error(`Set ${target.variable} before migrating the ${target.label} database.`);
+  }
+
+  console.log(`🎯 migrating the ${target.label} database (${target.variable})`);
 
   // The shared pool factory strips any sslmode from the URL; left in, pg reads
   // it as verify-full and rejects Supabase's chain despite rejectUnauthorized.
