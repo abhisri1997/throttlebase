@@ -145,9 +145,12 @@ const main = async (): Promise<void> => {
   // shell win, and a missing .env is fine.
   dotenv.config();
 
-  const connectionString = process.env.NODE_ENV === "production"
-    ? process.env.PROD_DATABASE_URL
-    : process.env.DEV_DATABASE_URL;
+  const dryRun = process.argv.includes("--dry-run");
+  const baselineExisting = process.argv.includes("--baseline-existing");
+
+  const connectionString = process.env.NODE_ENV === "development"
+    ? process.env.DEV_DATABASE_URL
+    : process.env.PROD_DATABASE_URL;
 
   if (!connectionString) {
     throw new Error(
@@ -155,8 +158,6 @@ const main = async (): Promise<void> => {
     );
   }
 
-  const dryRun = process.argv.includes("--dry-run");
-  const baselineExisting = process.argv.includes("--baseline-existing");
   // The shared pool factory strips any sslmode from the URL; left in, pg reads
   // it as verify-full and rejects Supabase's chain despite rejectUnauthorized.
   const pool = createPool({ connectionString, rejectUnauthorized: false, max: 2 });
