@@ -72,7 +72,7 @@ test("cleanup never removes other riders' data", { skip: !CONNECTION }, async (t
     [rideId, STAYER],
   );
 
-  const session = await admin.query(
+  const liveSession = await admin.query(
     `INSERT INTO ride_live_sessions (ride_id, status, started_at, ended_at)
      VALUES ($1, 'ended', now() - interval '40 days', now() - interval '40 days')
      RETURNING id`,
@@ -81,8 +81,9 @@ test("cleanup never removes other riders' data", { skip: !CONNECTION }, async (t
   await admin.query(
     `INSERT INTO ride_live_location_samples (session_id, rider_id, location, captured_at)
      VALUES ($1, $2, ST_SetSRID(ST_MakePoint(77.6, 12.9), 4326)::geography, now() - interval '40 days')`,
-    [session.rows[0].id, STAYER],
+    [liveSession.rows[0].id, STAYER],
   );
+  const liveSessionId = liveSession.rows[0].id as string;
 
   // One revoked session, which the cleanup should still purge.
   await admin.query(
@@ -128,8 +129,8 @@ test("cleanup never removes other riders' data", { skip: !CONNECTION }, async (t
     assert.equal(
       await countOf(
         admin,
-        `SELECT count(*) FROM ride_live_location_samples WHERE rider_id = $1`,
-        [STAYER],
+        `SELECT count(*) FROM ride_live_location_samples WHERE session_id = $1 AND rider_id = $2`,
+        [liveSessionId, STAYER],
       ),
       1,
     );

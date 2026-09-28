@@ -97,9 +97,9 @@ test("per-rider ride progress", { skip: !CONNECTION }, async (t) => {
   await runMigrations(admin);
   await admin.query(
     `INSERT INTO riders (id, email, display_name, username) VALUES
-       ($1, 'captain@example.test', 'Captain', 'captain'),
-       ($2, 'a@example.test', 'Rider A', 'ridera'),
-       ($3, 'b@example.test', 'Rider B', 'riderb')
+       ($1, 'progress-captain@example.test', 'Captain', 'progresscaptain'),
+       ($2, 'progress-a@example.test', 'Rider A', 'progressa'),
+       ($3, 'progress-b@example.test', 'Rider B', 'progressb')
      ON CONFLICT (id) DO NOTHING`,
     [CAPTAIN, RIDER_A, RIDER_B],
   );
