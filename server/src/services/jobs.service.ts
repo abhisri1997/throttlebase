@@ -204,6 +204,16 @@ export const enqueueCleanupExpiredSessionsJob =
     );
   };
 
+/** Purges deleted accounts whose grace period has passed (account-purge.processor). */
+export const enqueueAccountPurgeJob = async (): Promise<boolean> => {
+  return enqueueRecurringJobIfDue(
+    JOB_TYPES.ACCOUNT_PURGE,
+    { enqueuedAt: new Date().toISOString() },
+    3600, // once per hour
+    3,
+  );
+};
+
 export const enqueueLivePresenceSweepJob = async (): Promise<boolean> => {
   return enqueueRecurringJobIfDue(
     JOB_TYPES.LIVE_PRESENCE_SWEEP,
