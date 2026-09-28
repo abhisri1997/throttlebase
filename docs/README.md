@@ -12,28 +12,29 @@ This directory is organized by purpose so contributors and assistants can quickl
 ## Documents by Concern
 
 - Product and scope
-  - `product-overview.md`
+  - `product-overview.md` — what the product does
+  - `project-status.md` — beta scope, environments, known gaps, backlog
 
 - Architecture and technical operation
-  - `architecture.md`
-  - `technical-overview.md`
-  - `technical-decisions.md`
-  - `live-session-rollout.md`
-  - `live-navigation-phase1.md`
+  - `architecture.md` — components, hosting, server structure, request/realtime/job flows, scaling limits
+  - `technical-overview.md` — each feature, where its code lives, configuration, test commands
+  - `technical-decisions.md` — decisions and their reasons
+  - `live-session-rollout.md` — live session phases, per-rider progress, rollback controls
+  - `live-navigation-phase1.md` — full-screen navigation files and realtime contract status
 
 - Data and API contracts
-  - `database-design.md`
-  - `api-endpoints.md`
+  - `database-design.md` — schema generated from the migrations, RLS and roles
+  - `api-endpoints.md` — every HTTP route and socket event
 
-- Delivery and rollout tracking
-  - `project-status.md`
-  - `live-session-rollout.md`
-  - `live-navigation-phase1.md`
+- Launch and compliance
+  - `launch-readiness/LAUNCH_READINESS.md` — rules for launch and compliance work
+  - `launch-readiness/compliance-report.md` — background research (India and global)
+  - `legal/drafts/` — reserved for draft legal text (empty and untracked today)
 
-- QA and validation assets
-  - `uat-test-plan-feature-remaining-features.md`
+- QA and validation
+  - `uat-test-plan-feature-remaining-features.md` — UAT plan for security, support, mentions and live session; source for the PDF beside it
 
-- Postmortems and debugging history
+- Postmortems
   - `postmortems/android-ride-detail-flicker-crash.md`
 
 ## Maintenance Rules
@@ -44,3 +45,4 @@ This directory is organized by purpose so contributors and assistants can quickl
 - Keep editable test plans in Markdown and generate PDFs from those source files.
 - Update `ai-assistant.md` and the relevant docs file in the same change when architecture or status changes.
 - When security, support, notifications, or realtime behavior changes, review `technical-overview.md`, `api-endpoints.md`, `database-design.md`, and `project-status.md` together so they do not drift.
+- When a migration changes the schema, update `database-design.md` from the migrated schema, not from memory.

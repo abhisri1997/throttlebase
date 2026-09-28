@@ -54,12 +54,19 @@ Goal: provide reliable participant-only live ride coordination with lifecycle co
 
 ## Current Implementation Status
 
-- Phase 1 is implemented for live session lifecycle, incident creation, and participant-only access checks.
-- Phase 2 transport is implemented on `/live` with join/leave, heartbeat, location, incident, and session-ended events.
-- A lighter `/rides` namespace is also implemented for ride-detail synchronization such as join broadcasts and stop-request updates.
-- Phase 4 is partially implemented: presence sweep, incident escalation scheduling, cleanup scheduling, and notification delivery jobs are in place; external push/email providers are still pending.
-- Token-refresh-aware reconnect hardening remains open.
-- Per-rider progress is implemented: each rider has their own ride inside the group ride (see below).
+Reviewed against the code on 2026-09-28.
+
+- Phases 0–3 are done: schema (migrations 011–015, 032, 036), REST lifecycle, `/live` transport, and client live UX in ride detail and full-screen navigation.
+- Beyond the original plan: start-point roll call and roll-out, per-rider progress (below), regroup proposals, and waypoint reports.
+- A lighter `/rides` namespace handles ride-detail updates (joins, stop requests).
+- Location handling is hardened: the server drops fixes older than 2 min, more than 30 s in the future, or out of order (`LIVE_LOCATION_MAX_AGE_MS`, `LIVE_LOCATION_MAX_FUTURE_SKEW_MS`), and keeps a sample only per 20 m, per 30 s, or on a motion-reading change.
+- Tracking runs from the app-level background tracker on any screen, not only while a live screen is open.
+- Phase 4 is partial: presence sweep, incident escalation, cleanup and the ride-progress sweep run in the worker. Push and email delivery are stubs.
+- Still open:
+  - Reconnect after an access-token refresh. The socket reconnects with the token from its last `connect()`.
+  - Worker-side changes (auto-finish, idle end) are not pushed over sockets.
+  - Only one API instance is supported (in-memory sampling state, no Socket.IO adapter).
+- Phase 5 (progressive release) has not started; the closed beta is the first release.
 
 ## Per-Rider Progress
 
@@ -81,9 +88,9 @@ Thresholds are environment-tunable: `RIDE_EARLY_START_WINDOW_MIN`, `RIDE_ARRIVAL
 
 ## Rollback Controls
 
-- Client flag kill switch: `EXPO_PUBLIC_ENABLE_LIVE_SESSION`
-- Server-side live feature disable switch
-- Disable room joins/broadcast first, preserve durable records for diagnosis
+- Client kill switch: `EXPO_PUBLIC_ENABLE_LIVE_SESSION=false` hides live controls on ride detail. It defaults to on and is fixed at build time, so turning it off needs a new build.
+- There is no server-side live switch today. Unlike groups, rank, support and account security, live session has no `FEATURE_*` flag. Adding one is the way to disable it without an app release.
+- If disabling in an incident: stop room joins and broadcasts first, and keep durable records (`ride_live_*` tables) for diagnosis.
 
 ## Go/No-Go Criteria
 

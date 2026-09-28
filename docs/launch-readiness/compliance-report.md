@@ -4,6 +4,8 @@ ThrottleBase is not a simple ride logger in legal terms: the repo shows a social
 
 *This is research, not legal advice. Items marked ⚖️ should be reviewed by an Indian technology/privacy lawyer before launch.*
 
+*Hosting update (2026-09-28): the database moved from Neon to Supabase, project region `ap-south-1` (Mumbai). Hosting facts below are updated to match; the legal analysis is unchanged.*
+
 ## TL;DR
 
 - **Your real legal exposure comes from three features: continuous GPS/location traces, live location sharing in group rides, and user-generated content.** Each triggers specific obligations (DPDP notice/consent/security, IT Rules grievance officer and takedown clocks, Apple Guideline 1.2 and Google UGC policy, background-location declarations). Ride-risk liability (accidents, route guidance, "safety flow") is the other big exposure and is handled through Terms, disclaimers and product design, not a single waiver.
@@ -27,13 +29,13 @@ Rule of thumb: **the privacy policy must describe the code, not the other way ro
 
 ### What the app is
 
-The README describes ThrottleBase as "a mobile-first rider platform where users can create and join rides, share routes, track ride history, and interact with a community." Stack: Node.js 22+/TypeScript/Express 5 server, PostgreSQL + PostGIS, Expo/React Native client (Expo Router, Zustand, TanStack Query), Socket.IO realtime on a `/live` namespace, and a DB-backed queue with a worker process. Production domains are `throttlebase.in` and `api.throttlebase.in`; the documented hosting is Neon (PostgreSQL) and Railway (Node.js), with Cloudflare DNS. PR #8 upgraded Expo SDK 54 → 57 and React Native 0.81.5 → 0.86.3.
+The README describes ThrottleBase as "a mobile-first rider platform where users can create and join rides, share routes, track ride history, and interact with a community." Stack: Node.js 22+/TypeScript/Express 5 server, PostgreSQL + PostGIS, Expo/React Native client (Expo Router, Zustand, TanStack Query), Socket.IO realtime on a `/live` namespace, and a DB-backed queue with a worker process. Production domains are `throttlebase.in` and `api.throttlebase.in`; hosting is Supabase (PostgreSQL, `ap-south-1` Mumbai; previously Neon) and Railway (Node.js), with Cloudflare DNS. PR #8 upgraded Expo SDK 54 → 57 and React Native 0.81.5 → 0.86.3.
 
 ### Data inventory table
 
 | Data / feature                                                                      | Status                                              | Evidence                                                                                                                                                                    | Legal/store significance                                                                                                                                                                                                |
 | ----------------------------------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Account & authentication** — Google and Apple sign-in, server-issued JWT          | Confirmed (dev)                                     | PR #7 commit: "Introduced a new token verification mechanism using a TokenVerifier interface" and "Updated sign-in methods for Google and Apple"; README lists `JWT_SECRET` | Name, email, provider IDs = personal data. Google login triggers Apple Guideline 4.8 equivalent-login requirement.                                                                                                      |
+| **Account & authentication** — Google and Apple sign-in, server-issued JWT          | Confirmed (dev)                                     | PR #7 commit: "Introduced a new token verification mechanism using a TokenVerifier interface" and "Updated sign-in methods for Google and Apple"; `server/.env.example` lists `AUTH_JWT_PRIVATE_KEY` (ES256) | Name, email, provider IDs = personal data. Google login triggers Apple Guideline 4.8 equivalent-login requirement.                                                                                                      |
 | **2FA**                                                                             | Removed on `dev`, still listed on `main` README     | PR #7: "Removed 2FA-related routes, schemas, and services"                                                                                                                  | Make the README, privacy policy and store listing consistent; don't advertise 2FA you removed.                                                                                                                          |
 | **Login activity, session management**                                              | Confirmed                                           | README: "privacy, 2FA, login activity, session management"                                                                                                                  | IP addresses, device/session identifiers, timestamps = personal data; also your security logs (CERT-In/DPDP log retention).                                                                                             |
 | **Precise GPS location & ride traces**                                              | Confirmed                                           | README: "Route and GPS: route creation, sharing, bookmarks, trace ingestion"; PR #12 records rides "as track samples"; PostGIS                                              | Highest-risk data category. Reveals home/work, routines. Store "Precise location" disclosures; DPDP purpose limitation and security safeguards.                                                                         |
@@ -54,7 +56,7 @@ The README describes ThrottleBase as "a mobile-first rider platform where users 
 | **Date of birth / age**                                                             | Unknown — verify                                    | Not visible                                                                                                                                                                 | Determines children's-data exposure (DPDP: under 18 = child).                                                                                                                                                           |
 | **Analytics / crash reporting** (Sentry, Firebase, etc.)                            | Unknown — verify                                    | Not mentioned in commits                                                                                                                                                    | Each SDK = processor to disclose, DPA to sign, privacy label entries.                                                                                                                                                   |
 | **Payments / subscriptions**                                                        | None seen                                           | Not mentioned                                                                                                                                                               | If added: Apple/Google IAP rules, Consumer Protection e-commerce rules, GST.                                                                                                                                            |
-| **Hosting location**                                                                | Railway + Neon; region unknown                      | README                                                                                                                                                                      | If servers are outside India, it's a cross-border transfer (disclose); CERT-In expects logs maintained within Indian jurisdiction. ⚖️                                                                                    |
+| **Hosting location**                                                                | Supabase `ap-south-1` (Mumbai); Railway region not recorded                      | README                                                                                                                                                                      | If servers are outside India, it's a cross-border transfer (disclose); CERT-In expects logs maintained within Indian jurisdiction. ⚖️                                                                                    |
 
 **Features that raise specific legal risk (flagged):** real-time location sharing; stored GPS traces that reveal home addresses; speed data and leaderboards; the "safety flow"; UGC (defamation, harassment, doxxing via ride meetups); group ride organisation (organiser liability if something goes wrong on a ride created through your app); and minors signing up for group rides with adult strangers.
 
@@ -69,7 +71,7 @@ ThrottleBase-specific contents:
 - Itemised data categories matching the table above (account, login/session, precise location, ride traces, speed/telemetry, live-sharing, UGC, support, device/push tokens, maps requests).
 - Purpose for each category (ride recording, group coordination, social features, security, support) — no vague "improve our services" catch-alls.
 - Who sees what: public profile vs followers vs group members vs private; how live location is visible only to the active ride room and for how long.
-- Processors and recipients: Railway (hosting), Neon (database), Cloudflare (DNS/network), Google (Maps Platform; Google Sign-In), Apple (Sign in with Apple, APNs), push provider, any crash/analytics SDK.
+- Processors and recipients: Railway (hosting), Supabase (database), Cloudflare (DNS/network), Google (Maps Platform; Google Sign-In), Apple (Sign in with Apple, APNs), push provider, any crash/analytics SDK.
 - Storage location and cross-border transfer statement.
 - Retention schedule per category (see Section 6).
 - Rights: access, correction, erasure, withdrawal of consent, nomination (DPDP), grievance redressal; response timelines.
@@ -127,7 +129,7 @@ Most React Native/Expo dependencies are MIT/BSD/Apache-2.0, which require reprod
 - **13 Nov 2026:** Rule 4 — Consent Manager registration opens.
 - **13 May 2027:** Rules 3 and 5–16 and the rest of the substantive obligations — notice, consent, security, breach reporting, retention, children, rights, cross-border — become enforceable.
 
-You are a **Data Fiduciary** (you decide purposes and means). Railway, Neon, Cloudflare and Google Maps Platform are your **Data Processors** for the relevant flows.
+You are a **Data Fiduciary** (you decide purposes and means). Railway, Supabase, Cloudflare and Google Maps Platform are your **Data Processors** for the relevant flows.
 
 **Obligations mapped to ThrottleBase:**
 
@@ -171,7 +173,7 @@ You won't be a "Significant Social Media Intermediary" (the threshold is 50 lakh
 Applies broadly to "body corporates" and intermediaries — including you:
 
 - Report specified cyber incidents (data breaches, unauthorised access, compromised accounts, DDoS, etc.) to CERT-In **within 6 hours** of noticing them.
-- Enable and retain logs of all ICT systems securely for a **rolling 180 days, within Indian jurisdiction** — a real problem if Railway/Neon/Cloudflare logs live abroad. Options: pick India-region infrastructure where possible, or export logs to an Indian-region bucket. ⚖️
+- Enable and retain logs of all ICT systems securely for a **rolling 180 days, within Indian jurisdiction** — a real problem if Railway/Supabase/Cloudflare logs live abroad (the Supabase database itself is in Mumbai). Options: pick India-region infrastructure where possible, or export logs to an Indian-region bucket. ⚖️
 - Synchronise system clocks to NIC/NPL NTP servers (or sources traceable to them).
 - Designate a point of contact for CERT-In.
 
@@ -255,17 +257,17 @@ Recommendation: form an **LLP or Pvt Ltd before public launch**, publish the app
 
 ## 6. Security & Operational Practices
 
-- **Encryption in transit:** TLS everywhere (Railway custom domain, Socket.IO over WSS, Neon `sslmode=require`); consider certificate pinning later.
-- **Encryption at rest:** Neon's security documentation says "All customer and sensitive data is encrypted using AES-256 encryption at rest", with TLS 1.2/1.3 in transit and keys held in AWS KMS/Azure Key Vault. Add application-level encryption or at least strict access controls for ride traces and live-location data.
+- **Encryption in transit:** TLS everywhere (Railway custom domain, Socket.IO over WSS, TLS to Supabase); consider certificate pinning later.
+- **Encryption at rest:** confirm Supabase's encryption-at-rest and key-management terms for the project's plan (not yet reviewed here; the quote previously in this line described Neon). Add application-level encryption or at least strict access controls for ride traces and live-location data.
 - **Location minimisation:** default **privacy zones** that hide the first/last ~500 m of shared routes; round or truncate coordinates in public views; store live-session positions ephemerally (e.g., delete after the ride room closes) instead of persisting every broadcast.
-- **Access control:** your API has no Supabase-style row-level security — authorisation is in Express. Write tests proving user A can't read user B's private rides, traces, or support tickets (IDOR is the #1 bug in this class of app). Consider Postgres RLS as defence in depth.
+- **Access control:** the schema defines row-level security policies (migrations 027–028), but they are not enforced: the API connects as Supabase's `postgres` role, which bypasses RLS, so authorisation is in Express. Enforcing RLS is tracked in `docs/project-status.md`. Write tests proving user A can't read user B's private rides, traces, or support tickets (IDOR is the #1 bug in this class of app). Enforcing the existing RLS policies is the defence-in-depth step.
 - **Auth hygiene:** short-lived JWTs with refresh rotation, revocation on logout/"sign out all sessions", verification of Google/Apple ID tokens server-side (your new TokenVerifier), rate limiting on auth endpoints.
-- **Secrets:** `JWT_SECRET`, `DATABASE_URL`, Maps keys in Railway/EAS secrets only; scan git history (the repo is public) for leaked keys and rotate any that ever appeared. Keep Swagger disabled in production as your README recommends.
+- **Secrets:** `AUTH_JWT_PRIVATE_KEY`, `DATABASE_URL`, Maps keys in Railway/EAS secrets only; scan git history (the repo is public) for leaked keys and rotate any that ever appeared. Keep Swagger disabled in production as your README recommends.
 - **Admin access:** least privilege, admin actions audit-logged, 2FA for admin accounts even if removed for users.
 - **Logging:** security logs retained 180 days (CERT-In) to 1 year (DPDP), never containing raw precise coordinates or tokens.
 - **Breach response plan (one page):** who decides, CERT-In 6-hour report, user notification without delay, DPB detailed report within 72 hours, evidence preservation, key rotation.
 - **Retention schedule (starting point):** account data — life of account; ride traces — until user deletes or account deletion; live-session positions — deleted at session end or within 24 hours; UGC — until deleted, but preserve removed content 180 days if subject to a complaint/order; support tickets — 1–2 years; security logs — 180 days to 1 year; backups — rolling 30 days with deletion propagating on restore.
-- **Processor agreements (DPAs):** accept/sign Railway's, Neon's and Cloudflare's DPAs; review Google Maps Platform and Google Cloud data processing terms; same for any push/crash SDK you add.
+- **Processor agreements (DPAs):** accept/sign Railway's, Supabase's and Cloudflare's DPAs; review Google Maps Platform and Google Cloud data processing terms; same for any push/crash SDK you add.
 
 ## 7. Other Launch Considerations
 
@@ -318,7 +320,7 @@ Recommendation: form an **LLP or Pvt Ltd before public launch**, publish the app
 - [ ] Security pass: IDOR tests, rate limiting, secrets rotation and git-history scan, admin audit logs, restricted Maps keys.
 - [ ] Privacy zones for shared routes; ephemeral live-session positions.
 - [ ] Breach response runbook including CERT-In 6-hour reporting; NTP sync to NIC/NPL; 180-day log retention with India-jurisdiction storage plan.
-- [ ] Accept DPAs with Railway, Neon, Cloudflare, Google; document Neon/Railway regions and disclose cross-border storage.
+- [ ] Accept DPAs with Railway, Supabase, Cloudflare, Google; document Railway's region (Supabase is `ap-south-1`) and disclose any cross-border storage.
 - [ ] Grievance SOP meeting 24-hour acknowledgement, 7-day resolution and 3-hour takedown-on-order timelines.
 - [ ] Open-source licences screen; add a licence file to your own repo.
 

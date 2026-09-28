@@ -1,103 +1,150 @@
 # ThrottleBase
 
-ThrottleBase is a mobile-first rider platform where users can create and join rides, share routes, track ride history, and interact with a community.
+ThrottleBase is a mobile-first platform for motorcycle riders: plan and join group rides, ride them together with live navigation, find and share routes, and keep a ride history.
 
-## Core Capabilities
+## What it does
 
-- Ride lifecycle: draft, schedule, join, active, complete
-- Route and GPS: route creation, sharing, bookmarks, trace ingestion
-- Community: posts, comments, likes, follows, groups, ride reviews
-- Rewards and engagement: badges, achievements, leaderboard
-- Notifications and account controls: preferences, privacy, login activity, session management, support
-- Operations and moderation: admin support ticket triage plus mention-triggered notification fanout
-- Live group sessions: realtime ride coordination, ride-room updates, and safety flow
+- **Rides:** create a ride from scratch or from a saved route, add stops, join, and ride as a group. There's a roll call, live positions, per-rider start and finish, regroup, and incident/SOS reporting.
+- **Navigation:** full-screen turn-by-turn with the crew on the map, rerouting when off course.
+- **Routes:** search from one place to another, save the road you rode as a route, bookmark, share, and rate the road.
+- **History:** tracked automatically from the phone, counting riding time and distance only.
+- **Community:** posts, comments, likes, follows, @mentions, ride reviews.
+- **Account:** passwordless sign-in (Google, Apple, email code), settings, privacy, in-app notifications.
 
-## Tech Stack
+Groups, rewards, support tickets and account-security screens exist but are held back from the closed beta behind feature flags (see `docs/project-status.md`).
 
-- Server: Node.js 22+, TypeScript, Express 5
-- Data: PostgreSQL + PostGIS
-- Client: Expo, React Native, Expo Router, Zustand, TanStack Query
-- Realtime: Socket.IO (`/live` namespace)
-- Background processing: DB-backed queue + worker processors
+## Tech stack
 
-## Repository Layout
+- **Server:** Node.js 22+, TypeScript, Express 5, Zod, `jose`, run with `tsx`
+- **Data:** PostgreSQL 17 + PostGIS on Supabase, raw SQL migrations
+- **Realtime:** Socket.IO (`/live` for live sessions, `/rides` for ride-detail updates)
+- **Background work:** job queue in Postgres, run by a separate worker process
+- **Client:** Expo SDK 57, React Native 0.86, Expo Router, TanStack Query, Zustand
+- **Maps:** Google Maps Platform, called only through the server
 
-- `server/` backend API, queue worker, migrations
-- `client/` Expo application and UI flows
-- `docs/` project documentation
-- `ai-assistant.md` concise operational context for AI-assisted development
+## Repository layout
 
-## Production Endpoints
+- `server/`: API, realtime gateway, worker, migrations
+- `client/`: Expo app
+- `docs/`: project documentation (start at `docs/README.md`)
+- `ai-assistant.md`: short context brief for AI-assisted development
 
-- App/web domain: `https://throttlebase.in`
-- API domain: `https://api.throttlebase.in`
+There is no root `package.json`; `client/` and `server/` each install separately.
 
-## Local Setup
+## Environments
+
+| Environment | API | Built into |
+| --- | --- | --- |
+| Production | `https://api.throttlebase.in` | EAS `production` builds |
+| Development | `https://api-dev.throttlebase.in` | EAS `development` and `preview` builds, beta APKs |
+| Local | `http://localhost:5001` | Dev builds with no `EXPO_PUBLIC_API_URL` |
+
+The API and worker run on Railway, with DNS on Cloudflare. The hosted database is the Supabase project `throttlebase` in `ap-south-1` (Mumbai), the only project on the account. Each environment's `DATABASE_URL` is set in Railway. The app and share links live at `https://throttlebase.in`.
+
+## Local setup
+
+### Server
 
 1. Install dependencies:
 
-```bash
-cd server && npm install
-cd ../client && npm install
-```
+   ```bash
+   cd server
+   npm install
+   ```
 
-2. Ensure PostgreSQL + PostGIS are available and env is configured in `server/.env`.
+2. Create a Postgres database with PostGIS (Postgres 17 is what Supabase runs):
 
-	Security-related server env options:
+   ```bash
+   createdb throttle_base
+   psql -d throttle_base -c "CREATE EXTENSION IF NOT EXISTS postgis; CREATE EXTENSION IF NOT EXISTS pgcrypto;"
+   ```
 
-	- `CORS_ALLOWED_ORIGINS` (comma-separated allowlist, e.g. `https://throttlebase.in,https://www.throttlebase.in`)
-	- `ENABLE_SWAGGER_DOCS` (`true`/`false`; defaults to enabled in non-production, disabled in production)
-	- `SWAGGER_USERNAME` and `SWAGGER_PASSWORD` (required to access `/api-docs` in production when docs are enabled)
+3. Copy `server/.env.example` to `server/.env` and fill it in. The example documents every variable. For local work you need at least:
+   - `DATABASE_URL`, pointing at the local database. Discrete `DB_HOST` / `DB_USER` / … variables also work.
+   - `AUTH_JWT_PRIVATE_KEY` and `AUTH_JWT_KID`: generate an ES256 key with the `openssl` commands in the example.
+   - `GOOGLE_CLIENT_IDS` for Google sign-in, and `GOOGLE_MAPS_API_KEY` for maps.
+   - `EMAIL_DRIVER=console`, which prints email sign-in codes to the log.
 
-3. Run migrations using your existing migration workflow.
-4. Start backend and worker:
-```bash
-cd server
-npm run dev
-# separate terminal
-npm run worker
-```
+4. Apply the migrations:
 
-## Cloud hosting with Railway + Neon
+   ```bash
+   npm run migrate            # or: npm run migrate:dry-run
+   ```
 
-To host the backend in the cloud, use Neon for PostgreSQL and Railway for the Node.js service.
+5. Run the API and the worker:
 
-1. Create a Neon PostgreSQL database, then enable the PostGIS extension.
-2. Run the SQL migration scripts from `server/src/db/migrations` against the Neon database.
-3. In Railway, create a new project or service for the backend and set the `start` command to `npm run start`.
-4. Add the Neon `DATABASE_URL` to Railway environment variables along with `JWT_SECRET`, `CORS_ALLOWED_ORIGINS`, `ENABLE_SWAGGER_DOCS=false`, and any API keys.
-5. Add `api.throttlebase.in` as a custom domain in Railway, then point your Cloudflare DNS `CNAME` record to the Railway-hosted app domain.
+   ```bash
+   npm run dev:all            # API and worker together
+   # or separately:
+   npm run dev                # API on http://localhost:5001
+   npm run worker             # background jobs
+   ```
 
-The backend already reads `PORT` from `process.env.PORT`, so Railway can bind to the platform-assigned port automatically.
-```bash
-cd server
-npm run dev
-# separate terminal
-npm run worker
-```
+The server checks its configuration at boot and stops with the variable's name if something is missing.
 
-5. Start client:
+### Client
 
 ```bash
 cd client
-npm start
+npm install
+npx expo start --dev-client
 ```
 
-For an installed iOS/Android development build on a physical device, use the Expo dev client flow instead of opening the native app without Metro:
+`EXPO_PUBLIC_API_URL` picks the backend. With no value, a development build talks to the API on the machine running Metro (port 5001; `10.0.2.2` on the Android emulator), and a release build falls back to the development API, never production. The EAS profiles in `client/eas.json` set it per build.
+
+Installed debug builds have no embedded JavaScript bundle. Start Metro first (`npx expo start --dev-client`, adding `--tunnel` for a phone on another network), or the app opens with "No script URL provided".
+
+## Checks
 
 ```bash
-cd client
-npx expo start --dev-client --tunnel
+cd server
+npm run typecheck          # tsc --noEmit
+npm run test:unit          # unit tests
+npm run lint:boundaries    # architecture boundary rules
+npm test                   # end-to-end live-session script against the configured database
+
+cd ../client
+npm test                   # unit tests
+npx tsc --noEmit           # typecheck
+npm run lint:boundaries    # architecture boundary rules
 ```
 
-If the native app is rebuilt with `npx expo run:ios --device` or `npx expo run:android`, keep the dev server running before launching the app. Otherwise the app can fail with "No script URL provided" because the JavaScript bundle is not embedded in debug builds.
+`npm run test:integration` in `server/` runs Postgres integration tests against a throwaway database; see `server/src/adapters/postgres/migrations.integration.test.ts` for the one-line Docker setup.
+
+## Hosting: Railway + Supabase
+
+The database moved from Neon to Supabase. The code uses Supabase as plain Postgres, with no Supabase SDK, auth or storage, so any Postgres 17 + PostGIS host works.
+
+1. **Database (Supabase):** create a project and enable the `postgis` extension. Then apply migrations from a trusted machine:
+
+   ```bash
+   MIGRATION_DATABASE_URL="<supabase connection string>" npm run migrate
+   ```
+
+   The runner handles Supabase's certificate chain itself.
+
+2. **API (Railway):** a service rooted at `server/` with start command `npm start`. It reads `PORT` from the platform. Set these variables:
+   - everything in `server/.env.example` that applies;
+   - `DATABASE_URL`;
+   - `DATABASE_SSL_REJECT_UNAUTHORIZED=false`, which Supabase's chain needs;
+   - `NODE_ENV=production`;
+   - `CORS_ALLOWED_ORIGINS`;
+   - `EMAIL_DRIVER=smtp` with the `SMTP_*` settings;
+   - `ENABLE_SWAGGER_DOCS=false`;
+   - the `FEATURE_*` flags.
+
+3. **Worker (Railway):** a second service from the same code with start command `npm run worker` and the same variables as the API.
+
+4. **Domain:** add `api.throttlebase.in` (or `api-dev.throttlebase.in`) as a Railway custom domain, and point a Cloudflare `CNAME` at it.
+
+The migrations define a least-privilege role (`throttlebase_app`) and row-level security policies. The API does not use that role yet: it still connects as `postgres`. Switching needs code changes first; see `docs/database-design.md` → Row-level security.
 
 ## Documentation
 
-- Documentation index: `docs/README.md`
+- Index: `docs/README.md`
 - Architecture: `docs/architecture.md`
-- Technical overview: `docs/technical-overview.md`
-- API inventory: `docs/api-endpoints.md`
-- Database design: `docs/database-design.md`
-- Technical decisions: `docs/technical-decisions.md`
-- Status/backlog: `docs/project-status.md`
+- Features and configuration: `docs/technical-overview.md`
+- API and socket events: `docs/api-endpoints.md`
+- Database: `docs/database-design.md`
+- Decisions: `docs/technical-decisions.md`
+- Status and backlog: `docs/project-status.md`

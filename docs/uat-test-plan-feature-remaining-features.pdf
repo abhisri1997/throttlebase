@@ -43,7 +43,7 @@ BT /F1 11 Tf 1 0 0 1 72 77 Tm (- Unshipped live-session reliability hardening wo
 endstream
 endobj
 4 0 obj
-<< /Length 2364 >>
+<< /Length 2768 >>
 stream
 BT /F1 11 Tf 1 0 0 1 54 738 Tm () Tj ET
 BT /F2 15 Tf 1 0 0 1 54 706 Tm (Required Test Environment) Tj ET
@@ -51,432 +51,444 @@ BT /F1 11 Tf 1 0 0 1 54 682 Tm () Tj ET
 BT /F1 11 Tf 1 0 0 1 72 660 Tm (1. A running backend API and connected mobile client build.) Tj ET
 BT /F1 11 Tf 1 0 0 1 72 642 Tm (2. At least two active app sessions or two devices for realtime validation.) Tj ET
 BT /F1 11 Tf 1 0 0 1 72 624 Tm (3. Seeded or manually created ride, post, and support-ticket data.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 606 Tm () Tj ET
-BT /F2 15 Tf 1 0 0 1 54 574 Tm (Required Test Accounts) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 550 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 528 Tm (1. Standard rider A) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 510 Tm (2. Standard rider B) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 492 Tm (3. Standard rider C for optional multi-rider realtime checks) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 474 Tm (4. Admin rider with is_admin enabled) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 456 Tm () Tj ET
-BT /F2 15 Tf 1 0 0 1 54 424 Tm (Recommended Data Setup) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 400 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 378 Tm (1. Ensure at least one ride exists with a captain and one confirmed participant.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 360 Tm (2. Ensure rider A can mention rider B by username.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 342 Tm (3. Ensure the admin rider can access the same environment as the standard riders.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 324 Tm (4. If possible, use fresh sessions before beginning the security scenarios.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 306 Tm () Tj ET
-BT /F2 15 Tf 1 0 0 1 54 274 Tm (Pass And Fail Guidance) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 250 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 228 Tm (Pass a scenario only when all expected UI outcomes occur without manual database fixes) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 214 Tm (during execution.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 196 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 174 Tm (Fail a scenario when:) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 156 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 134 Tm (- the screen does not open from the documented tap path) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 116 Tm (- the action succeeds but the expected state is not visible in the UI) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 98 Tm (- authorization or visibility rules are violated) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 80 Tm (- realtime updates require manual refresh when the feature is expected to update) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 606 Tm (4. For Scenarios 1–4, the held-back features enabled on both sides and a build made) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 592 Tm (with them: `FEATURE_ACCOUNT_SECURITY` / `EXPO_PUBLIC_FEATURE_ACCOUNT_SECURITY`) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 578 Tm (\(Scenario 1\) and `FEATURE_SUPPORT` / `EXPO_PUBLIC_FEATURE_SUPPORT` \(Scenarios 2–4\).) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 564 Tm (Both are off in the closed beta.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 546 Tm () Tj ET
+BT /F2 15 Tf 1 0 0 1 54 514 Tm (Required Test Accounts) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 490 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 468 Tm (1. Standard rider A) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 450 Tm (2. Standard rider B) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 432 Tm (3. Standard rider C for optional multi-rider realtime checks) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 414 Tm (4. Admin rider: a row `\(rider_id, 'admin'\)` in `rider_roles`, granted out of band.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 400 Tm (The rider must sign in again \(or refresh\) after the grant so the role reaches their) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 386 Tm (token) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 368 Tm () Tj ET
+BT /F2 15 Tf 1 0 0 1 54 336 Tm (Recommended Data Setup) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 312 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 290 Tm (1. Ensure at least one ride exists with a captain and one confirmed participant.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 272 Tm (2. Ensure rider A can mention rider B by username.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 254 Tm (3. Ensure the admin rider can access the same environment as the standard riders.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 236 Tm (4. If possible, use fresh sessions before beginning the security scenarios.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 218 Tm () Tj ET
+BT /F2 15 Tf 1 0 0 1 54 186 Tm (Pass And Fail Guidance) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 162 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 140 Tm (Pass a scenario only when all expected UI outcomes occur without manual database fixes) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 126 Tm (during execution.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 108 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 86 Tm (Known issue \(2026-09-28\): the settings screen decides whether to show "Admin - Manage) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 72 Tm (Tickets" from `is_admin` on the rider profile, which is always `false` since that column) Tj ET
 endstream
 endobj
 5 0 obj
-<< /Length 1933 >>
+<< /Length 2212 >>
 stream
-BT /F1 11 Tf 1 0 0 1 72 738 Tm (live) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 720 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 698 Tm (Log each failure with:) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 680 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 658 Tm (1. scenario identifier) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 640 Tm (2. account used) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 622 Tm (3. device or platform used) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 604 Tm (4. exact step number) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 586 Tm (5. actual result) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 568 Tm (6. screenshot or screen recording reference) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 550 Tm () Tj ET
-BT /F2 15 Tf 1 0 0 1 54 518 Tm (Scenario 1 - Review Login Activity And Revoke A Session) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 494 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 464 Tm (Objective) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 445 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 423 Tm (Confirm that login activity and session inventory are visible, and that revoking a) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 409 Tm (session blocks that session.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 391 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 361 Tm (Primary Actor) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 342 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 320 Tm (Rider A on device 1 and device 2) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 302 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 272 Tm (Preconditions) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 253 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 231 Tm (1. Rider A can log in on two app sessions.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 213 Tm (2. Both sessions point to the same backend environment.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 195 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 165 Tm (Steps) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 146 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 124 Tm (1. Log in as rider A on device 1.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 106 Tm (2. Log in as rider A on device 2.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 88 Tm (3. On device 1, open My Profile.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 70 Tm (4. Tap Settings.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 738 Tm (was replaced by `rider_roles`. Scenario 3 fails at step 4 until the client reads roles.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 724 Tm (The admin endpoints themselves check roles correctly.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 706 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 684 Tm (Fail a scenario when:) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 666 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 644 Tm (- the screen does not open from the documented tap path) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 626 Tm (- the action succeeds but the expected state is not visible in the UI) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 608 Tm (- authorization or visibility rules are violated) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 590 Tm (- realtime updates require manual refresh when the feature is expected to update) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 576 Tm (live) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 558 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 536 Tm (Log each failure with:) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 518 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 496 Tm (1. scenario identifier) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 478 Tm (2. account used) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 460 Tm (3. device or platform used) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 442 Tm (4. exact step number) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 424 Tm (5. actual result) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 406 Tm (6. screenshot or screen recording reference) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 388 Tm () Tj ET
+BT /F2 15 Tf 1 0 0 1 54 356 Tm (Scenario 1 - Review Login Activity And Revoke A Session) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 332 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 302 Tm (Objective) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 283 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 261 Tm (Confirm that login activity and session inventory are visible, and that revoking a) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 247 Tm (session blocks that session.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 229 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 199 Tm (Primary Actor) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 180 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 158 Tm (Rider A on device 1 and device 2) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 140 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 110 Tm (Preconditions) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 91 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 69 Tm (1. Rider A can log in on two app sessions.) Tj ET
 endstream
 endobj
 6 0 obj
-<< /Length 1962 >>
+<< /Length 2115 >>
 stream
-BT /F1 11 Tf 1 0 0 1 72 738 Tm (5. Open Security.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 720 Tm (6. Review the login activity list.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 702 Tm (7. Review the active sessions list.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 684 Tm (8. Revoke the session that represents device 2.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 666 Tm (9. On device 2, attempt to refresh profile data or open another authenticated) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 652 Tm (screen.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 634 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 604 Tm (Expected Result) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 585 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 563 Tm (1. The login activity list shows recent login events.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 545 Tm (2. The sessions list shows more than one active session before revocation.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 527 Tm (3. The revoked session no longer remains valid on device 2.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 509 Tm (4. Device 1 remains authenticated.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 491 Tm () Tj ET
-BT /F2 15 Tf 1 0 0 1 54 459 Tm (Scenario 2 - Submit A Support Ticket As A Rider) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 435 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 405 Tm (Objective) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 386 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 364 Tm (Confirm that a standard rider can create a support ticket and see it in personal ticket) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 350 Tm (history.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 332 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 302 Tm (Primary Actor) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 283 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 261 Tm (Rider B) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 243 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 213 Tm (Preconditions) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 194 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 172 Tm (1. Rider B is logged in.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 154 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 124 Tm (Steps) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 105 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 83 Tm (1. Open My Profile.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 738 Tm (2. Both sessions point to the same backend environment.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 720 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 690 Tm (Steps) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 671 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 649 Tm (1. Log in as rider A on device 1.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 631 Tm (2. Log in as rider A on device 2.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 613 Tm (3. On device 1, open My Profile.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 595 Tm (4. Tap Settings.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 577 Tm (5. Open Security.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 559 Tm (6. Review the login activity list.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 541 Tm (7. Review the active sessions list.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 523 Tm (8. Revoke the session that represents device 2.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 505 Tm (9. On device 2, attempt to refresh profile data or open another authenticated) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 491 Tm (screen.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 473 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 443 Tm (Expected Result) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 424 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 402 Tm (1. The login activity list shows recent login events.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 384 Tm (2. The sessions list shows more than one active session before revocation.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 366 Tm (3. The revoked session no longer remains valid on device 2.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 348 Tm (4. Device 1 remains authenticated.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 330 Tm () Tj ET
+BT /F2 15 Tf 1 0 0 1 54 298 Tm (Scenario 2 - Submit A Support Ticket As A Rider) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 274 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 244 Tm (Objective) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 225 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 203 Tm (Confirm that a standard rider can create a support ticket and see it in personal ticket) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 189 Tm (history.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 171 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 141 Tm (Primary Actor) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 122 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 100 Tm (Rider B) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 82 Tm () Tj ET
 endstream
 endobj
 7 0 obj
-<< /Length 2018 >>
+<< /Length 2023 >>
 stream
-BT /F1 11 Tf 1 0 0 1 72 738 Tm (2. Tap Settings.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 720 Tm (3. In the Support section, tap Contact Support.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 702 Tm (4. Select a ticket category.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 684 Tm (5. Enter a subject.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 666 Tm (6. Enter a detailed description.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 648 Tm (7. Optionally add one or more attachment URLs.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 630 Tm (8. Submit the ticket.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 612 Tm (9. Review the ticket list shown in the Support Center.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 594 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 564 Tm (Expected Result) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 545 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 523 Tm (1. The ticket is created successfully.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 505 Tm (2. The rider sees the new ticket in their support history.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 487 Tm (3. The ticket status appears with an initial open-style state.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 469 Tm () Tj ET
-BT /F2 15 Tf 1 0 0 1 54 437 Tm (Scenario 3 - Admin Reviews And Updates A Support Ticket) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 413 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 383 Tm (Objective) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 364 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 342 Tm (Confirm that an admin can open the ticket-management view, inspect a rider ticket,) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 328 Tm (update status, and save an agent reply.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 310 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 280 Tm (Primary Actor) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 261 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 239 Tm (Admin rider) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 221 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 191 Tm (Preconditions) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 172 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 150 Tm (1. Scenario 2 has created a ticket.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 132 Tm (2. The admin account has is_admin enabled.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 114 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 84 Tm (Steps) Tj ET
+BT /F2 12 Tf 1 0 0 1 54 738 Tm (Preconditions) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 719 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 697 Tm (1. Rider B is logged in.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 679 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 649 Tm (Steps) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 630 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 608 Tm (1. Open My Profile.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 590 Tm (2. Tap Settings.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 572 Tm (3. In the Support section, tap Contact Support.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 554 Tm (4. Select a ticket category.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 536 Tm (5. Enter a subject.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 518 Tm (6. Enter a detailed description.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 500 Tm (7. Optionally add one or more attachment URLs.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 482 Tm (8. Submit the ticket.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 464 Tm (9. Review the ticket list shown in the Support Center.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 446 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 416 Tm (Expected Result) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 397 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 375 Tm (1. The ticket is created successfully.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 357 Tm (2. The rider sees the new ticket in their support history.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 339 Tm (3. The ticket status appears with an initial open-style state.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 321 Tm () Tj ET
+BT /F2 15 Tf 1 0 0 1 54 289 Tm (Scenario 3 - Admin Reviews And Updates A Support Ticket) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 265 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 235 Tm (Objective) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 216 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 194 Tm (Confirm that an admin can open the ticket-management view, inspect a rider ticket,) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 180 Tm (update status, and save an agent reply.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 162 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 132 Tm (Primary Actor) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 113 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 91 Tm (Admin rider) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 73 Tm () Tj ET
 endstream
 endobj
 8 0 obj
-<< /Length 2014 >>
+<< /Length 2150 >>
 stream
-BT /F1 11 Tf 1 0 0 1 54 738 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 716 Tm (1. Log in as the admin rider.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 698 Tm (2. Open My Profile.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 680 Tm (3. Tap Settings.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 662 Tm (4. In the Support section, tap Admin - Manage Tickets.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 644 Tm (5. Confirm the ticket list loads.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 626 Tm (6. Open the ticket created by rider B.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 608 Tm (7. Change the status to In Progress or Resolved.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 590 Tm (8. Enter an agent reply.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 572 Tm (9. Save the update.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 554 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 524 Tm (Expected Result) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 505 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 483 Tm (1. The admin-only ticket list is accessible to the admin rider.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 465 Tm (2. The selected ticket detail view shows rider information and ticket content.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 447 Tm (3. The status update succeeds.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 429 Tm (4. The saved agent reply appears in the ticket detail after update.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 411 Tm () Tj ET
-BT /F2 15 Tf 1 0 0 1 54 379 Tm (Scenario 4 - Non-Admin Cannot Access Admin Ticket Controls) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 355 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 325 Tm (Objective) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 306 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 284 Tm (Confirm that admin support controls are hidden from a non-admin rider.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 266 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 236 Tm (Primary Actor) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 217 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 195 Tm (Standard rider C) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 177 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 147 Tm (Preconditions) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 128 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 106 Tm (1. Rider C is logged in.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 88 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 738 Tm (Preconditions) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 719 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 697 Tm (1. Scenario 2 has created a ticket.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 679 Tm (2. The admin account has the `admin` role in `rider_roles` and has signed in since) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 665 Tm (it was granted.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 647 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 617 Tm (Steps) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 598 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 576 Tm (1. Log in as the admin rider.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 558 Tm (2. Open My Profile.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 540 Tm (3. Tap Settings.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 522 Tm (4. In the Support section, tap Admin - Manage Tickets.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 504 Tm (5. Confirm the ticket list loads.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 486 Tm (6. Open the ticket created by rider B.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 468 Tm (7. Change the status to In Progress or Resolved.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 450 Tm (8. Enter an agent reply.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 432 Tm (9. Save the update.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 414 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 384 Tm (Expected Result) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 365 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 343 Tm (1. The admin-only ticket list is accessible to the admin rider.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 325 Tm (2. The selected ticket detail view shows rider information and ticket content.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 307 Tm (3. The status update succeeds.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 289 Tm (4. The saved agent reply appears in the ticket detail after update.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 271 Tm () Tj ET
+BT /F2 15 Tf 1 0 0 1 54 239 Tm (Scenario 4 - Non-Admin Cannot Access Admin Ticket Controls) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 215 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 185 Tm (Objective) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 166 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 144 Tm (Confirm that admin support controls are hidden from a non-admin rider.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 126 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 96 Tm (Primary Actor) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 77 Tm () Tj ET
 endstream
 endobj
 9 0 obj
-<< /Length 1823 >>
+<< /Length 1684 >>
 stream
-BT /F2 12 Tf 1 0 0 1 54 738 Tm (Steps) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 719 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 697 Tm (1. Open My Profile.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 679 Tm (2. Tap Settings.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 661 Tm (3. Review the Support section.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 643 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 613 Tm (Expected Result) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 594 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 572 Tm (1. Contact Support is visible.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 554 Tm (2. Admin - Manage Tickets is not visible.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 536 Tm () Tj ET
-BT /F2 15 Tf 1 0 0 1 54 504 Tm (Scenario 5 - Create A Post With A Mention) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 480 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 450 Tm (Objective) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 431 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 409 Tm (Confirm that mentioning another rider in a post produces an in-app notification for the) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 395 Tm (mentioned rider.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 377 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 347 Tm (Primary Actor) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 328 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 306 Tm (Rider A mentioning rider B) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 288 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 258 Tm (Preconditions) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 239 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 217 Tm (1. Rider B has a known username.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 199 Tm (2. Rider A is logged in.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 181 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 151 Tm (Steps) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 132 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 110 Tm (1. Open the Feed.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 92 Tm (2. Start creating a new post.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 74 Tm (3. Enter content that includes the handle for rider B in the format @username.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 738 Tm (Standard rider C) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 720 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 690 Tm (Preconditions) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 671 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 649 Tm (1. Rider C is logged in.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 631 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 601 Tm (Steps) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 582 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 560 Tm (1. Open My Profile.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 542 Tm (2. Tap Settings.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 524 Tm (3. Review the Support section.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 506 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 476 Tm (Expected Result) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 457 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 435 Tm (1. Contact Support is visible.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 417 Tm (2. Admin - Manage Tickets is not visible.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 399 Tm () Tj ET
+BT /F2 15 Tf 1 0 0 1 54 367 Tm (Scenario 5 - Create A Post With A Mention) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 343 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 313 Tm (Objective) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 294 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 272 Tm (Confirm that mentioning another rider in a post produces an in-app notification for the) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 258 Tm (mentioned rider.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 240 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 210 Tm (Primary Actor) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 191 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 169 Tm (Rider A mentioning rider B) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 151 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 121 Tm (Preconditions) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 102 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 80 Tm (1. Rider B has a known username.) Tj ET
 endstream
 endobj
 10 0 obj
-<< /Length 1930 >>
+<< /Length 1952 >>
 stream
-BT /F1 11 Tf 1 0 0 1 72 738 Tm (4. Submit the post.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 720 Tm (5. Log in as rider B or switch to rider B on another device.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 702 Tm (6. Open Notifications.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 684 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 654 Tm (Expected Result) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 635 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 613 Tm (1. The post is created successfully.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 595 Tm (2. Rider B sees a new in-app notification for the mention.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 577 Tm (3. The notification appears as unread initially.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 559 Tm () Tj ET
-BT /F2 15 Tf 1 0 0 1 54 527 Tm (Scenario 6 - Create A Comment With A Mention) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 503 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 473 Tm (Objective) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 454 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 432 Tm (Confirm that mentioning another rider inside a comment also creates a mention) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 418 Tm (notification.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 400 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 370 Tm (Primary Actor) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 351 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 329 Tm (Rider A mentioning rider B in comments) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 738 Tm (2. Rider A is logged in.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 720 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 690 Tm (Steps) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 671 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 649 Tm (1. Open the Feed.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 631 Tm (2. Start creating a new post.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 613 Tm (3. Enter content that includes the handle for rider B in the format @username.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 595 Tm (4. Submit the post.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 577 Tm (5. Log in as rider B or switch to rider B on another device.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 559 Tm (6. Open Notifications.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 541 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 511 Tm (Expected Result) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 492 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 470 Tm (1. The post is created successfully.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 452 Tm (2. Rider B sees a new in-app notification for the mention.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 434 Tm (3. The notification appears as unread initially.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 416 Tm () Tj ET
+BT /F2 15 Tf 1 0 0 1 54 384 Tm (Scenario 6 - Create A Comment With A Mention) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 360 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 330 Tm (Objective) Tj ET
 BT /F1 11 Tf 1 0 0 1 54 311 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 281 Tm (Preconditions) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 262 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 240 Tm (1. An existing post is available.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 222 Tm (2. Rider A is logged in.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 204 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 174 Tm (Steps) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 155 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 133 Tm (1. Open a post detail page.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 115 Tm (2. Enter a new comment containing @username for rider B.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 97 Tm (3. Submit the comment.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 79 Tm (4. Switch to rider B.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 289 Tm (Confirm that mentioning another rider inside a comment also creates a mention) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 275 Tm (notification.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 257 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 227 Tm (Primary Actor) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 208 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 186 Tm (Rider A mentioning rider B in comments) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 168 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 138 Tm (Preconditions) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 119 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 97 Tm (1. An existing post is available.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 79 Tm (2. Rider A is logged in.) Tj ET
 endstream
 endobj
 11 0 obj
-<< /Length 1925 >>
+<< /Length 1771 >>
 stream
-BT /F1 11 Tf 1 0 0 1 72 738 Tm (5. Open Notifications.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 720 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 690 Tm (Expected Result) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 671 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 649 Tm (1. The comment is created successfully.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 631 Tm (2. Rider B receives a new mention notification for the comment.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 613 Tm () Tj ET
-BT /F2 15 Tf 1 0 0 1 54 581 Tm (Scenario 7 - Manage Read State In Notifications) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 557 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 527 Tm (Objective) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 508 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 486 Tm (Confirm that unread filtering, per-item mark-as-read, and mark-all behavior work in the) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 472 Tm (Notifications center.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 454 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 424 Tm (Primary Actor) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 405 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 383 Tm (Rider B) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 738 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 708 Tm (Steps) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 689 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 667 Tm (1. Open a post detail page.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 649 Tm (2. Enter a new comment containing @username for rider B.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 631 Tm (3. Submit the comment.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 613 Tm (4. Switch to rider B.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 595 Tm (5. Open Notifications.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 577 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 547 Tm (Expected Result) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 528 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 506 Tm (1. The comment is created successfully.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 488 Tm (2. Rider B receives a new mention notification for the comment.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 470 Tm () Tj ET
+BT /F2 15 Tf 1 0 0 1 54 438 Tm (Scenario 7 - Manage Read State In Notifications) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 414 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 384 Tm (Objective) Tj ET
 BT /F1 11 Tf 1 0 0 1 54 365 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 335 Tm (Preconditions) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 316 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 294 Tm (1. Scenarios 7 and 8 have produced at least one notification.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 276 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 246 Tm (Steps) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 227 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 205 Tm (1. Open Notifications.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 187 Tm (2. Confirm the unread count is visible near the top of the screen.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 169 Tm (3. Switch to the Unread filter.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 151 Tm (4. Tap one unread notification to mark it as read.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 133 Tm (5. Confirm the list and unread count update.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 115 Tm (6. Return to All.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 97 Tm (7. Tap Mark all.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 79 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 343 Tm (Confirm that unread filtering, per-item mark-as-read, and mark-all behavior work in the) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 329 Tm (Notifications center.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 311 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 281 Tm (Primary Actor) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 262 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 240 Tm (Rider B) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 222 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 192 Tm (Preconditions) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 173 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 151 Tm (1. Scenarios 7 and 8 have produced at least one notification.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 133 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 103 Tm (Steps) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 84 Tm () Tj ET
 endstream
 endobj
 12 0 obj
-<< /Length 2279 >>
+<< /Length 2053 >>
 stream
-BT /F2 12 Tf 1 0 0 1 54 738 Tm (Expected Result) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 719 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 697 Tm (1. The unread filter shows only unread notifications.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 679 Tm (2. Tapping an unread notification marks it read.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 661 Tm (3. Mark all clears the remaining unread state.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 643 Tm () Tj ET
-BT /F2 15 Tf 1 0 0 1 54 611 Tm (Scenario 8 - Ride Detail Realtime Update For Ride Join Or Stop) Tj ET
-BT /F2 15 Tf 1 0 0 1 54 593 Tm (Event) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 569 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 539 Tm (Objective) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 520 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 498 Tm (Confirm that ride detail screens receive live updates through the lightweight ride-room) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 484 Tm (channel.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 466 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 436 Tm (Primary Actor) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 417 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 395 Tm (Captain on device 1 and participant on device 2) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 377 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 347 Tm (Preconditions) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 328 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 306 Tm (1. A ride exists that both users can view.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 288 Tm (2. Both users are authenticated.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 270 Tm (3. Both devices open the same ride detail screen.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 252 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 222 Tm (Steps) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 203 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 181 Tm (1. On device 1, open the target ride detail screen and keep it visible.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 163 Tm (2. On device 2, open the same ride detail screen.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 145 Tm (3. Trigger a ride change that should broadcast to subscribers.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 127 Tm (4. If the ride still allows join behavior, complete a join action from device 2.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 109 Tm (5. If stop-management is available instead, request or update a stop from one) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 95 Tm (device.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 77 Tm (6. Observe the ride detail screen on the other device without manually refreshing.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 738 Tm (1. Open Notifications.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 720 Tm (2. Confirm the unread count is visible near the top of the screen.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 702 Tm (3. Switch to the Unread filter.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 684 Tm (4. Tap one unread notification to mark it as read.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 666 Tm (5. Confirm the list and unread count update.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 648 Tm (6. Return to All.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 630 Tm (7. Tap Mark all.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 612 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 582 Tm (Expected Result) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 563 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 541 Tm (1. The unread filter shows only unread notifications.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 523 Tm (2. Tapping an unread notification marks it read.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 505 Tm (3. Mark all clears the remaining unread state.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 487 Tm () Tj ET
+BT /F2 15 Tf 1 0 0 1 54 455 Tm (Scenario 8 - Ride Detail Realtime Update For Ride Join Or Stop) Tj ET
+BT /F2 15 Tf 1 0 0 1 54 437 Tm (Event) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 413 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 383 Tm (Objective) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 364 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 342 Tm (Confirm that ride detail screens receive live updates through the lightweight ride-room) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 328 Tm (channel.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 310 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 280 Tm (Primary Actor) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 261 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 239 Tm (Captain on device 1 and participant on device 2) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 221 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 191 Tm (Preconditions) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 172 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 150 Tm (1. A ride exists that both users can view.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 132 Tm (2. Both users are authenticated.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 114 Tm (3. Both devices open the same ride detail screen.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 96 Tm () Tj ET
 endstream
 endobj
 13 0 obj
-<< /Length 2062 >>
+<< /Length 2282 >>
 stream
-BT /F1 11 Tf 1 0 0 1 54 738 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 708 Tm (Expected Result) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 689 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 667 Tm (1. The second device sees the ride update without requiring a full pull-to-refresh.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 649 Tm (2. The broadcasted change matches the action that just occurred.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 631 Tm (3. Unauthorized users should not be able to receive private ride updates.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 613 Tm () Tj ET
-BT /F2 15 Tf 1 0 0 1 54 581 Tm (Scenario 9 - Start And End A Live Session) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 557 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 527 Tm (Objective) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 508 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 486 Tm (Confirm that a ride captain can start and end a live session and that participants see) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 472 Tm (the session state change.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 454 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 424 Tm (Primary Actor) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 405 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 383 Tm (Ride captain and confirmed participant) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 365 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 335 Tm (Preconditions) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 316 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 294 Tm (1. A ride exists with a captain and a confirmed participant.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 276 Tm (2. Both users can open the same ride detail screen.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 258 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 228 Tm (Steps) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 209 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 187 Tm (1. On the captain device, open ride detail.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 169 Tm (2. Start the live session.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 151 Tm (3. On the participant device, remain on the same ride detail screen.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 133 Tm (4. Confirm the participant sees live-session state information.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 115 Tm (5. End the live session from the captain device.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 97 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 738 Tm (Steps) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 719 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 697 Tm (1. On device 1, open the target ride detail screen and keep it visible.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 679 Tm (2. On device 2, open the same ride detail screen.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 661 Tm (3. Trigger a ride change that should broadcast to subscribers.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 643 Tm (4. If the ride still allows join behavior, complete a join action from device 2.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 625 Tm (5. If stop-management is available instead, request or update a stop from one) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 611 Tm (device.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 593 Tm (6. Observe the ride detail screen on the other device without manually refreshing.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 575 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 545 Tm (Expected Result) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 526 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 504 Tm (1. The second device sees the ride update without requiring a full pull-to-refresh.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 486 Tm (2. The broadcasted change matches the action that just occurred.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 468 Tm (3. Unauthorized users should not be able to receive private ride updates.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 450 Tm () Tj ET
+BT /F2 15 Tf 1 0 0 1 54 418 Tm (Scenario 9 - Start And End A Live Session) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 394 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 364 Tm (Objective) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 345 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 323 Tm (Confirm that a ride captain can start and end a live session and that participants see) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 309 Tm (the session state change.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 291 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 261 Tm (Primary Actor) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 242 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 220 Tm (Ride captain and confirmed participant) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 202 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 172 Tm (Preconditions) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 153 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 131 Tm (1. A ride exists with a captain and a confirmed participant.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 113 Tm (2. Both users can open the same ride detail screen.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 95 Tm () Tj ET
 endstream
 endobj
 14 0 obj
-<< /Length 2132 >>
+<< /Length 2054 >>
 stream
-BT /F2 12 Tf 1 0 0 1 54 738 Tm (Expected Result) Tj ET
+BT /F2 12 Tf 1 0 0 1 54 738 Tm (Steps) Tj ET
 BT /F1 11 Tf 1 0 0 1 54 719 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 697 Tm (1. Starting the session succeeds and reflects in the UI.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 679 Tm (2. The participant sees the live session become active.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 661 Tm (3. Ending the session updates both devices to show the ended state.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 643 Tm () Tj ET
-BT /F2 15 Tf 1 0 0 1 54 611 Tm (Scenario 10 - Report A Live Incident Or SOS) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 587 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 557 Tm (Objective) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 538 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 516 Tm (Confirm that a participant can report an incident and that other session participants) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 502 Tm (see the event.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 484 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 454 Tm (Primary Actor) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 435 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 413 Tm (Confirmed participant reporting to captain) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 395 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 365 Tm (Preconditions) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 346 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 324 Tm (1. Scenario 9 has an active live session.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 306 Tm (2. Both participant and captain remain connected in the same ride.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 288 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 258 Tm (Steps) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 239 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 217 Tm (1. On the participant device, trigger the SOS or incident action from ride detail.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 199 Tm (2. Keep the captain device on the same ride detail screen.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 181 Tm (3. Observe the live session UI on both devices.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 163 Tm () Tj ET
-BT /F2 12 Tf 1 0 0 1 54 133 Tm (Expected Result) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 114 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 92 Tm (1. The participant action succeeds without crashing the session UI.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 74 Tm (2. The captain device receives visible incident state changes.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 697 Tm (1. On the captain device, open ride detail.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 679 Tm (2. Start the live session.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 661 Tm (3. On the participant device, remain on the same ride detail screen.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 643 Tm (4. Confirm the participant sees live-session state information.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 625 Tm (5. End the live session from the captain device.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 607 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 577 Tm (Expected Result) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 558 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 536 Tm (1. Starting the session succeeds and reflects in the UI.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 518 Tm (2. The participant sees the live session become active.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 500 Tm (3. Ending the session updates both devices to show the ended state.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 482 Tm () Tj ET
+BT /F2 15 Tf 1 0 0 1 54 450 Tm (Scenario 10 - Report A Live Incident Or SOS) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 426 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 396 Tm (Objective) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 377 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 355 Tm (Confirm that a participant can report an incident and that other session participants) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 341 Tm (see the event.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 323 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 293 Tm (Primary Actor) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 274 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 252 Tm (Confirmed participant reporting to captain) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 234 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 204 Tm (Preconditions) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 185 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 163 Tm (1. Scenario 9 has an active live session.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 145 Tm (2. Both participant and captain remain connected in the same ride.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 127 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 97 Tm (Steps) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 78 Tm () Tj ET
 endstream
 endobj
 15 0 obj
-<< /Length 1775 >>
+<< /Length 2426 >>
 stream
-BT /F1 11 Tf 1 0 0 1 72 738 Tm (3. The participant remains in the live session after reporting.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 720 Tm () Tj ET
-BT /F2 15 Tf 1 0 0 1 54 688 Tm (Final Sign-Off Checklist) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 664 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 642 Tm (1. All scenarios that are in scope have a pass or fail outcome recorded.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 624 Tm (2. Any failing scenario includes screenshots or notes for reproducibility.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 606 Tm (3. Realtime flows were tested with two concurrent app sessions.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 588 Tm (4. Unsupported provider integrations were not counted as UAT failures.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 570 Tm () Tj ET
-BT /F2 15 Tf 1 0 0 1 54 538 Tm (PDF Export Workflow) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 514 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 492 Tm (Use the local PDF generator script to create a PDF from this source file.) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 474 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 452 Tm (Command:) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 434 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 412 Tm (1. `/opt/homebrew/bin/python3 scripts/generate_pdf.py) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 398 Tm (docs/uat-test-plan-feature-remaining-features.md) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 384 Tm (docs/uat-test-plan-feature-remaining-features.pdf`) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 366 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 54 344 Tm (Notes:) Tj ET
-BT /F1 11 Tf 1 0 0 1 54 326 Tm () Tj ET
-BT /F1 11 Tf 1 0 0 1 72 304 Tm (1. The generator uses only the Python standard library.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 286 Tm (2. Regenerate the PDF whenever this markdown file changes.) Tj ET
-BT /F1 11 Tf 1 0 0 1 72 268 Tm (3. Treat this markdown file as the editable source of truth rather than the PDF.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 738 Tm (1. On the participant device, trigger the SOS or incident action from ride detail.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 720 Tm (2. Keep the captain device on the same ride detail screen.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 702 Tm (3. Observe the live session UI on both devices.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 684 Tm () Tj ET
+BT /F2 12 Tf 1 0 0 1 54 654 Tm (Expected Result) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 635 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 613 Tm (1. The participant action succeeds without crashing the session UI.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 595 Tm (2. The captain device receives visible incident state changes.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 577 Tm (3. The participant remains in the live session after reporting.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 559 Tm () Tj ET
+BT /F2 15 Tf 1 0 0 1 54 527 Tm (Final Sign-Off Checklist) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 503 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 481 Tm (1. All scenarios that are in scope have a pass or fail outcome recorded.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 463 Tm (2. Any failing scenario includes screenshots or notes for reproducibility.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 445 Tm (3. Realtime flows were tested with two concurrent app sessions.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 427 Tm (4. Unsupported provider integrations were not counted as UAT failures.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 409 Tm () Tj ET
+BT /F2 15 Tf 1 0 0 1 54 377 Tm (PDF Export Workflow) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 353 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 331 Tm (Use the local PDF generator script to create a PDF from this source file.) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 313 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 291 Tm (Command:) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 273 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 251 Tm (1. `/opt/homebrew/bin/python3 scripts/generate_pdf.py) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 237 Tm (docs/uat-test-plan-feature-remaining-features.md) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 223 Tm (docs/uat-test-plan-feature-remaining-features.pdf`) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 205 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 54 183 Tm (Notes:) Tj ET
+BT /F1 11 Tf 1 0 0 1 54 165 Tm () Tj ET
+BT /F1 11 Tf 1 0 0 1 72 143 Tm (1. The generator uses only the Python standard library.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 125 Tm (2. Regenerate the PDF whenever this markdown file changes.) Tj ET
+BT /F1 11 Tf 1 0 0 1 72 107 Tm (3. Treat this markdown file as the editable source of truth rather than the PDF.) Tj ET
 endstream
 endobj
 16 0 obj
@@ -531,34 +543,34 @@ xref
 0000000079 00000 n 
 0000000154 00000 n 
 0000002442 00000 n 
-0000004858 00000 n 
-0000006843 00000 n 
-0000008857 00000 n 
-0000010927 00000 n 
-0000012993 00000 n 
-0000014868 00000 n 
-0000016851 00000 n 
-0000018829 00000 n 
-0000021161 00000 n 
-0000023276 00000 n 
-0000025461 00000 n 
-0000027289 00000 n 
-0000027433 00000 n 
-0000027571 00000 n 
-0000027709 00000 n 
-0000027847 00000 n 
-0000027985 00000 n 
-0000028123 00000 n 
-0000028261 00000 n 
-0000028399 00000 n 
-0000028538 00000 n 
-0000028677 00000 n 
-0000028816 00000 n 
-0000028955 00000 n 
-0000029094 00000 n 
-0000029233 00000 n 
+0000005262 00000 n 
+0000007526 00000 n 
+0000009693 00000 n 
+0000011768 00000 n 
+0000013970 00000 n 
+0000015706 00000 n 
+0000017711 00000 n 
+0000019535 00000 n 
+0000021641 00000 n 
+0000023976 00000 n 
+0000026083 00000 n 
+0000028562 00000 n 
+0000028706 00000 n 
+0000028844 00000 n 
+0000028982 00000 n 
+0000029120 00000 n 
+0000029258 00000 n 
+0000029396 00000 n 
+0000029534 00000 n 
+0000029672 00000 n 
+0000029811 00000 n 
+0000029950 00000 n 
+0000030089 00000 n 
+0000030228 00000 n 
+0000030367 00000 n 
+0000030506 00000 n 
 trailer
 << /Size 31 /Root 30 0 R >>
 startxref
-29284
+30557
 %%EOF

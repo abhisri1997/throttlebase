@@ -1,5 +1,7 @@
 # Project Status - ThrottleBase
 
+Last reviewed against the code: 2026-09-28.
+
 ## Closed Beta Scope
 
 The first release is a closed beta: a few riders and riding clubs, installed
@@ -9,8 +11,8 @@ small and the bug count low.
 
 ### In the beta
 
-- Routes: create, bookmark, share.
-- Rides: create, join, schedule, live group session and full-screen
+- Routes: create, bookmark, share, search, save a ride as a route, road feedback.
+- Rides: create, join, schedule, stops, live group session and full-screen
   navigation, per-rider start and finish, ride history.
 - Feed (posts, comments, likes, mentions) and follows with rider profiles.
 - Profile with ride stats only (distance, rides, history).
@@ -19,7 +21,7 @@ small and the bug count low.
 ### Held back behind feature flags (code kept, off by default)
 
 | Feature | Server flag | Client flag |
-|---|---|---|
+| --- | --- | --- |
 | Groups | `FEATURE_GROUPS` | `EXPO_PUBLIC_FEATURE_GROUPS` |
 | Rank (leaderboard, badges, achievements) | `FEATURE_RANK` | `EXPO_PUBLIC_FEATURE_RANK` |
 | Support tickets and admin triage | `FEATURE_SUPPORT` | `EXPO_PUBLIC_FEATURE_SUPPORT` |
@@ -32,89 +34,85 @@ build. Badges keep being awarded meanwhile, so Rank launches with history.
 
 - Passwords and TOTP two-factor: sign-in is passwordless.
 
-### To revisit before or during the beta
+## Current state
 
-- Push notifications: delivery is not working as intended yet, so the beta
-  relies on in-app notifications until push is reworked.
-- Email notifications: still a provider stub.
-- A feedback channel for testers, now that support tickets are hidden.
+### Environments
 
-## Implementation Progress
+| Environment | API | Used by |
+| --- | --- | --- |
+| Production | `https://api.throttlebase.in` | EAS `production` builds |
+| Development | `https://api-dev.throttlebase.in` | EAS `development` and `preview` builds, beta tester APKs |
+| Local | `http://<metro host>:5001` | Dev builds with no `EXPO_PUBLIC_API_URL` |
 
-### Completed
+Both hosted APIs run on Railway and answered `/health` on 2026-09-28. The database is the Supabase project `throttlebase` (`ap-south-1`), the only project on the account; it previously ran on Neon. All 37 migration files are applied there.
 
-- Core backend modules: Auth, Riders, Rides, Routes, Community, Rewards, Notifications, Support, Live Session.
-- Core client experience: auth, tabs, ride/route/detail flows, groups, reviews, follower/following list, notifications center, security modal, and support entry points.
-- Rider support center now includes per-ticket detail opening with support-reply visibility.
-- Rider support tickets now allow follow-up replies and rider-initiated closure from ticket detail.
-- Background jobs foundation with queue + worker runtime.
-- Ride analytics pipeline writing to `ride_history_stats` with enqueue hooks.
-- Passwordless sign-in (Google, Apple, email code), login activity capture, and session management APIs are implemented. Passwords and TOTP two-factor were removed.
-- Session revocation now invalidates existing JWT access through session-bound token checks.
-- Support admin workflow is implemented with admin-only ticket list, status updates, and agent reply support.
-- Mention-triggered notification fanout is implemented for posts and comments.
-- Mention UX now includes composer suggestions, clickable @mention profile links, and mention-notification deep links into post/comment context.
-- Live session lifecycle APIs, realtime gateway, ride-room realtime updates, client room/session integration, and worker-backed notification fanout are implemented.
-- Navigation Phase 1 full-screen experience and stabilization updates.
-- Live navigation now shows peer rider markers and supports tapping a crew member to focus their live location on the map.
-- Ride detail and full-screen navigation maps now render road-following routes in canonical order: current location -> start -> approved stops -> destination, with automatic origin fallback to start when device location is unavailable.
-- Navigation reroute cadence is now throttled to avoid rapid route refetch loops while riding, while preserving movement- and time-based refresh behavior.
-- Navigation polyline rendering is now optimized with adaptive simplification and point-capping to reduce delayed route draw on long rides.
-- Full-screen navigation now auto-reroutes from the rider’s live position when off-route, prefers the fastest ETA among Google Directions alternatives, and falls back to a destination-only detour when the waypoint chain cannot be traversed.
-- Android ride maps are hardened against flicker/crash regressions: ride-detail preview uses lightweight cached rendering, memoized marker data, and reduced rerender pressure, while full-screen navigation keeps stable peer-marker identity with `tracksViewChanges` disabled.
-- Ride-detail Android flicker mitigation now also includes stronger header-map memoization (stable callback + deep prop equality) and paused preview-location sampling after initial origin lock, reducing repeated map repaints on realtime screen updates.
-- Android full-screen navigation now further reduces flicker by throttling camera follow updates with movement/heading thresholds and preferring native pin markers over custom marker views during live location streaming.
-- Keep-awake behavior is now scoped to full-screen navigation only, with guarded activation/deactivation tied to screen focus and active app state to avoid startup keep-awake promise errors.
-- Navigation route fetching is now deduplicated for identical in-flight/recent requests, reducing repeated Directions API work and preview-map rerender churn on Android.
-- Full-screen navigation now avoids mount-time foreground permission prompts and performs passive permission checks only, eliminating ride-detail-style permission-activity remount-loop risk on Android.
-- Client production domain wiring is aligned to `https://throttlebase.in` (share links) and `https://api.throttlebase.in` (API/socket base URL), with local-development fallbacks preserved.
-- Android ride-detail flicker/crash root cause is resolved: mount-time foreground location permission requests no longer reopen `GrantPermissionsActivity` in a remount loop; ride detail now checks permission passively and keeps socket listener attachment idempotent.
-- Android release/prebuild stability is now persistent: Expo config plugin `client/plugins/with-android-jdk17.js` restores `org.gradle.java.home` to Temurin JDK 17 during every Android prebuild, preventing `com.facebook.react.settings` plugin resolution failures when the machine default JDK is Java 26.
-- API security baseline hardened: Express fingerprint header removed, strict CORS allowlist added for HTTP + Socket.IO, and browser-facing security headers are now enforced.
-- Production API docs exposure hardened: `/api-docs` is disabled by default in production and can be enabled intentionally with basic-auth protection.
-- Rewards mutation authorization tightened: badge creation, badge awarding, and achievement creation are now admin-only at route middleware level.
-- Security hardening follow-up completed: Swagger/docs endpoints now fail closed by default unless explicitly enabled via `ENABLE_SWAGGER_DOCS=true`; blocked origins return generic `403` JSON (no stack/path leak), and HTTPS requests now always receive HSTS from app middleware.
-- Security hardening second pass completed: API root no longer serves/redirects docs in app routing, Swagger basic-auth checks are env-agnostic (no `NODE_ENV` bypass), explicit `/openapi.json` and `/swagger.json` controls were added, and `Cross-Origin-Embedder-Policy` now accompanies COOP/CORP headers.
+### Done
 
-### In Progress
+- Passwordless auth on ports and adapters: Google, Apple (ready, off until configured), email code; rotating refresh-token families; JWKS; consent capture; role table.
+- Rides end to end: planning from a saved route, stop suggestions, roll call and roll-out, per-rider start/arrive/finish/resume, auto-finish and idle end, regroup, incidents.
+- Tracking: background tracker on any screen, motion readings with each fix, server-side sample throttling, stale/future/out-of-order fix rejection.
+- Ride stats from riding only: stop and jam detection, motion-aware; sparse tracks no longer count as riding (PR #43).
+- Routes: search by place in either direction, save a ride as a route, highlights, road feedback.
+- Full-screen navigation: guidance, reroute and detour, crew focus, Android stability fixes, dev GPS simulator.
+- Maps proxy: all Google calls server-side with rate limits and daily ceilings.
+- Security baseline: CORS allowlist, headers, Swagger fail-closed, admin-gated rewards writes.
 
-- Reliability hardening around live-session reconnect behavior and operational tuning.
-- Push/email notification provider integration and device-token registration.
+### In progress
 
-## Known Gaps
+- First real-world ride on a physical phone to prove per-rider progress and motion-based stop detection end to end.
+- Live-session reliability: reconnect after token refresh, background/resume.
+
+## Known gaps
+
+### Security and data
+
+- **RLS is not enforced.** The API connects to Supabase as `postgres` (BYPASSRLS); `throttlebase_app` and `throttlebase_migrator` are `NOLOGIN`. Legacy services don't set `app.rider_id`, so switching roles today would break settings, preferences and other per-rider tables. Needed: move services onto `withRiderTransaction`, set role passwords, point `DATABASE_URL` at `throttlebase_app` and `MIGRATION_DATABASE_URL` at `throttlebase_migrator`.
+- Transitional (allow-all) RLS policies remain on ride, route, live, social, support and rewards tables.
+- Leaderboard ignores `rider_privacy_settings.leaderboard_opt_in`.
 
 ### Backend
 
-- Push notification (FCM/APNs) and email delivery processors are still provider stubs.
-- Rider notification on admin ticket updates is not yet automated.
+- Push (FCM/APNs) and email notification processors are stubs; no device-token registration.
+- Worker changes (auto-finish, idle end) are not pushed over sockets; clients see them on their next poll.
+- Single API instance only: sampling state is in memory and Socket.IO has no shared adapter.
+- `gps_traces` and `/api/routes/traces` are unused legacy paths.
+- `ride_history_stats` elevation and calorie columns are never filled.
+- Riders are not notified when an admin updates their support ticket.
 
 ### Client
 
-- Some advanced live session operational UX is still pending broader QA hardening.
-- Push-device registration UX and delivery verification are not yet present.
+- `GET /api/riders/me` still returns `is_admin` via a JSON fallback on a dropped column, so it is always `false`. The settings screen uses it to show "Admin - Manage Tickets", so admins never see that entry. It should read roles instead (support is flagged off for the beta).
+- The `/live` socket reconnects with the token it was given at `connect()`. After the access token expires, Socket.IO's automatic reconnect uses the stale token until the app calls `connect()` again with a fresh one.
+- Two HTTP clients coexist (fetch adapter and legacy axios).
+- `app/ride/[id].tsx` (~2,560 lines) and `app/ride/[id]/navigation.tsx` (~980 lines) are due to be split.
+- No feedback channel for testers while support is hidden.
 
-## Prioritized Backlog
+## Prioritized backlog
 
-## P0 (Now)
+### P0 — beta readiness
 
-1. Keep live session reliability and contract consistency stable as usage expands.
-2. Close high-value UX and API parity gaps that affect core ride/community flows.
+1. Real-phone ride validation of per-rider progress, motion readings and stop markers.
+2. Live socket reconnect with a refreshed token.
+3. Tester feedback channel.
 
-## P1 (Security and Delivery)
+### P1 — security and delivery
 
-1. Integrate real push/email providers and add rider device registration.
-2. Add rider-facing updates when support tickets are changed by admins.
-3. Expand test coverage for session revocation edge-cases.
+1. Enforce RLS: services on `withRiderTransaction`, API on `throttlebase_app`, then replace transitional policies.
+2. Real push and email providers with device registration.
+3. Fix admin detection on the client (roles instead of `is_admin`).
+4. Honour `leaderboard_opt_in` before Rank launches.
 
-## P2 (Scale and Evolution)
+### P2 — scale and cleanup
 
-1. Improve async idempotency/retry behavior and observability coverage.
-2. Expand realtime channels for additional ride events beyond live sessions.
-3. Evaluate migration from raw SQL layer to Drizzle ORM or Prisma after feature stabilization.
+1. Socket.IO shared adapter and shared sampling state for more than one API instance; let the worker publish socket events.
+2. Retire `gps_traces`, the axios client and the remaining legacy vendor zone.
+3. Split the large ride-detail and navigation screens.
 
-## Validation Checklist (Per Milestone)
+## Validation checklist (per milestone)
 
-1. API contracts are represented in Swagger and match runtime behavior.
-2. Permission boundaries are covered by integration tests.
-3. Mobile screens remain functional on both iOS and Android paths.
-4. Worker/queue flows are validated for retries and duplicate execution safety.
+1. `npm run typecheck`, `npm run test:unit` and `npm run lint:boundaries` pass in `server/`; `npm test` and `npx tsc --noEmit` pass in `client/`.
+2. Migration integration tests pass against a throwaway PostGIS database.
+3. Permission boundaries have tests.
+4. Both iOS and Android paths work on a device.
+5. Queue flows are safe to retry and to run twice.
+6. `docs/` and `ai-assistant.md` match the change.
