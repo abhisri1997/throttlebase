@@ -4,7 +4,7 @@
  * while its owner walks is never a top speed.
  */
 import { MAX_PLAUSIBLE_SPEED_MPS, type TrackSample } from "../../utils/track.js";
-import { segmentRide } from "./segmentRide.js";
+import { segmentRide, type PlannedStopPoint } from "./segmentRide.js";
 
 export interface RidingStats {
   distanceKm: number;
@@ -12,6 +12,42 @@ export interface RidingStats {
   avgSpeedKmh: number;
   maxSpeedKmh: number;
 }
+
+export interface RidingSummary {
+  ridingTimeS: number;
+  ridingDistanceM: number;
+  /** Time at stops, off the bike or beside it; traffic and signals are riding. */
+  stoppedS: number;
+  stops: {
+    startedAtMs: number;
+    endedAtMs: number;
+    durationS: number;
+    walkedAway: boolean;
+    /** At one of the ride's planned stops. */
+    planned: boolean;
+  }[];
+}
+
+/** How a rider's ride went: "Riding 26 min · Stopped 13 min", and each stop. */
+export const ridingSummary = (
+  samples: readonly TrackSample[],
+  plannedStops: readonly PlannedStopPoint[] = [],
+): RidingSummary => {
+  const ride = segmentRide(samples, plannedStops);
+  const stops = ride.stops.map((stop) => ({
+    startedAtMs: stop.startedAtMs,
+    endedAtMs: stop.endedAtMs,
+    durationS: stop.durationS,
+    walkedAway: stop.walkedAway,
+    planned: stop.plannedStopId !== null,
+  }));
+  return {
+    ridingTimeS: ride.ridingTimeS,
+    ridingDistanceM: ride.ridingDistanceM,
+    stoppedS: stops.reduce((total, stop) => total + stop.durationS, 0),
+    stops,
+  };
+};
 
 const MAX_PLAUSIBLE_KMH = MAX_PLAUSIBLE_SPEED_MPS * 3.6;
 

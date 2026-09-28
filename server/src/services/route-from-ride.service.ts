@@ -8,10 +8,12 @@
 import pool, { query } from "../config/db.js";
 import { routeFromTrack } from "../core/routes/routeFromTrack.js";
 import {
-  buildRouteStops,
-  placeAtParking,
+  keptRouteStops,
+  stopChoices,
+  type KeptStop,
   type RideStopForRoute,
   type RouteStopDraft,
+  type StopChoice,
 } from "../core/routes/routeStops.js";
 import type { SaveRouteFromRideInput } from "../schemas/route.schemas.js";
 import { reverseGeocodeArea } from "./maps.service.js";
@@ -24,7 +26,7 @@ type LatLngPoint = { lat: number; lng: number };
 
 /** Highlights and stop notes are optional; everything else is required. */
 export type SaveRouteFromRideRequest = Pick<SaveRouteFromRideInput, "title" | "visibility"> &
-  Partial<Pick<SaveRouteFromRideInput, "highlights" | "stop_notes">>;
+  Partial<Pick<SaveRouteFromRideInput, "highlights" | "stop_notes" | "stops">>;
 
 export interface SaveRouteFromRideDeps {
   /**
@@ -122,7 +124,8 @@ interface PreparedRoute {
   end: LatLngPoint;
   startName: string | null;
   endName: string | null;
-  stops: RouteStopDraft[];
+  /** Every stop the saver can keep: planned ones ridden past or skipped, and ones they found. */
+  choices: StopChoice[];
 }
 
 interface SavableRide {
@@ -145,11 +148,32 @@ const assertSavable = async (rideId: string, riderId: string): Promise<SavableRi
   return { start_point_name: ride.start_point_name ?? null, end_point_name: ride.end_point_name ?? null };
 };
 
+/** A stop the rider found is named by its area, like the route's ends. */
+const nameFoundStops = (
+  choices: readonly StopChoice[],
+  nameArea: (point: LatLngPoint) => Promise<string | null>,
+): Promise<StopChoice[]> =>
+  Promise.all(
+    choices.map(async (choice) =>
+      choice.kind === "discovered" ? { ...choice, name: await nameOrNull(nameArea, choice) } : choice,
+    ),
+  );
+
+/** What older apps ask for: the planned stops ridden past, with their notes. */
+const plannedStopsRiddenPast = (
+  choices: readonly StopChoice[],
+  noteFor: (choice: StopChoice) => string | null | undefined,
+): Map<string, KeptStop> =>
+  new Map(
+    choices
+      .filter((choice) => choice.kind === "planned" && choice.status === "visited")
+      .map((choice) => [choice.key, { note: noteFor(choice) ?? null }]),
+  );
+
 const prepareRoute = async (
   rideId: string,
   riderId: string,
   ride: SavableRide,
-  notes: SaveRouteFromRideRequest["stop_notes"],
   deps: SaveRouteFromRideDeps,
 ): Promise<PreparedRoute> => {
   const [sessionResult, plannedStops] = await Promise.all([
@@ -169,10 +193,18 @@ const prepareRoute = async (
   const start = { lat: startLat, lng: startLng };
   const end = { lat: endLat, lng: endLng };
   const nameArea = deps.nameArea ?? noAreaName;
+  const choices = stopChoices({
+    coordinates: geometry.coordinates,
+    routeDistanceKm: geometry.distanceKm,
+    plannedStops,
+    rideStops: geometry.stops,
+  });
   // Named before any transaction, so no Google call holds a database connection.
-  const [startArea, endArea] = await Promise.all([nameOrNull(nameArea, start), nameOrNull(nameArea, end)]);
-  // A stop the rider got off at sits where the bike was parked.
-  const rideStops = placeAtParking(plannedStops, geometry.stops);
+  const [startArea, endArea, namedChoices] = await Promise.all([
+    nameOrNull(nameArea, start),
+    nameOrNull(nameArea, end),
+    nameFoundStops(choices, nameArea),
+  ]);
 
   return {
     geometry,
@@ -180,14 +212,36 @@ const prepareRoute = async (
     end,
     startName: startArea ?? ride.start_point_name,
     endName: endArea ?? ride.end_point_name,
-    stops: buildRouteStops({
-      coordinates: geometry.coordinates,
-      routeDistanceKm: geometry.distanceKm,
-      rideStops,
-      notesByRideStopId: new Map((notes ?? []).map((entry) => [entry.ride_stop_id, entry.note])),
-    }),
+    choices: namedChoices,
   };
 };
+
+/** A stop as the save sheet lists it. */
+export interface RouteStopChoice {
+  key: string;
+  kind: StopChoice["kind"];
+  status: StopChoice["status"];
+  ride_stop_id: string | null;
+  name: string | null;
+  distance_from_start_km: number | null;
+  /** How long the rider was off the bike there, when they got off. */
+  stopped_s: number | null;
+  walked_away: boolean;
+  /** Ticked to start with. */
+  suggested: boolean;
+}
+
+const toStopChoice = (choice: StopChoice): RouteStopChoice => ({
+  key: choice.key,
+  kind: choice.kind,
+  status: choice.status,
+  ride_stop_id: choice.rideStopId,
+  name: choice.name,
+  distance_from_start_km: choice.distanceFromStartKm,
+  stopped_s: choice.stoppedS,
+  walked_away: choice.walkedAway,
+  suggested: choice.suggested,
+});
 
 export interface RoutePreview {
   /** Set when this rider already saved this ride; open that route instead. */
@@ -196,8 +250,10 @@ export interface RoutePreview {
   end_name: string | null;
   distance_km: number;
   duration_s: number;
-  /** The stops the route would keep, for the saver to add notes to. */
+  /** The planned stops ridden past, as older apps list them. */
   stops: { ride_stop_id: string; name: string | null; distance_from_start_km: number }[];
+  /** Every stop the saver can keep, in road order, skipped stops last. */
+  stop_choices: RouteStopChoice[];
 }
 
 /** What saving this ride would produce, for the save sheet. Writes nothing. */
@@ -217,21 +273,25 @@ export const previewRouteFromRide = async (
       distance_km: Number(existing.distance_km ?? 0),
       duration_s: Number(existing.ridden_duration_s ?? 0),
       stops: [],
+      stop_choices: [],
     };
   }
 
-  const prepared = await prepareRoute(rideId, riderId, ride, [], deps);
+  const prepared = await prepareRoute(rideId, riderId, ride, deps);
   return {
     saved_route_id: null,
     start_name: prepared.startName,
     end_name: prepared.endName,
     distance_km: prepared.geometry.distanceKm,
     duration_s: prepared.geometry.durationS,
-    stops: prepared.stops.map((stop) => ({
-      ride_stop_id: stop.rideStopId,
-      name: stop.name,
-      distance_from_start_km: stop.distanceFromStartKm,
-    })),
+    stops: prepared.choices
+      .filter((choice) => choice.kind === "planned" && choice.status === "visited")
+      .map((choice) => ({
+        ride_stop_id: choice.rideStopId!,
+        name: choice.name,
+        distance_from_start_km: choice.distanceFromStartKm!,
+      })),
+    stop_choices: prepared.choices.map(toStopChoice),
   };
 };
 
@@ -265,7 +325,6 @@ export const rebuildRouteFromRide = async (
       String(row.ride_id),
       String(row.creator_id),
       { start_point_name: row.start_name ?? null, end_point_name: row.end_name ?? null },
-      [],
       {},
     );
   } catch (error) {
@@ -276,7 +335,11 @@ export const rebuildRouteFromRide = async (
   // Stops come from the same ride stops, so a note finds its stop by name.
   const noteRows = await query(`SELECT name, note FROM route_stops WHERE route_id = $1 AND note IS NOT NULL`, [routeId]);
   const notesByName = new Map<string, string>(noteRows.rows.map((note) => [String(note.name), String(note.note)]));
-  const stops = prepared.stops.map((stop) => ({ ...stop, note: (stop.name && notesByName.get(stop.name)) || null }));
+  // Rebuilt without the rider to ask, so stops they found stay off, as they were.
+  const stops = keptRouteStops(
+    prepared.choices,
+    plannedStopsRiddenPast(prepared.choices, (choice) => (choice.name ? notesByName.get(choice.name) : null)),
+  );
   const rebuild: RouteRebuild = {
     routeId,
     before: { distanceKm: Number(row.distance_km ?? 0), durationS: Number(row.ridden_duration_s ?? 0) },
@@ -328,13 +391,12 @@ export const saveRouteFromRide = async (
   const existing = await findSavedRoute(rideId, riderId);
   if (existing) return { route: existing, created: false };
 
-  const { geometry, start, end, startName, endName, stops } = await prepareRoute(
-    rideId,
-    riderId,
-    ride,
-    input.stop_notes,
-    deps,
-  );
+  const { geometry, start, end, startName, endName, choices } = await prepareRoute(rideId, riderId, ride, deps);
+  const notesByRideStopId = new Map((input.stop_notes ?? []).map((entry) => [entry.ride_stop_id, entry.note]));
+  const kept = input.stops
+    ? new Map<string, KeptStop>(input.stops.map((stop) => [stop.key, { note: stop.note ?? null, name: stop.name ?? null }]))
+    : plannedStopsRiddenPast(choices, (choice) => notesByRideStopId.get(choice.rideStopId ?? ""));
+  const stops: RouteStopDraft[] = keptRouteStops(choices, kept);
 
   let createdRouteId: string | undefined;
   const client = await pool.connect();

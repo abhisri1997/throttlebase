@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildRouteStops, placeAtParking, type RideStopForRoute } from "./routeStops.js";
+import { keptRouteStops, placeAtParking, stopChoices, type RideStopForRoute } from "./routeStops.js";
+import type { RideStop } from "../ride-progress/segmentRide.js";
 
 /** A straight route due north, ~11.1 km per 0.1° of latitude. */
 const LINE: [number, number][] = [
@@ -16,62 +17,105 @@ const stop = (id: string, lat: number, lng = 77.6, name: string | null = `Stop $
   lng,
 });
 
-test("stops keep the ride's order and get their distance along the route", () => {
-  const stops = buildRouteStops({
-    coordinates: LINE,
-    routeDistanceKm: 22.24,
-    rideStops: [stop("a", 12.95), stop("b", 13.05)],
-    notesByRideStopId: new Map(),
-  });
+const rideStop = (overrides: Partial<RideStop> & Pick<RideStop, "parkedAt">): RideStop => ({
+  startedAtMs: Date.UTC(2026, 8, 25, 14, 53),
+  endedAtMs: Date.UTC(2026, 8, 25, 15, 6),
+  durationS: 780,
+  farthestM: 310,
+  walkedAway: true,
+  plannedStopId: null,
+  ...overrides,
+});
+
+const choose = (plannedStops: RideStopForRoute[], rideStops: RideStop[] = [], routeDistanceKm = 22.24) =>
+  stopChoices({ coordinates: LINE, routeDistanceKm, plannedStops, rideStops });
+
+test("planned stops on the way are listed in road order, measured along the route, and ticked", () => {
+  const choices = choose([stop("b", 13.05), stop("a", 12.95)]);
 
   assert.deepEqual(
-    stops.map((s) => [s.position, s.name, s.rideStopId]),
+    choices.map((c) => [c.key, c.kind, c.status, c.suggested]),
     [
-      [1, "Stop a", "a"],
-      [2, "Stop b", "b"],
+      ["planned:a", "planned", "visited", true],
+      ["planned:b", "planned", "visited", true],
     ],
   );
-  assert.ok(Math.abs(stops[0]!.distanceFromStartKm - 5.56) < 0.05, `${stops[0]!.distanceFromStartKm}`);
-  assert.ok(Math.abs(stops[1]!.distanceFromStartKm - 16.68) < 0.05, `${stops[1]!.distanceFromStartKm}`);
+  assert.ok(Math.abs(choices[0]!.distanceFromStartKm! - 5.56) < 0.05, `${choices[0]!.distanceFromStartKm}`);
+  assert.ok(Math.abs(choices[1]!.distanceFromStartKm! - 16.68) < 0.05, `${choices[1]!.distanceFromStartKm}`);
 });
 
 test("distances are scaled to the route's real length, not the simplified line", () => {
   // The simplified line is ~22.24 km; the road actually ridden was 30 km.
-  const [only] = buildRouteStops({
-    coordinates: LINE,
-    routeDistanceKm: 30,
-    rideStops: [stop("a", 13.0)],
-    notesByRideStopId: new Map(),
-  });
+  const [only] = choose([stop("a", 13.0)], [], 30);
 
-  assert.ok(Math.abs(only!.distanceFromStartKm - 15) < 0.05, `${only!.distanceFromStartKm}`);
+  assert.ok(Math.abs(only!.distanceFromStartKm! - 15) < 0.05, `${only!.distanceFromStartKm}`);
 });
 
-test("a planned stop the rider never went near is left out", () => {
-  const stops = buildRouteStops({
-    coordinates: LINE,
-    routeDistanceKm: 22.24,
-    // ~5.4 km east of the line.
-    rideStops: [stop("a", 12.95), stop("far", 13.0, 77.65)],
-    notesByRideStopId: new Map(),
-  });
+test("a planned stop the rider never went near is listed as skipped, last, and can't be kept", () => {
+  // ~5.4 km east of the line.
+  const choices = choose([stop("far", 13.0, 77.65), stop("a", 12.95)]);
 
-  assert.deepEqual(stops.map((s) => s.name), ["Stop a"]);
+  assert.deepEqual(
+    choices.map((c) => [c.key, c.status, c.suggested, c.distanceFromStartKm]),
+    [
+      ["planned:a", "visited", true, choices[0]!.distanceFromStartKm],
+      ["planned:far", "skipped", false, null],
+    ],
+  );
 });
 
-test("notes attach to their stop, trimmed, and a blank note is no note", () => {
-  const stops = buildRouteStops({
-    coordinates: LINE,
-    routeDistanceKm: 22.24,
-    rideStops: [stop("a", 12.95), stop("b", 13.05)],
-    notesByRideStopId: new Map([
-      ["a", "  Last fuel for 60 km  "],
-      ["b", "   "],
+test("a planned stop the rider got off at sits where the bike was, with how long they stopped", () => {
+  const gate = { lat: 12.95, lng: 77.6005 };
+
+  const [infosys] = choose([stop("infosys", 12.95, 77.603)], [rideStop({ parkedAt: gate, plannedStopId: "infosys" })]);
+
+  assert.equal(infosys!.lat, gate.lat);
+  assert.equal(infosys!.lng, gate.lng);
+  assert.equal(infosys!.stoppedS, 780);
+  assert.equal(infosys!.walkedAway, true);
+});
+
+test("a stop the rider found is listed where it fell, ticked if they walked off", () => {
+  const temple = rideStop({ parkedAt: { lat: 13.0, lng: 77.6 }, startedAtMs: 1_000 });
+  const stretch = rideStop({ parkedAt: { lat: 13.08, lng: 77.6 }, startedAtMs: 2_000, walkedAway: false, farthestM: 10 });
+
+  const choices = choose([stop("a", 12.95)], [stretch, temple]);
+
+  assert.deepEqual(
+    choices.map((c) => [c.key, c.kind, c.status, c.suggested, c.name]),
+    [
+      ["planned:a", "planned", "visited", true, "Stop a"],
+      ["found:1000", "discovered", "found", true, null],
+      ["found:2000", "discovered", "found", false, null],
+    ],
+    "the stop beside the bike (a stretch, a standstill) is the rider's call",
+  );
+});
+
+test("the route keeps only the stops the rider kept, with their notes and names", () => {
+  const choices = choose([stop("a", 12.95), stop("b", 13.05)], [rideStop({ parkedAt: { lat: 13.0, lng: 77.6 }, startedAtMs: 1_000 })]);
+
+  const kept = keptRouteStops(
+    choices,
+    new Map([
+      ["planned:a", { note: "  Last fuel for 60 km  " }],
+      ["found:1000", { name: "  Hilltop temple  ", note: "   " }],
     ]),
-  });
+  );
 
-  assert.equal(stops[0]!.note, "Last fuel for 60 km");
-  assert.equal(stops[1]!.note, null);
+  assert.deepEqual(
+    kept.map((s) => [s.position, s.key, s.name, s.note]),
+    [
+      [1, "planned:a", "Stop a", "Last fuel for 60 km"],
+      [2, "found:1000", "Hilltop temple", null],
+    ],
+  );
+});
+
+test("a skipped stop is never kept, even if asked", () => {
+  const choices = choose([stop("far", 13.0, 77.65)]);
+
+  assert.deepEqual(keptRouteStops(choices, new Map([["planned:far", {}]])), []);
 });
 
 test("a planned stop the rider parked for sits where the bike was, not where they walked to", () => {
