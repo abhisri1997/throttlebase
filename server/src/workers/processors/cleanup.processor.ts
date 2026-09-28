@@ -1,12 +1,17 @@
 /**
  * Cleanup Processor
  *
- * Handles `cleanup.expired_sessions` jobs:
- *   1. Purge expired or revoked auth sessions from the `sessions` table.
- *   2. Hard-delete riders whose `deleted_at` is more than 30 days ago
- *      (soft-deleted past the grace period).
+ * Handles `cleanup.expired_sessions` jobs: purges expired or revoked auth
+ * sessions from the `sessions` table.
  *
- * Safe to run as a recurring job (idempotent DELETEs).
+ * It never deletes riders. Deleting an account anonymises the rider row and
+ * keeps it (core/riders/deleteAccount.ts), because other riders' records
+ * point at it: rides.captain_id is ON DELETE CASCADE, so removing the row
+ * would take every ride the rider captained with it, along with the other
+ * riders' participation, tracks and stats. Removing a leaving rider's own
+ * data is a separate, explicit purge (docs/launch-readiness/plans/account-deletion.md).
+ *
+ * Safe to run as a recurring job (idempotent DELETE).
  */
 
 import { query } from "../../config/db.js";
@@ -20,29 +25,14 @@ const purgeExpiredSessions = async (): Promise<number> => {
   return result.rowCount ?? 0;
 };
 
-const purgeGracePeriodExpiredRiders = async (): Promise<number> => {
-  // Hard-delete riders whose soft-delete grace period (30 days) has elapsed.
-  // Cascade constraints on child tables handle associated data cleanup.
-  const result = await query(
-    `DELETE FROM riders
-     WHERE deleted_at IS NOT NULL
-       AND deleted_at < now() - interval '30 days'`,
-  );
-  return result.rowCount ?? 0;
-};
-
 export const processCleanupExpiredSessions = async (
   _payload: Record<string, unknown>,
 ): Promise<Record<string, unknown>> => {
-  const [sessionsDeleted, ridersDeleted] = await Promise.all([
-    purgeExpiredSessions(),
-    purgeGracePeriodExpiredRiders(),
-  ]);
+  const sessionsDeleted = await purgeExpiredSessions();
 
   return {
     processor: "cleanup-expired-sessions",
     sessionsDeleted,
-    ridersDeleted,
     handledAt: new Date().toISOString(),
   };
 };
