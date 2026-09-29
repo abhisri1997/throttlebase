@@ -21,6 +21,7 @@ if (CONNECTION) {
 
 const db = CONNECTION ? await import("../../config/db.js") : null;
 const rides = CONNECTION ? await import("../../services/ride.service.js") : null;
+const join = CONNECTION ? await import("../../services/ride-join.service.js") : null;
 const community = CONNECTION ? await import("../../services/community.service.js") : null;
 const feedback = CONNECTION ? await import("../../services/road-feedback.service.js") : null;
 const routes = CONNECTION ? await import("../../services/route.service.js") : null;
@@ -176,7 +177,7 @@ test("a deleted rider disappears from routes, rides, reviews, groups and road fe
   await t.test("a ride led by a deleted rider can't be opened or joined by its ID by anyone new", async () => {
     assert.equal(await rides!.getRideById(goneRide, ASHA), null);
     assert.notEqual(await rides!.getRideById(goneRide, BALA), null);
-    await assert.rejects(rides!.joinRide(goneRide, ASHA), /Ride not found/);
+    await assert.rejects(join!.joinOrRequestRide(goneRide, ASHA), /Ride not found/);
   });
 
   await t.test("the deleted rider's start point no longer shapes the meeting point", async () => {

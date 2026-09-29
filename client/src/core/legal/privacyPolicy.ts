@@ -68,7 +68,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         list(
           "Your profile (name, username, photo, bio, city, experience and ride totals) and your follower counts are visible to other signed-in riders. Your email address and phone number never are.",
           "Posts, comments, likes, ride reviews and road feedback are visible to other signed-in riders.",
-          "Rides are public by default: signed-in riders can see the ride, its plan and who has joined. A private ride is visible only to the riders on it.",
+          "Rides are public by default: signed-in riders can see the ride, its plan and who has joined. For a ride that needs approval, other signed-in riders see only its title, date, length, captain and number of riders; its meeting point, route and who has joined are shown only to riders the captain or a co-captain accepts. When you ask to join such a ride, its captain and co-captains see your name.",
           "Routes are private by default. You can share a route with specific riders or make it public, which lets every signed-in rider see and follow it.",
           "Your ride history is shown on your profile according to the privacy setting you choose in Settings.",
         ),

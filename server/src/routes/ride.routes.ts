@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth.middleware.js";
 import * as rideController from "../controllers/ride.controller.js";
+import * as rideJoinController from "../controllers/ride-join.controller.js";
 import * as liveSessionController from "../controllers/live-session.controller.js";
 import * as rideProgressController from "../controllers/ride-progress.controller.js";
 import * as roadFeedbackController from "../controllers/road-feedback.controller.js";
@@ -140,6 +141,12 @@ router.post("/", authenticate, rideController.createRide);
  * /api/rides/{id}:
  *   get:
  *     summary: Get ride details with captain info, participants, and stops
+ *     description: >
+ *       A rider not on a ride that needs approval gets a preview instead
+ *       (is_preview true): title, date, duration, captain, seats and their
+ *       own request (my_request), never the meeting point, route, stops,
+ *       description or riders. The captain and co-captains also get the
+ *       requests waiting (join_requests).
  *     tags: [Rides]
  *     security:
  *       - bearerAuth: []
@@ -152,7 +159,7 @@ router.post("/", authenticate, rideController.createRide);
  *           format: uuid
  *     responses:
  *       200:
- *         description: Full ride details
+ *         description: Full ride details, or a preview
  *       404:
  *         description: Ride not found
  *   patch:
@@ -225,7 +232,49 @@ router.delete("/:id", authenticate, rideController.deleteRide);
  * @swagger
  * /api/rides/{id}/join:
  *   post:
- *     summary: Join a ride as a participant (enforces max capacity)
+ *     summary: Join a public ride, or ask to join a ride that needs approval
+ *     description: >
+ *       A public ride is joined at once (enforcing max capacity). A ride that
+ *       needs approval (visibility "private") records a request instead; the
+ *       captain or a co-captain accepts or declines it. A rider declined twice
+ *       can't ask again. A rider who left can join or ask again.
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               location_coords:
+ *                 type: array
+ *                 description: Where the rider will ride from, [longitude, latitude]
+ *                 items:
+ *                   type: number
+ *                 minItems: 2
+ *                 maxItems: 2
+ *     responses:
+ *       200:
+ *         description: Joined (outcome "joined") or request sent (outcome "requested")
+ *       400:
+ *         description: Already a participant, ride is full, the ride isn't open, or invalid input
+ *       403:
+ *         description: Declined twice; the rider can't ask again
+ *       404:
+ *         description: Ride not found
+ *       409:
+ *         description: A request is already waiting
+ *   delete:
+ *     summary: Withdraw a waiting request to join
  *     tags: [Rides]
  *     security:
  *       - bearerAuth: []
@@ -238,13 +287,59 @@ router.delete("/:id", authenticate, rideController.deleteRide);
  *           format: uuid
  *     responses:
  *       200:
- *         description: Successfully joined the ride
- *       400:
- *         description: Already a participant, ride is full, or the ride is completed or cancelled
+ *         description: Request withdrawn
  *       404:
- *         description: Ride not found
+ *         description: No waiting request
  */
-router.post("/:id/join", authenticate, rideController.joinRide);
+router.post("/:id/join", authenticate, rideJoinController.joinRide);
+router.delete("/:id/join", authenticate, rideJoinController.cancelJoinRequest);
+
+/**
+ * @swagger
+ * /api/rides/{id}/requests/{riderId}:
+ *   post:
+ *     summary: Accept or decline a request to join (captain/co-captain only)
+ *     description: >
+ *       Accepting puts the rider on the ride, and is refused when the ride is
+ *       full. Declining lets the rider ask once more; a second decline is final.
+ *       The rider is notified either way.
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: path
+ *         name: riderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [accept]
+ *             properties:
+ *               accept:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Rider accepted, or request declined
+ *       400:
+ *         description: The ride is full or isn't open, or invalid input
+ *       403:
+ *         description: Not the captain or a co-captain
+ *       404:
+ *         description: Ride not found, or no waiting request from that rider
+ */
+router.post("/:id/requests/:riderId", authenticate, rideJoinController.answerJoinRequest);
 
 /**
  * @swagger
@@ -821,7 +916,7 @@ router.post("/:id/captain", authenticate, rideController.passCaptaincy);
  * @swagger
  * /api/rides/{id}/stops:
  *   get:
- *     summary: List all stops for a ride
+ *     summary: List all stops for a ride (riders who may see the ride)
  *     tags: [Rides]
  *     security:
  *       - bearerAuth: []
@@ -835,6 +930,8 @@ router.post("/:id/captain", authenticate, rideController.passCaptaincy);
  *     responses:
  *       200:
  *         description: Array of ride stops
+ *       404:
+ *         description: Ride not found, or the rider isn't on a ride that needs approval
  *   post:
  *     summary: Request a stop on a ride (any participant)
  *     tags: [Rides]

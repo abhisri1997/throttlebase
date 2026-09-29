@@ -789,10 +789,11 @@ function CreateRideForm({ plan }: { plan: RoutePlan | null }) {
               className='font-bold text-lg mb-1'
               style={{ color: colors.text }}
             >
-              Private Ride
+              Approval needed
             </Text>
             <Text className='text-xs' style={{ color: colors.textMuted }}>
-              If enabled, this ride will not appear on the Discover tab.
+              Anyone can find this ride. You or a co-captain accept each rider,
+              and they see the meeting point and route once accepted.
             </Text>
           </View>
           <Switch

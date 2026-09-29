@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import { Calendar, Users, MapPin, Gauge } from 'lucide-react-native';
+import { Calendar, Users, MapPin, Gauge, Lock } from 'lucide-react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { formatDuration } from '../features/navigation/core/format';
 
@@ -19,6 +19,9 @@ interface RideCardProps {
     start_point_name?: string | null;
     end_point_name?: string | null;
     stop_count?: number | null;
+    visibility?: string;
+    /** Only a preview: a ride that needs approval, and the rider isn't on it. */
+    is_preview?: boolean;
   };
   onPress?: () => void;
 }
@@ -49,8 +52,15 @@ export const RideCard = ({ ride, onPress }: RideCardProps) => {
         <Text className="flex-1 text-xl font-bold mr-2" style={{ color: colors.text }} numberOfLines={1}>
           {ride.title}
         </Text>
-        <View className="bg-primary-500/20 px-3 py-1 rounded-full">
-          <Text className="text-primary-500 text-xs font-bold uppercase">{ride.status}</Text>
+        <View className="flex-row items-center">
+          {ride.visibility === 'private' ? (
+            <View accessibilityLabel="Approval needed" className="mr-2">
+              <Lock color={colors.textMuted} size={16} />
+            </View>
+          ) : null}
+          <View className="bg-primary-500/20 px-3 py-1 rounded-full">
+            <Text className="text-primary-500 text-xs font-bold uppercase">{ride.status}</Text>
+          </View>
         </View>
       </View>
 
@@ -74,12 +84,19 @@ export const RideCard = ({ ride, onPress }: RideCardProps) => {
         <View className="flex-row items-center w-1/2">
           <MapPin color={colors.textMuted} size={16} className="mr-2" />
           <Text className="text-sm" style={{ color: colors.textMuted }}>
-            {stopCount > 0 ? `${stopCount} ${stopCount === 1 ? 'stop' : 'stops'}` : 'Tap for Route'}
+            {stopCount > 0 ? `${stopCount} ${stopCount === 1 ? 'stop' : 'stops'}` : ride.is_preview ? 'Tap for details' : 'Tap for Route'}
           </Text>
         </View>
       </View>
 
-      {hasRouteNames ? (
+      {ride.is_preview ? (
+        <View className="flex-row items-start">
+          <Lock color={colors.textMuted} size={16} className="mr-2" />
+          <Text className="text-sm flex-1" style={{ color: colors.textMuted }}>
+            Approval needed · meeting point shown once you're accepted
+          </Text>
+        </View>
+      ) : hasRouteNames ? (
         <View className="flex-row items-start">
           <MapPin color={colors.primary} size={16} className="mr-2" />
           <Text className="text-sm flex-1" style={{ color: colors.text }} numberOfLines={2}>
