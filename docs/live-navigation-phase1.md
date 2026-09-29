@@ -14,6 +14,8 @@ Phase 1 now includes lightweight multi-rider awareness by rendering peer live-lo
 - Forward-offset camera follow for the current rider
 - Turn-by-turn instruction card with ETA and remaining distance
 - Off-route detection with automatic reroute after a short grace window
+- Traffic refresh every 5 minutes, which keeps the current leg when the refreshed one is more than 10% + 200 m longer and not at least 10% faster. Google snaps the rider's position to any road nearby, and near a flyover a refresh could otherwise swap the road being ridden for a longer one overhead (`shouldAdoptRefreshedLeg` in `core/routeProgress.ts`)
+- Known limit: the 60 m off-route threshold cannot tell parallel roads 10–40 m apart (flyover, road beneath, service road), so the drawn line can sit on the neighbouring road until the rider turns off it
 - Detour fallback to the destination when the remaining waypoint chain is no longer routable
 - Live-session integration for start/end flow, room join, heartbeat, and location emit
 - Ride-detail realtime subscription for join and stop-request updates before entering navigation
@@ -66,7 +68,7 @@ Status of the Phase 2 socket-gateway contract, reviewed against the code on 2026
 | `session:ended` | Done | REST controller emits `{ rideId, sessionId, endedAt, endedBy, reason }` | None |
 | Sampled persistence | Done | `realtime/sampleThrottle.ts`: keep a sample per 20 m, per 30 s, or on a motion-reading change | None |
 | Drop stale or out-of-order updates | Done | `updateLivePresenceLocation()` drops fixes older than 2 min, more than 30 s ahead, or out of order | None |
-| Reconnect with token refresh | Partial | Client reconnects and rejoins | Socket.IO auto-reconnect reuses the token from the last `connect()`; refresh the token on `connect_error` or before reconnecting |
+| Reconnect with token refresh | Done | `core/auth/socketAuth.ts`: the socket's `auth` callback fetches a current access token on every (re)connect, and a refused handshake is retried with backoff (1 s doubling to 30 s) | None |
 | Presence online/offline | Done, needs field QA | Heartbeat, leave, disconnect, presence sweep job | Validate under background and network churn |
 | No unauthorized room joins | Done | Socket auth + confirmed-participant check | None |
 
@@ -74,6 +76,5 @@ Added since the original contract: `rider:progress`, `ride:arrival`, `regroup:re
 
 ## Still Open for Navigation UX
 
-- Reconnect that survives an access-token refresh.
 - Field QA for background/resume, poor networks and multi-rider load. The first real-phone ride for per-rider progress is pending.
 - Server-pushed updates for worker-side changes (auto-finish, idle end); today the client learns of them by polling.

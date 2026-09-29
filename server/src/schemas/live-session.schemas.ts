@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { MOTION_ACTIVITIES } from "../utils/track.js";
+import {
+  INCIDENT_KINDS,
+  LEGACY_GROUP_ALERT_KIND,
+  normalizeIncidentKind,
+} from "../core/rides/incidentCopy.js";
 
 export const SessionStatusSchema = z.enum([
   "starting",
@@ -15,13 +20,10 @@ export const IncidentSeveritySchema = z.enum([
   "critical",
 ]);
 
-export const IncidentKindSchema = z.enum([
-  "sos",
-  "crash",
-  "medical",
-  "mechanical",
-  "other",
-]);
+/** App builds before the rename still send "sos"; it is stored as "group_alert". */
+export const IncidentKindSchema = z
+  .enum([...INCIDENT_KINDS, LEGACY_GROUP_ALERT_KIND])
+  .transform(normalizeIncidentKind);
 
 export const LiveLocationUpdateSchema = z.object({
   lon: z.number().gte(-180).lte(180),

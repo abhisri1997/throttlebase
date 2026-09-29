@@ -59,6 +59,7 @@ ThrottleBase: mobile-first platform for motorcycle group rides.
 - Auth passwordless: Google, Apple, email code. No passwords. No TOTP.
 - Access token: ES256 JWT, 15 min. Verified by signature only. No session lookup per request.
 - Refresh token: 30 days. Hashed in `sessions`. Rotates each refresh. Reuse revokes family.
+- Client signs out only when `/auth/refresh` answers 400/401. Offline, timeout, 5xx keep the session.
 - Admin: `rider_roles` table, roles in token. `riders.is_admin` dropped (migration 024).
 - JWKS path: `/.well-known/jwks.json`. Not under `/auth`.
 - DB connection: API uses Supabase `postgres` role (BYPASSRLS). RLS policies exist but unenforced.
@@ -66,6 +67,7 @@ ThrottleBase: mobile-first platform for motorcycle group rides.
 - Client base URL: `EXPO_PUBLIC_API_URL`. Unset release build → dev API, never prod.
 - Track source: `ride_live_location_samples`. `gps_traces` unused.
 - Sample kept per 20 m, per 30 s, or on motion change. Stale/future/out-of-order fixes dropped.
+- Sockets (`/live`, `/rides`) fetch a fresh access token on every (re)connect via `core/auth/socketAuth.ts`; a refused handshake is retried with backoff. Never hold a token for a socket.
 - Worker cannot emit socket events. Worker-side changes reach clients via polling.
 - One API instance only. Sampling state in memory. No Socket.IO adapter.
 - Push/email delivery: stubs. In-app notifications only.
@@ -81,10 +83,8 @@ ThrottleBase: mobile-first platform for motorcycle group rides.
 ## Active Priorities
 
 1. Real-phone ride validating per-rider progress, motion readings, stop markers.
-2. Live socket reconnect after token refresh.
-3. Enforce RLS: services onto `withRiderTransaction`, API onto `throttlebase_app`.
-4. Push/email providers + device registration.
-5. Client admin check: read roles, not `is_admin` (always false today).
+2. Enforce RLS: services onto `withRiderTransaction`, API onto `throttlebase_app`.
+3. Push/email providers + device registration.
 
 ## Assistant Operating Notes
 

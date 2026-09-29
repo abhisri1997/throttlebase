@@ -199,6 +199,53 @@ export const remainingLegSeconds = (
   return (currentSeconds + laterSeconds) * trafficFactor;
 };
 
+/**
+ * A refreshed leg no more than this much longer than what is left of the
+ * current one is taken to be the same way there, and replaces it for the
+ * fresher traffic. 10% plus 200 m absorbs Google snapping the start a little
+ * differently and small detours around a jam.
+ */
+export const REFRESH_SAME_WAY_RATIO = 1.1;
+export const REFRESH_SAME_WAY_SLACK_METERS = 200;
+/** A clearly longer refreshed leg must also save this share of the time left. */
+export const REFRESH_MIN_TIME_SAVING = 0.1;
+
+export interface CurrentLeg {
+  leg: RouteLeg;
+  geometry: LegGeometry;
+  progress: LegProgress | null;
+}
+
+/**
+ * Whether a leg fetched for a traffic refresh should replace the one being
+ * ridden.
+ *
+ * Google is given only the rider's coordinates, and snaps them to whichever
+ * road it picks. Where a flyover, the road beneath it and service roads run
+ * side by side a few metres apart, a refresh can put the rider on the wrong
+ * one. Riding under the Electronic City flyover, a refresh put the rider on
+ * the flyover and swapped a 3.4 km leg for a 6.8 km one that stayed up there
+ * past their turn. So a refreshed leg that is clearly longer than what is
+ * left must also be clearly faster, or the current leg stays. A reroute after
+ * leaving the route is not subject to this: its origin is off the old line.
+ */
+export const shouldAdoptRefreshedLeg = (
+  current: CurrentLeg | null,
+  candidate: RouteLeg,
+): boolean => {
+  // Nothing to compare against, or not on it: the refreshed leg is all we have.
+  if (!current || !current.progress || !current.progress.isOnRoute) return true;
+
+  const along = current.progress.distanceAlongMeters;
+  const remainingMeters = remainingLegMeters(current.geometry, along);
+  const sameWayLimit = remainingMeters * REFRESH_SAME_WAY_RATIO + REFRESH_SAME_WAY_SLACK_METERS;
+  if (candidate.distanceMeters <= sameWayLimit) return true;
+
+  const remainingSeconds = remainingLegSeconds(current.leg, current.geometry, along);
+  const candidateSeconds = candidate.durationInTrafficSeconds ?? candidate.durationSeconds;
+  return candidateSeconds < remainingSeconds * (1 - REFRESH_MIN_TIME_SAVING);
+};
+
 export interface TripGeometry {
   polyline: LatLng[];
   cumulative: number[];

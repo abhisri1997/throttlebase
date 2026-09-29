@@ -14,7 +14,7 @@
 | The server marks the rider offline the instant the socket disconnects | `server/src/realtime/gateway.ts:404-411` |
 | …or after 120 s without a heartbeat | `server/src/workers/processors/live-ops.processor.ts:15` |
 | Other riders' maps drop anyone marked offline | `client/src/features/navigation/hooks/useRideParticipants.ts:53` |
-| Even with "Always", the socket reconnects with the token it got at `connect()`. Access tokens last 15 min, so a long background stint ends in a rejected reconnect | `client/src/services/liveSessionSocket.ts:160-180`; `docs/project-status.md` |
+| ✅ Fixed (step 5). Even with "Always", the socket reconnected with the token it got at `connect()`. Access tokens last 15 min, so a long background stint ended in a rejected reconnect, which Socket.IO never retries | `client/src/core/auth/socketAuth.ts` |
 
 ## What the platform allows
 
@@ -32,13 +32,16 @@
      - the rider leaves the live session (new: tie it to `session:leave`);
      - the rider signs out.
    - If the rider is already mid-ride when the app returns to the foreground, restart it.
+   - ✅ Done (`fix: ride tracking needs only "While using the app"`): `resumeTrackingInForeground` restarts a tracker that could not start, or that the OS stopped, when the app returns to the foreground. Still open: stopping on `session:leave`.
 2. **Remove the "Always" request.**
    - Delete `requestBackgroundPermissionsAsync` and its gate.
    - Delete `ACCESS_BACKGROUND_LOCATION` and set `isAndroidBackgroundLocationEnabled: false`.
    - Remove the `locationAlwaysPermission` / `locationAlwaysAndWhenInUsePermission` strings.
    - Keep `isAndroidForegroundServiceEnabled`, `FOREGROUND_SERVICE_LOCATION` and iOS `UIBackgroundModes: ["location"]`.
    - Remove the unused `fetch` mode.
+   - ✅ Done in the same change, plus `android.blockedPermissions` for `ACCESS_BACKGROUND_LOCATION`. A config test (`client/src/appConfig.test.ts`) fails if any of it comes back.
 3. **Make the notification honest and useful.** Title: "Ride in progress". Body: "Sharing your location with your ride group until you finish." Add a "Finish ride" action if expo-location allows it; otherwise tapping the notification opens the ride.
+   - ✅ Title and body done. The "Finish ride" action is still open.
 4. **Add a prominent disclosure screen.** Show it once, before the first location prompt. It says:
    - what is shared (live position, speed, and motion when allowed);
    - with whom (this ride's group);
@@ -47,8 +50,8 @@
 
    Record the choice in the consent ledger as `live_location_sharing` (see [consent.md](consent.md)).
 5. **Keep the socket authenticated in the background.**
-   - Use Socket.IO's `auth` callback to fetch a fresh access token on every (re)connect instead of a fixed token.
-   - Refresh proactively when a `session:error` reports an expired token.
+   - ✅ Done (`fix: sockets reconnect with a fresh access token`): Socket.IO's `auth` callback fetches a current access token on every (re)connect, for `/live` and `/rides`, and the background tracker no longer holds a token.
+   - ✅ Done in the same change: a handshake the server refuses (which Socket.IO never retries) is retried after 1 s, doubling to 30 s, with whatever token is current then. The server does not check token expiry per event, so no `session:error` handling is needed.
 6. **Don't erase a rider for a short gap.**
    - Server: on disconnect, mark offline only if no reconnect arrives within a grace window (60 s). Treat every `location:update` as a heartbeat; the upsert already refreshes `last_heartbeat_at`.
    - Server: while the tracker runs, send a heartbeat from the location task even when stationary. Otherwise a rider stopped at a light for 2 min (distance filter 10 m) goes stale.

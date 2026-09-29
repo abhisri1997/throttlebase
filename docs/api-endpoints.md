@@ -36,24 +36,29 @@ Account routes (`server/src/adapters/http/riderAccountRoutes.ts`) are mounted be
 - `GET /api/riders/username-available?u=`
 - `PATCH /api/riders/me/onboarding` — set username (and profile basics) to finish onboarding
 - `DELETE /api/riders/me` — soft-delete: unlinks identities, revokes sessions; hard-deleted after 30 days
-- `GET /api/riders/me` — own full profile
+- `GET /api/riders/me` — own full profile, including `roles` (from `rider_roles`; never in another rider's view)
 - `PATCH /api/riders/me` — update own profile
 - `GET /api/riders/search?query=&limit=` — username-prefix search for mention suggestions (limit 1–10, default 8)
 - `GET /api/riders/:id` — public profile, privacy-aware
 
 ## Rides
 
-- `GET /api/rides` — upcoming public rides
+- `GET /api/rides` — upcoming rides anyone can find, and your own open rides. A ride that needs approval (`visibility: "private"`) you aren't on comes as a preview (`is_preview: true`, see below)
 - `GET /api/rides/history` — rides you took part in
 - `GET /api/rides/riding` — rides you are riding right now (started, not finished). The background tracker follows these
 - `POST /api/rides` — create a ride; you become captain
-- `GET /api/rides/:id` — ride with captain, participants and stops
+- `GET /api/rides/:id` — ride with captain, participants and stops. For a ride that needs approval you aren't on: a preview instead, with only `id`, `title`, `status`, `visibility`, `scheduled_at`, `estimated_duration_min`, `max_capacity`, `current_rider_count`, `requirements`, `stop_count`, `captain_id`, `captain_name`, `is_preview: true` and `my_request: { status: none | requested | declined, can_request }`. Never the meeting point, route, stops, description or riders
 - `PATCH /api/rides/:id` — captain / co-captain; status transitions validated
 - `DELETE /api/rides/:id` — captain; not for active or completed rides
-- `POST /api/rides/:id/join` — scheduled or active rides only; enforces capacity. Broadcasts `ride:joined`
+- `POST /api/rides/:id/join` — `{ location_coords?: [lng, lat] }` (where you ride from). Scheduled or active rides only. A public ride is joined at once, enforcing capacity (`outcome: "joined"`, broadcasts `ride:joined`). A ride that needs approval records a request instead (`outcome: "requested"`, holds no seat, broadcasts `ride:roster_changed`; the captain and co-captains are notified). 409 while a request waits; 403 after two declines. A rider who left can join or ask again
+- `DELETE /api/rides/:id/join` — withdraw your waiting request. Past declines still count. Broadcasts `ride:roster_changed`
+- `POST /api/rides/:id/requests/:riderId` — `{ accept }`: the captain or a co-captain accepts (refused when the ride is full) or declines a waiting request. A declined rider may ask once more. The rider is notified. Broadcasts `ride:roster_changed`
 - `POST /api/rides/:id/promote` — captain promotes a rider to co-captain
+- `POST /api/rides/:id/leave` — leave before the ride starts (409 once live: finish your ride instead). The captain hands the ride to the next leader, or cancels it with nobody left. Returns `outcome`: `left`, `handed_over` or `ride_cancelled`. Broadcasts `ride:roster_changed`
+- `POST /api/rides/:id/captain` — `{ rider_id }`: the captain hands the ride to a confirmed rider, before or during it, and stays on as co-captain. Broadcasts `ride:roster_changed`
+- `GET /api/rides/:id` gives the captain `next_captain` — who would lead if they left, or `null` — and the captain and co-captains `join_requests`: `[{ rider_id, display_name, requested_at, decline_count }]`, oldest first
 - `PATCH /api/rides/:id/start-location` — your own start point, for auto-start rides
-- `GET /api/rides/:id/stops`
+- `GET /api/rides/:id/stops` — riders who may see the ride; 404 otherwise
 - `POST /api/rides/:id/stops` — any participant requests a stop. Broadcasts `ride:stop_requested`
 - `PATCH /api/rides/:id/stops/:stopId` — captain / co-captain approves or rejects. Broadcasts `ride:stop_updated`
 - `POST /api/rides/:id/regroup` — propose somewhere for the group to wait for a rider left behind. Emits `regroup:requested`
@@ -119,7 +124,7 @@ The only path to Google. The client never calls `googleapis.com`. Rate-limited t
 - `GET /api/community/groups`, `POST /api/community/groups`
 - `GET /api/community/groups/:id`
 - `POST /api/community/groups/:id/join`
-- `DELETE /api/community/groups/:id/leave` — admins cannot leave
+- `DELETE /api/community/groups/:id/leave` — anyone can leave; the owner hands the group to the next admin, or ends it as the only member. Returns `outcome`: `left`, `handed_over` or `group_deleted`. `GET /api/community/groups/:id` gives the owner `next_admin`
 
 ## Notifications, settings, privacy
 
@@ -200,6 +205,6 @@ Server → client:
 Lightweight ride-detail updates. Room `ride:<rideId>`; subscribing requires the ride to be public, or you to be captain or a confirmed participant.
 
 - Client → server: `ride:subscribe`, `ride:unsubscribe` — `{ rideId }`
-- Server → client: `ride:subscribed`, `ride:joined`, `ride:stop_requested`, `ride:stop_updated`, `ride:error`
+- Server → client: `ride:subscribed`, `ride:joined`, `ride:roster_changed` (someone left or asked to join, a request was answered, or the captain changed), `ride:stop_requested`, `ride:stop_updated`, `ride:error`
 
 Events emitted by the worker process do not reach sockets: the worker has no Socket.IO server. For example, an auto-finish by `ride_progress.sweep` reaches clients on their next poll.

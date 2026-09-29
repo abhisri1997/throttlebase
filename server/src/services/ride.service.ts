@@ -10,10 +10,10 @@ import { haversineMeters } from "../utils/polyline.js";
 import { snapToNearestPlace } from "./meetingPoint.service.js";
 import { enqueueRideStatsRecompute } from "./jobs.service.js";
 import { getRouteById } from "./route.service.js";
-import { syncRiderCounts } from "./ride-roster.service.js";
+import { describeMyRequest, type ParticipantStatus } from "../core/rides/joinRequest.js";
+import { toRidePreview, type RidePreview } from "../core/rides/ridePreview.js";
+import { previewNextCaptain } from "./ride-roster.service.js";
 
-/** Rides a rider can still join. */
-const JOINABLE_RIDE_STATUSES: ReadonlySet<string> = new Set(["scheduled", "active"]);
 /** Rides that are over; nothing about who is on them changes any more. */
 const FINISHED_RIDE_STATUSES: ReadonlySet<string> = new Set(["completed", "cancelled"]);
 
@@ -33,6 +33,10 @@ export interface Ride {
   updated_at: string;
   // Included from JOIN
   captain_name?: string;
+  /** Confirmed riders, on the full ride only. */
+  participants?: Array<{ rider_id: string; role: string; display_name: string | null }> | null;
+  /** Only for the captain: who would lead if they left (null: nobody). */
+  next_captain?: { rider_id: string; display_name: string } | null;
 }
 
 export interface RideStop {
@@ -393,36 +397,54 @@ export const getRideById = async (
        ${visibilityClause}`,
     params,
   );
-  return result.rows.length ? (result.rows[0] as Ride) : null;
+  const ride = result.rows[0] as Ride | undefined;
+  if (!ride) return null;
+  // The captain sees who would lead if they left, before they decide to.
+  if (viewerRiderId && ride.captain_id === viewerRiderId) {
+    return { ...ride, next_captain: await previewNextCaptain(id, viewerRiderId) };
+  }
+  return ride;
 };
 
 /**
- * Lists public and upcoming rides.
+ * A Discover row as this rider may see it: a ride that needs approval
+ * shows only its preview until they are on it.
+ */
+const asDiscovered = (row: Record<string, unknown>, riderId: string): Ride | RidePreview => {
+  const { my_status: myStatus, my_decline_count: myDeclineCount, ...ride } = row;
+  const isOnRide = ride.captain_id === riderId || myStatus === "confirmed";
+  if (ride.visibility !== "private" || isOnRide) return ride as unknown as Ride;
+  const seat =
+    typeof myStatus === "string"
+      ? { status: myStatus as ParticipantStatus, declineCount: Number(myDeclineCount ?? 0) }
+      : null;
+  return toRidePreview(ride, describeMyRequest(seat));
+};
+
+/**
+ * Lists upcoming rides anyone can find, and the rider's own open rides.
+ * Rides that need approval are listed as previews to riders not on them.
  */
 export const listDiscoverableRides = async (
   riderId: string,
   statusFilter: RideStatusFilter = "all",
-): Promise<Ride[]> => {
+): Promise<Array<Ride | RidePreview>> => {
   const params: any[] = [riderId];
   let queryStr = `
     SELECT r.*, c.display_name as captain_name,
            (SELECT count(*) FROM ride_stops rs
-             WHERE rs.ride_id = r.id AND rs.status = 'approved')::int AS stop_count
+             WHERE rs.ride_id = r.id AND rs.status = 'approved')::int AS stop_count,
+           me.status AS my_status, me.decline_count AS my_decline_count
     FROM rides r
     JOIN riders c ON r.captain_id = c.id
+    LEFT JOIN ride_participants me ON me.ride_id = r.id AND me.rider_id = $1
     WHERE r.status NOT IN ('completed', 'cancelled')
       AND (
-        -- A ride led by a rider who deleted their account leaves public
-        -- discovery at once; its own riders still see it.
-        (r.visibility = 'public' AND r.status = 'scheduled' AND c.deleted_at IS NULL)
+        -- A ride led by a rider who deleted their account leaves discovery
+        -- at once; its own riders still see it.
+        (r.status = 'scheduled' AND c.deleted_at IS NULL)
         OR r.captain_id = $1
-        OR EXISTS (
-          SELECT 1
-          FROM ride_participants rp
-          WHERE rp.ride_id = r.id
-            AND rp.rider_id = $1
-            AND rp.status = 'confirmed'
-        )
+        OR me.status = 'confirmed'
       )
   `;
 
@@ -434,7 +456,7 @@ export const listDiscoverableRides = async (
   queryStr += ` ORDER BY r.scheduled_at ASC LIMIT 50`;
 
   const result = await query(queryStr, params);
-  return result.rows as Ride[];
+  return result.rows.map((row) => asDiscovered(row, riderId));
 };
 
 /**
@@ -664,98 +686,6 @@ export const deleteRide = async (
     [rideId, captainId],
   );
   return result.rows.length > 0;
-};
-
-/**
- * Allows a rider to join a public ride.
- * Enforces max capacity using SELECT ... FOR UPDATE (optimistic locking).
- */
-export const joinRide = async (
-  rideId: string,
-  riderId: string,
-  overrideLocation?: [number, number],
-): Promise<boolean> => {
-  const client = await pool.connect();
-
-  try {
-    await client.query("BEGIN");
-
-    // Lock the ride row and check capacity
-    const rideResult = await client.query(
-      `SELECT id, max_capacity, current_rider_count, status, visibility, start_point_auto,
-              EXISTS (
-                SELECT 1 FROM riders c WHERE c.id = rides.captain_id AND c.deleted_at IS NOT NULL
-              ) AS captain_deleted
-       FROM rides WHERE id = $1 FOR UPDATE`,
-      [rideId],
-    );
-
-    // Nobody new joins a ride whose captain has deleted their account.
-    if (rideResult.rows.length === 0 || rideResult.rows[0].captain_deleted) {
-      await client.query("ROLLBACK");
-      throw new Error("Ride not found");
-    }
-
-    const ride = rideResult.rows[0];
-
-    // Only a published (scheduled) or active ride can be joined. A finished
-    // one cannot: joining it would also make anyone a participant who can
-    // review a ride they never rode.
-    if (!JOINABLE_RIDE_STATUSES.has(ride.status)) {
-      await client.query("ROLLBACK");
-      throw new Error(`Cannot join a ride with status "${ride.status}"`);
-    }
-
-    // Enforce max capacity
-    if (ride.max_capacity && ride.current_rider_count >= ride.max_capacity) {
-      await client.query("ROLLBACK");
-      throw new Error("This ride has reached its maximum capacity");
-    }
-
-    // Try to insert the participant
-    const insertQuery = overrideLocation
-      ? `INSERT INTO ride_participants (ride_id, rider_id, role, status, joined_at, start_location_override)
-         VALUES ($1, $2, 'rider', 'confirmed', now(), ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography)
-         ON CONFLICT (ride_id, rider_id) DO NOTHING
-         RETURNING id`
-      : `INSERT INTO ride_participants (ride_id, rider_id, role, status, joined_at)
-         VALUES ($1, $2, 'rider', 'confirmed', now())
-         ON CONFLICT (ride_id, rider_id) DO NOTHING
-         RETURNING id`;
-
-    const insertParams = overrideLocation
-      ? [rideId, riderId, overrideLocation[0], overrideLocation[1]]
-      : [rideId, riderId];
-
-    const insertResult = await client.query(insertQuery, insertParams);
-
-    if (insertResult.rows.length > 0) {
-      // Counted from who is on the ride, so it can never drift.
-      await syncRiderCounts(client, [rideId]);
-      await client.query("COMMIT");
-
-      // Auto-calculate start point if enabled
-      if (ride.start_point_auto) {
-        recalculateStartPoint(rideId).catch((err) =>
-          console.error(
-            `Failed to recalculate start point for ride ${rideId}:`,
-            err,
-          ),
-        );
-      }
-
-      return true;
-    } else {
-      // Already a participant
-      await client.query("ROLLBACK");
-      return false;
-    }
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
 };
 
 /**

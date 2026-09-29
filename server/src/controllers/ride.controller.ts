@@ -8,6 +8,14 @@ import {
   HandleStopSchema,
 } from "../schemas/ride.schemas.js";
 import * as RideService from "../services/ride.service.js";
+import {
+  leaveRide as leaveRideAndHandOver,
+  passCaptaincy as passRideCaptaincy,
+  RideRosterError,
+  type LeaveRideOutcome,
+  type RideRosterRefusal,
+} from "../services/ride-roster.service.js";
+import { getRideForViewer } from "../services/ride-join.service.js";
 import { emitToLiveRoom, emitToRideRoom } from "../realtime/gateway.js";
 import { buildLiveRoomKey } from "../realtime/session-room.js";
 import { getLiveSession } from "../services/live-session.service.js";
@@ -52,7 +60,8 @@ export const getRide = async (req: Request, res: Response): Promise<void> => {
   try {
     const rideId = req.params.id as string;
     const riderId = (req.rider as unknown as RiderPayload).riderId;
-    const ride = await RideService.getRideById(rideId, riderId);
+    // A rider not on a ride that needs approval gets its preview.
+    const ride = await getRideForViewer(rideId, riderId);
 
     if (!ride) {
       res.status(404).json({ error: "Ride not found" });
@@ -168,35 +177,6 @@ export const deleteRide = async (
   } catch (error: any) {
     console.error("Error deleting ride:", error);
     res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const joinRide = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const riderId = (req.rider as unknown as RiderPayload).riderId;
-    const rideId = req.params.id as string;
-
-    const success = await RideService.joinRide(rideId, riderId);
-
-    if (success) {
-      emitToRideRoom(rideId, "ride:joined", { rideId, riderId });
-      res.json({ message: "Successfully joined the ride" });
-    } else {
-      res
-        .status(400)
-        .json({ message: "You are already a participant of this ride" });
-    }
-  } catch (error: any) {
-    if (error.message?.includes("maximum capacity")) {
-      res.status(400).json({ error: error.message });
-    } else if (error.message?.includes("Cannot join")) {
-      res.status(400).json({ error: error.message });
-    } else if (error.message === "Ride not found") {
-      res.status(404).json({ error: "Ride not found" });
-    } else {
-      console.error("Error joining ride:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
   }
 };
 
@@ -414,6 +394,12 @@ export const getRideStops = async (
 ): Promise<void> => {
   try {
     const rideId = req.params.id as string;
+    const riderId = (req.rider as unknown as RiderPayload).riderId;
+    // Stops show where a ride goes: only for riders who may see the ride.
+    if (!(await RideService.getRideById(rideId, riderId))) {
+      res.status(404).json({ error: "Ride not found" });
+      return;
+    }
     const stops = await RideService.listRideStops(rideId);
     res.json({ stops });
   } catch (error) {
@@ -459,5 +445,63 @@ export const updateStartLocation = async (
       console.error("Error updating start location:", error);
       res.status(500).json({ error: "Internal server error" });
     }
+  }
+};
+
+// ── Leaving a ride, and passing it on ─────────────────────────────────────
+
+const ROSTER_REFUSAL_STATUS: Readonly<Record<RideRosterRefusal, number>> = {
+  not_found: 404,
+  not_on_ride: 403,
+  ride_started: 409,
+  ride_over: 409,
+  not_captain: 403,
+  target_not_on_ride: 400,
+  already_captain: 400,
+};
+
+const LEAVE_MESSAGES: Readonly<Record<LeaveRideOutcome, string>> = {
+  left: "You left the ride",
+  handed_over: "You left the ride; the next leader is captain now",
+  ride_cancelled: "You left the ride; nobody else was on it, so it was cancelled",
+};
+
+const sendRosterError = (res: Response, error: unknown, action: string): void => {
+  if (error instanceof RideRosterError) {
+    res.status(ROSTER_REFUSAL_STATUS[error.kind]).json({ error: error.message });
+    return;
+  }
+  console.error(`Error ${action}:`, error);
+  res.status(500).json({ error: "Internal server error" });
+};
+
+export const leaveRide = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const riderId = (req.rider as unknown as RiderPayload).riderId;
+    const rideId = req.params.id as string;
+
+    const outcome = await leaveRideAndHandOver(rideId, riderId);
+    emitToRideRoom(rideId, "ride:roster_changed", { rideId });
+    res.json({ message: LEAVE_MESSAGES[outcome], outcome });
+  } catch (error: unknown) {
+    sendRosterError(res, error, "leaving ride");
+  }
+};
+
+export const passCaptaincy = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const validated = PromoteCoCaptainSchema.safeParse(req.body);
+    if (!validated.success) {
+      res.status(400).json({ error: "Validation failed", details: validated.error.issues });
+      return;
+    }
+    const captainId = (req.rider as unknown as RiderPayload).riderId;
+    const rideId = req.params.id as string;
+
+    await passRideCaptaincy(rideId, captainId, validated.data.rider_id);
+    emitToRideRoom(rideId, "ride:roster_changed", { rideId });
+    res.json({ message: "The ride has a new captain" });
+  } catch (error: unknown) {
+    sendRosterError(res, error, "passing the ride on");
   }
 };

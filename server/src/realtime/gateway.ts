@@ -66,6 +66,25 @@ let _liveNamespace: ReturnType<InstanceType<typeof Server>["of"]> | null =
 let _ridesNamespace: ReturnType<InstanceType<typeof Server>["of"]> | null =
   null;
 
+/**
+ * What the ride room hears when a rider reports an incident. Carries where
+ * they were, so a group alert can be navigated to before their next fix.
+ */
+export const incidentCreatedEvent = (
+  incident: Record<string, unknown>,
+  riderId: string,
+  coords: { lon?: number | undefined; lat?: number | undefined },
+) => ({
+  incidentId: incident.id,
+  riderId,
+  severity: incident.severity,
+  kind: incident.kind,
+  createdAt: incident.created_at,
+  ...(coords.lon !== undefined && coords.lat !== undefined
+    ? { lon: coords.lon, lat: coords.lat }
+    : {}),
+});
+
 export const emitToLiveRoom = (
   roomKey: string,
   event: string,
@@ -374,17 +393,9 @@ export const createLiveGateway = (httpServer: HttpServer) => {
           },
         );
 
-        const session = await getLiveSession(payload.rideId, rider.riderId);
-
         liveNamespace
-          .to(buildLiveRoomKey(payload.rideId, session.id))
-          .emit("incident:created", {
-            incidentId: incident.id,
-            riderId: rider.riderId,
-            severity: incident.severity,
-            kind: incident.kind,
-            createdAt: incident.created_at,
-          });
+          .to(buildLiveRoomKey(payload.rideId, incident.session_id as string))
+          .emit("incident:created", incidentCreatedEvent(incident, rider.riderId, payload));
       } catch (error) {
         if (error instanceof LiveSessionError) {
           emitSocketError(socket, error.message, error.statusCode);

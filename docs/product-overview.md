@@ -30,7 +30,7 @@ Provide a single rider platform that supports:
 - Each rider starts, arrives and finishes their own ride; early starts and early exits are shown to the group
 - Full-screen turn-by-turn navigation with the crew on the map, rerouting when off course
 - Regroup proposals for riders left behind
-- Incident and SOS reporting with acknowledgement
+- "Alert my group" safety alert to everyone on the ride, with a Call 112 hand-off, and incident reporting with acknowledgement
 - Ride-detail updates for joins and stop requests before entering navigation
 
 ### Rider Identity and Social Layer

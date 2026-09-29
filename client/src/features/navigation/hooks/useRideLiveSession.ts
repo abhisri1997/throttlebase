@@ -189,7 +189,7 @@ export const useRideLiveSession = ({
   useEffect(() => {
     if (!token || !rideId) return;
 
-    connect(token);
+    connect();
     setRideContext(rideId);
     return () => clearRideContext();
   }, [clearRideContext, connect, rideId, setRideContext, token]);

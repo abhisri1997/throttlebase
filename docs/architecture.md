@@ -88,6 +88,7 @@ The boundary is enforced by lint (`server/eslint.boundaries.js`, `npm run lint:b
 - Roles come from `rider_roles` (`admin`, `support`) and are re-read at every refresh. `requireAdmin` checks the token.
 - Email codes: hashed in `email_otps`, limited attempts, rate-limited per email and per IP through `rate_limit_counters`. In development `EMAIL_DRIVER=console` prints codes; production refuses it unless `ALLOW_CONSOLE_EMAIL=true`.
 - Client: `client/src/core/auth/session.ts` refreshes 60 s before expiry; `singleFlight` stops parallel refreshes. Tokens live in `expo-secure-store`. The HTTP adapter retries a request once after a 401.
+- Only the server refusing the refresh token (400 or 401 from `/auth/refresh`) signs the rider out. A refresh that gets no answer (no signal, timeout, 429, 5xx) keeps the session and is tried again on the next call; a 401 from any other endpoint never signs out.
 
 ## Data access and security
 

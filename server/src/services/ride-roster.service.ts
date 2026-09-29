@@ -1,10 +1,11 @@
 /**
- * Who is on a ride, and who leads it, when a rider leaves ThrottleBase.
+ * Who is on a ride, and who leads it, when riders leave: by deleting their
+ * account, by leaving the ride, or by the captain passing it on.
  *
- * Every function runs on the caller's client, inside the caller's
- * transaction: account deletion hands the rider's rides on in the same
+ * The hand-off at account deletion runs on the caller's client, inside the
  * transaction that deletes the account, so a ride never outlives its
- * captain (docs/launch-readiness/plans/account-deletion.md).
+ * captain (docs/launch-readiness/plans/account-deletion.md). Leaving and
+ * passing on run in their own transactions.
  */
 import pool from "../config/db.js";
 import { pickRideSuccessor, type SuccessorCandidate } from "../core/rides/rideSuccessor.js";
@@ -37,10 +38,48 @@ export const syncRiderCounts = async (client: SqlClient, rideIds: readonly strin
   );
 };
 
+/** Why a ride changed captain; the notification says so. */
+export type CaptainChangeReason = "account_deleted" | "left" | "passed_on";
+
+export type LeaveRideOutcome = "left" | "handed_over" | "ride_cancelled";
+
+export type RideRosterRefusal =
+  | "not_found"
+  | "not_on_ride"
+  | "ride_started"
+  | "ride_over"
+  | "not_captain"
+  | "target_not_on_ride"
+  | "already_captain";
+
+const REFUSAL_MESSAGES: Readonly<Record<RideRosterRefusal, string>> = {
+  not_found: "Ride not found",
+  not_on_ride: "You're not on this ride",
+  ride_started: "The ride has started: finish your ride instead of leaving",
+  ride_over: "This ride is over",
+  not_captain: "Only the captain can pass the ride on",
+  target_not_on_ride: "That rider is not on this ride",
+  already_captain: "You're already the captain",
+};
+
+export class RideRosterError extends Error {
+  constructor(readonly kind: RideRosterRefusal) {
+    super(REFUSAL_MESSAGES[kind]);
+    this.name = "RideRosterError";
+  }
+}
+
+/**
+ * Confirmed riders other than the leaving one whose accounts still exist.
+ * With `lock`, a candidate deleting their own account right now holds these
+ * rows: the hand-over waits for it and looks again, so the ride never goes
+ * to them. The preview shown before leaving reads without locking.
+ */
 const loadSuccessorCandidates = async (
   client: SqlClient,
   rideId: string,
   leavingRiderId: string,
+  { lock }: { lock: boolean } = { lock: true },
 ): Promise<SuccessorCandidate[]> => {
   const result = await client.query(
     `SELECT p.rider_id::text AS rider_id, p.role, p.promoted_at, p.joined_at,
@@ -55,7 +94,8 @@ const loadSuccessorCandidates = async (
       WHERE p.ride_id = $1
         AND p.rider_id <> $2
         AND p.status = 'confirmed'
-        AND r.deleted_at IS NULL`,
+        AND r.deleted_at IS NULL
+      ${lock ? "FOR SHARE OF p, r" : ""}`,
     [rideId, leavingRiderId],
   );
   return result.rows.map((row) => ({
@@ -67,7 +107,14 @@ const loadSuccessorCandidates = async (
   }));
 };
 
-const passRide = async (client: SqlClient, rideId: string, fromRiderId: string, toRiderId: string): Promise<void> => {
+const passRide = async (
+  client: SqlClient,
+  rideId: string,
+  fromRiderId: string,
+  toRiderId: string,
+  reason: CaptainChangeReason,
+  at: Date,
+): Promise<void> => {
   await client.query(`UPDATE rides SET captain_id = $2, updated_at = now() WHERE id = $1`, [rideId, toRiderId]);
   await client.query(`UPDATE ride_participants SET role = 'captain' WHERE ride_id = $1 AND rider_id = $2`, [
     rideId,
@@ -85,7 +132,7 @@ const passRide = async (client: SqlClient, rideId: string, fromRiderId: string, 
   // Queued in this transaction, so riders are told only if the hand-off commits.
   await client.query(`INSERT INTO jobs (type, payload) VALUES ($1, $2::jsonb)`, [
     JOB_TYPES.RIDE_LEADER_CHANGED,
-    JSON.stringify({ rideId, newCaptainId: toRiderId, previousCaptainId: fromRiderId }),
+    JSON.stringify({ rideId, newCaptainId: toRiderId, previousCaptainId: fromRiderId, reason, at: at.toISOString() }),
   ]);
 };
 
@@ -119,6 +166,12 @@ const leaveOpenRides = async (client: SqlClient, riderId: string, at: Date): Pro
       WHERE s.id = p.session_id AND s.status <> 'ended' AND p.rider_id = $1`,
     [riderId],
   );
+  // Requests to join still waiting are withdrawn too; they hold no seat.
+  await client.query(
+    `UPDATE ride_participants SET status = 'dropped_out', left_at = $2
+      WHERE rider_id = $1 AND status = 'requested'`,
+    [riderId, at],
+  );
   return left.rows.map((row) => row.ride_id as string);
 };
 
@@ -145,7 +198,7 @@ export const handOffRidesOf = async (client: SqlClient, riderId: string, at: Dat
   for (const rideId of ledIds) {
     const successor = pickRideSuccessor(await loadSuccessorCandidates(client, rideId, riderId));
     if (successor) {
-      await passRide(client, rideId, riderId, successor);
+      await passRide(client, rideId, riderId, successor, "account_deleted", at);
       handedOff += 1;
     } else {
       await cancelRide(client, rideId, at);
@@ -195,4 +248,128 @@ export const handOffRidesOfDeletedRiders = async (): Promise<number> => {
     }
   }
   return rides;
+};
+
+// ── Leaving a ride, and passing it on ──────────────────────────────────────
+
+/** Runs `work` in one transaction on its own client. */
+export const inTransaction = async <T>(work: (client: SqlClient) => Promise<T>): Promise<T> => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await work(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+interface LockedRide {
+  status: string;
+  captain_id: string;
+}
+
+const lockRide = async (client: SqlClient, rideId: string): Promise<LockedRide> => {
+  const result = await client.query(`SELECT status, captain_id::text FROM rides WHERE id = $1 FOR UPDATE`, [rideId]);
+  const ride = result.rows[0] as LockedRide | undefined;
+  if (!ride) throw new RideRosterError("not_found");
+  return ride;
+};
+
+const isConfirmedOnRide = async (client: SqlClient, rideId: string, riderId: string): Promise<boolean> => {
+  const result = await client.query(
+    `SELECT 1 FROM ride_participants p JOIN riders r ON r.id = p.rider_id
+      WHERE p.ride_id = $1 AND p.rider_id = $2 AND p.status = 'confirmed' AND r.deleted_at IS NULL`,
+    [rideId, riderId],
+  );
+  return result.rows.length > 0;
+};
+
+/** Sets a rider's role on one ride, in its live session too. */
+const setRole = async (client: SqlClient, rideId: string, riderId: string, role: "co_captain"): Promise<void> => {
+  await client.query(
+    `UPDATE ride_participants SET role = $3, promoted_at = now() WHERE ride_id = $1 AND rider_id = $2`,
+    [rideId, riderId, role],
+  );
+  await client.query(
+    `UPDATE ride_live_presence p
+        SET role = $3, updated_at = now()
+       FROM ride_live_sessions s
+      WHERE s.ride_id = $1 AND s.status <> 'ended'
+        AND p.session_id = s.id AND p.rider_id = $2`,
+    [rideId, riderId, role],
+  );
+};
+
+/**
+ * The rider leaves a ride before it starts; once it is live, they finish
+ * their ride instead. A captain hands it to the next leader first, or
+ * cancels it when nobody is left.
+ */
+export const leaveRide = (rideId: string, riderId: string): Promise<LeaveRideOutcome> =>
+  inTransaction(async (client) => {
+    const ride = await lockRide(client, rideId);
+    if (ride.status === "active") throw new RideRosterError("ride_started");
+    if (!OPEN_RIDE_STATUSES.includes(ride.status)) throw new RideRosterError("ride_over");
+    if (!(await isConfirmedOnRide(client, rideId, riderId))) throw new RideRosterError("not_on_ride");
+
+    const at = new Date();
+    let outcome: LeaveRideOutcome = "left";
+    if (ride.captain_id === riderId) {
+      const successor = pickRideSuccessor(await loadSuccessorCandidates(client, rideId, riderId));
+      if (successor) {
+        await passRide(client, rideId, riderId, successor, "left", at);
+        outcome = "handed_over";
+      } else {
+        await cancelRide(client, rideId, at);
+        outcome = "ride_cancelled";
+      }
+    }
+
+    await client.query(
+      `UPDATE ride_participants SET status = 'dropped_out', role = 'rider', left_at = $3
+        WHERE ride_id = $1 AND rider_id = $2`,
+      [rideId, riderId, at],
+    );
+    await syncRiderCounts(client, [rideId]);
+    return outcome;
+  });
+
+/**
+ * The captain hands the ride to another rider on it, before or during the
+ * ride, and stays on as a co-captain.
+ */
+export const passCaptaincy = (rideId: string, captainId: string, toRiderId: string): Promise<void> =>
+  inTransaction(async (client) => {
+    const ride = await lockRide(client, rideId);
+    if (ride.captain_id !== captainId) throw new RideRosterError("not_captain");
+    if (!OPEN_RIDE_STATUSES.includes(ride.status)) throw new RideRosterError("ride_over");
+    if (toRiderId === captainId) throw new RideRosterError("already_captain");
+
+    // Locked like a hand-over, so the ride never goes to a rider mid-deletion.
+    const candidates = await loadSuccessorCandidates(client, rideId, captainId);
+    if (!candidates.some((candidate) => candidate.riderId === toRiderId)) {
+      throw new RideRosterError("target_not_on_ride");
+    }
+
+    await passRide(client, rideId, captainId, toRiderId, "passed_on", new Date());
+    await setRole(client, rideId, captainId, "co_captain");
+  });
+
+/**
+ * Who would lead the ride if its captain left now; null when nobody would.
+ * Shown to the captain before they decide.
+ */
+export const previewNextCaptain = async (
+  rideId: string,
+  captainId: string,
+): Promise<{ rider_id: string; display_name: string } | null> => {
+  const successor = pickRideSuccessor(await loadSuccessorCandidates(pool, rideId, captainId, { lock: false }));
+  if (!successor) return null;
+  const rider = await pool.query(`SELECT display_name FROM riders WHERE id = $1`, [successor]);
+  return { rider_id: successor, display_name: (rider.rows[0]?.display_name as string | undefined) ?? "A rider" };
 };

@@ -19,6 +19,8 @@
 
 ## Build — required for launch
 
+> **Status (2026-09-29):** steps 1, 2, 3 (banner with Navigate to rider; live position comes from the ride's location stream), 5 (sheet and Terms draft) and 6 are built. Still open: the first-ride safety screen (E7), step 4 (push, which waits for push), and an in-app acknowledge / resolve for leaders. The `'sos'` value leaves the CHECK in a later migration once no build sends it.
+
 1. **Rename everywhere.**
    - UI copy: "Alert my group". The confirmation reads "Send an alert with your location to everyone on this ride?".
    - Data: add `kind = 'group_alert'` and migrate the existing `'sos'` rows. The migration is additive: widen the CHECK, backfill, then narrow in a later release.

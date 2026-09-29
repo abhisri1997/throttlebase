@@ -14,6 +14,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { useCurrentRider } from "../../src/services/useCurrentRider";
+import { isAdmin } from "../../src/core/auth/roles";
 import { authService } from "../../src/services/auth";
 import { FEATURES } from "../../src/core/features/features";
 import type { ReactNode } from "react";
@@ -445,7 +446,7 @@ export default function SettingsModal() {
                 </View>
                 <Text style={{ color: colors.textMuted }}>➔</Text>
               </TouchableOpacity>
-              {rider?.is_admin ? (
+              {isAdmin(rider?.roles) ? (
                 <TouchableOpacity
                   onPress={() => router.push("/(modals)/support-admin")}
                   className='px-4 py-4 flex-row items-center justify-between'

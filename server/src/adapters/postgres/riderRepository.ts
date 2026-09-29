@@ -10,6 +10,7 @@ import type {
   RiderRepository,
   RiderTransaction,
 } from "../../ports/RiderRepository.js";
+import { handOverGroupsOf } from "../../services/group-roster.service.js";
 import { handOffRidesOf } from "../../services/ride-roster.service.js";
 import { assumeRider, withRiderTransaction } from "./requestContext.js";
 
@@ -248,7 +249,11 @@ export const createRiderRepository = (pool: pg.Pool): RiderRepository => ({
       // In the same transaction, so no ride is ever left led by a deleted
       // account: each open ride they lead passes to its next leader, or is
       // cancelled with nobody left, and they leave every open ride they joined.
-      if (deleted) await handOffRidesOf(client, riderId, at);
+      if (deleted) {
+        await handOffRidesOf(client, riderId, at);
+        // Groups carry on too, under their next admin.
+        await handOverGroupsOf(client, riderId);
+      }
 
       return deleted;
     }),

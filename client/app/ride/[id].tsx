@@ -72,7 +72,22 @@ import { StartMyRideCard } from "../../src/features/rides/components/StartMyRide
 import { SaveRouteCard } from "../../src/features/rides/components/SaveRouteCard";
 import { RoadFeedbackCard } from "../../src/features/rides/components/RoadFeedbackCard";
 import { rideSummaryLabel } from "../../src/features/rides/core/rideSummary";
+import {
+  leaveRidePrompt,
+  makeCaptainPrompt,
+  type ConfirmPrompt,
+} from "../../src/features/rides/core/rideLeadershipPrompts";
 import { useEndRideWithWarning } from "../../src/features/rides/hooks/useEndRideWithWarning";
+import { useGroupAlert } from "../../src/features/rides/hooks/useGroupAlert";
+import { GroupAlertSheet } from "../../src/features/rides/components/GroupAlertSheet";
+import { GroupAlertBanner } from "../../src/features/rides/components/GroupAlertBanner";
+import { RidePreviewView } from "../../src/features/rides/components/RidePreviewView";
+import { JoinRequestsCard } from "../../src/features/rides/components/JoinRequestsCard";
+import {
+  isRidePreview,
+  joinedMessage,
+  type JoinOutcome,
+} from "../../src/features/rides/core/joinRequest";
 
 const fetchRideDetails = async (id: string) => {
   const { data } = await apiClient.get(`/api/rides/${id}`);
@@ -83,7 +98,7 @@ const joinRide = async (id: string, coords?: [number, number]) => {
   const { data } = await apiClient.post(`/api/rides/${id}/join`, {
     location_coords: coords,
   });
-  return data;
+  return data as { message: string; outcome: JoinOutcome };
 };
 
 const updateStartLocationOverride = async (
@@ -98,6 +113,18 @@ const updateStartLocationOverride = async (
 
 const promoteRider = async (rideId: string, riderId: string) => {
   const { data } = await apiClient.post(`/api/rides/${rideId}/promote`, {
+    rider_id: riderId,
+  });
+  return data;
+};
+
+const leaveRideRequest = async (rideId: string) => {
+  const { data } = await apiClient.post(`/api/rides/${rideId}/leave`);
+  return data as { message: string; outcome: "left" | "handed_over" | "ride_cancelled" };
+};
+
+const passCaptaincyRequest = async (rideId: string, riderId: string) => {
+  const { data } = await apiClient.post(`/api/rides/${rideId}/captain`, {
     rider_id: riderId,
   });
   return data;
@@ -169,55 +196,6 @@ const startLiveSessionReq = async (rideId: string) => {
 const rollOutLiveSessionReq = async (rideId: string) => {
   const { data } = await apiClient.post(`/api/rides/${rideId}/live/roll-out`);
   return data;
-};
-
-const reportSOSReq = async (
-  rideId: string,
-  payload?: { lon: number; lat: number },
-) => {
-  const { data } = await apiClient.post(`/api/rides/${rideId}/live/incident`, {
-    severity: "critical",
-    kind: "sos",
-    ...(payload ? payload : {}),
-    metadata: {
-      source: "mobile",
-    },
-  });
-  return data;
-};
-
-const getSOSCoords = async (): Promise<
-  { lon: number; lat: number } | undefined
-> => {
-  if (Platform.OS === "web") {
-    return undefined;
-  }
-
-  try {
-    const permission = await ExpoLocation.requestForegroundPermissionsAsync();
-    if (permission.status !== "granted") {
-      return undefined;
-    }
-
-    const lastKnown = await ExpoLocation.getLastKnownPositionAsync();
-    if (lastKnown?.coords) {
-      return {
-        lon: lastKnown.coords.longitude,
-        lat: lastKnown.coords.latitude,
-      };
-    }
-
-    const current = await ExpoLocation.getCurrentPositionAsync({
-      accuracy: ExpoLocation.Accuracy.Balanced,
-    });
-
-    return {
-      lon: current.coords.longitude,
-      lat: current.coords.latitude,
-    };
-  } catch {
-    return undefined;
-  }
 };
 
 const hasGrantedForegroundLocation = async (): Promise<boolean> => {
@@ -608,7 +586,6 @@ export default function RideDetailScreen() {
     clearRideContext,
     sendHeartbeat,
     upsertLocation,
-    reportSOS,
     reset,
   } = useLiveSessionStore();
 
@@ -708,16 +685,27 @@ export default function RideDetailScreen() {
   const [showJoinOverridePicker, setShowJoinOverridePicker] = useState(false);
   const [reviewRating, setReviewRating] = useState<number>(0);
   const [reviewText, setReviewText] = useState("");
-  const [sosSubmitting, setSOSSubmitting] = useState(false);
+  const groupAlert = useGroupAlert(id);
+  // Who raised a group alert, for the banner the rest of the ride sees.
+  const riderNames = useMemo<Record<string, string>>(
+    () =>
+      Object.fromEntries(
+        (ride?.participants ?? []).map((participant: any) => [
+          participant.rider_id,
+          participant.display_name || "A rider",
+        ]),
+      ),
+    [ride?.participants],
+  );
   const [sampledLocation, setSampledLocation] = useState<LatLng | null>(null);
   const hasAutoFitLiveMarkersRef = useRef(false);
 
   const joinMutation = useMutation({
     mutationFn: (coords?: [number, number]) => joinRide(id!, coords),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["ride", id] });
       queryClient.invalidateQueries({ queryKey: ["rides"] });
-      Alert.alert("Success", "You have joined the ride!");
+      Alert.alert("Success", joinedMessage(data.outcome));
     },
     onError: (err: any) => {
       Alert.alert("Error", getApiErrorMessage(err, "Failed to join ride"));
@@ -747,6 +735,28 @@ export default function RideDetailScreen() {
     },
     onError: (err: any) => {
       Alert.alert("Error", getApiErrorMessage(err, "Failed to promote"));
+    },
+  });
+
+  const leaveMutation = useMutation({
+    mutationFn: () => leaveRideRequest(id!),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["ride", id] });
+      queryClient.invalidateQueries({ queryKey: ["rides"] });
+      Alert.alert("You left the ride", result.message);
+    },
+    onError: (err: any) => {
+      Alert.alert("Error", getApiErrorMessage(err, "Failed to leave the ride"));
+    },
+  });
+
+  const captainMutation = useMutation({
+    mutationFn: (riderId: string) => passCaptaincyRequest(id!, riderId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ride", id] });
+    },
+    onError: (err: any) => {
+      Alert.alert("Error", getApiErrorMessage(err, "Failed to pass the ride on"));
     },
   });
 
@@ -809,7 +819,7 @@ export default function RideDetailScreen() {
         queryClient.invalidateQueries({ queryKey: ["live-session", id] }),
       ]);
       if (token) {
-        connect(token);
+        connect();
       }
       await refetchLiveSession();
       joinRoom(id!);
@@ -845,58 +855,6 @@ export default function RideDetailScreen() {
     onEnded: () => void refetchLiveSession(),
   });
 
-  const liveSOSMutation = useMutation({
-    mutationFn: (payload?: { lon: number; lat: number }) =>
-      reportSOSReq(id!, payload),
-    onSuccess: () => {
-      Alert.alert("SOS sent", "Your critical SOS incident has been reported.");
-      refetchLiveSession();
-    },
-    onError: (err: any) => {
-      Alert.alert("Error", getApiErrorMessage(err, "Failed to report SOS"));
-    },
-  });
-
-  const handleSOS = () => {
-    Alert.alert(
-      "Send SOS?",
-      "This will report a critical incident to ride leaders immediately.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Send SOS",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              if (sosSubmitting || liveSOSMutation.isPending) {
-                return;
-              }
-
-              setSOSSubmitting(true);
-
-              try {
-                const coords = await getSOSCoords();
-
-                if (inRoom) {
-                  reportSOS(coords);
-                  Alert.alert(
-                    "SOS sent",
-                    "Your critical SOS incident has been reported.",
-                  );
-                  void refetchLiveSession();
-                } else {
-                  await liveSOSMutation.mutateAsync(coords);
-                }
-              } finally {
-                setSOSSubmitting(false);
-              }
-            })();
-          },
-        },
-      ],
-    );
-  };
-
   useEffect(() => {
   if (isFocused) {
     console.log(`[RideDetail] ENTER id=${id} ts=${Date.now()}`);
@@ -918,7 +876,7 @@ useEffect(() => {
       return;
     }
 
-    connect(token);
+    connect();
 
     return () => {
       reset();
@@ -1131,7 +1089,7 @@ useEffect(() => {
   useEffect(() => {
     if (!id || !token) return;
 
-    rideSocket.connect(token);
+    rideSocket.connect();
     rideSocket.subscribe(id);
 
     const handleJoined = () => {
@@ -1147,14 +1105,21 @@ useEffect(() => {
       queryClient.invalidateQueries({ queryKey: ["ride", id] });
     };
 
+    // Someone left, or the captain changed: the rider list and leader moved.
+    const handleRosterChanged = () => {
+      queryClient.invalidateQueries({ queryKey: ["ride", id] });
+    };
+
     rideSocket.on("ride:joined", handleJoined);
     rideSocket.on("ride:stop_requested", handleStopRequested);
     rideSocket.on("ride:stop_updated", handleStopUpdated);
+    rideSocket.on("ride:roster_changed", handleRosterChanged);
 
     return () => {
       rideSocket.off("ride:joined", handleJoined);
       rideSocket.off("ride:stop_requested", handleStopRequested);
       rideSocket.off("ride:stop_updated", handleStopUpdated);
+      rideSocket.off("ride:roster_changed", handleRosterChanged);
       rideSocket.unsubscribe(id);
     };
   }, [id, token, queryClient]);
@@ -1393,6 +1358,11 @@ useEffect(() => {
     );
   }
 
+  // A ride that needs approval, and this rider isn't on it yet.
+  if (isRidePreview(ride)) {
+    return <RidePreviewView ride={ride} onBack={handleBackPress} />;
+  }
+
   const startCoords = ride.start_point_geojson?.coordinates;
   const endCoords = ride.end_point_geojson?.coordinates;
   const isParticipant = isParticipantFromRide;
@@ -1471,6 +1441,17 @@ useEffect(() => {
       { text: "Promote", onPress: () => promoteMutation.mutate(riderId) },
     ]);
   };
+
+  const confirm = (prompt: ConfirmPrompt, onConfirm: () => void) =>
+    Alert.alert(prompt.title, prompt.message, [
+      { text: "Cancel", style: "cancel" },
+      { text: prompt.confirmLabel, style: "destructive", onPress: onConfirm },
+    ]);
+
+  const handleLeave = () => confirm(leaveRidePrompt(ride), () => leaveMutation.mutate());
+
+  const handleMakeCaptain = (riderId: string, name: string) =>
+    confirm(makeCaptainPrompt(name), () => captainMutation.mutate(riderId));
 
   const handleJoinAttempt = () => {
     if (ride.start_point_auto) {
@@ -1973,15 +1954,14 @@ useEffect(() => {
                 liveStatus === "starting" ||
                 inRoom) && (
                 <TouchableOpacity
-                  onPress={handleSOS}
-                  disabled={liveSOSMutation.isPending || sosSubmitting}
+                  accessibilityRole='button'
+                  onPress={groupAlert.openSheet}
+                  disabled={groupAlert.isSending}
                   className='px-4 py-2 rounded-xl mr-2 mb-2'
-                  style={{ backgroundColor: colors.danger }}
+                  style={{ backgroundColor: colors.danger, minHeight: 44, justifyContent: "center" }}
                 >
                   <Text className='font-bold text-white'>
-                    {liveSOSMutation.isPending || sosSubmitting
-                      ? "Sending SOS..."
-                      : "SOS"}
+                    {groupAlert.isSending ? "Sending alert…" : "Alert my group"}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -2193,6 +2173,14 @@ useEffect(() => {
           </View>
         )}
 
+        {isLeader && !isTerminalRideStatus && (
+          <JoinRequestsCard
+            rideId={id!}
+            requests={ride.join_requests ?? []}
+            onOpenRider={(riderId) => router.push(`/rider/${riderId}` as any)}
+          />
+        )}
+
         {/* Participants */}
         <View className='p-5 mb-10'>
           <Text
@@ -2284,6 +2272,21 @@ useEffect(() => {
                     style={{ color: "#3b82f6" }}
                   >
                     Promote
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {/* Captain: hand the ride to anyone else on it, before or during it */}
+              {isCaptain && !isTerminalRideStatus && p.rider_id !== currentRider?.id && (
+                <TouchableOpacity
+                  onPress={() => handleMakeCaptain(p.rider_id, p.display_name)}
+                  disabled={captainMutation.isPending}
+                  className='ml-2 px-3 py-1.5 rounded-full'
+                  style={{ borderWidth: 1, borderColor: colors.primary }}
+                  accessibilityRole='button'
+                  accessibilityLabel={`Make ${p.display_name} the captain`}
+                >
+                  <Text className='text-xs font-bold' style={{ color: colors.primary }}>
+                    Make captain
                   </Text>
                 </TouchableOpacity>
               )}
@@ -2519,6 +2522,23 @@ useEffect(() => {
                   )}
                 </View>
               )}
+              {/* Before the start only: once live, riders finish their ride instead. */}
+              {ride.status !== "active" && (
+                <TouchableOpacity
+                  onPress={handleLeave}
+                  disabled={leaveMutation.isPending}
+                  className='mt-3 py-2 items-center'
+                  accessibilityRole='button'
+                >
+                  {leaveMutation.isPending ? (
+                    <ActivityIndicator color={colors.danger} />
+                  ) : (
+                    <Text className='font-semibold' style={{ color: colors.danger }}>
+                      Leave ride
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
           ) : (
             <TouchableOpacity
@@ -2555,6 +2575,17 @@ useEffect(() => {
           customTrigger={() => <View />}
         />
       )}
+
+      {liveEnabled ? (
+        <GroupAlertBanner currentRiderId={currentRider?.id} riderNames={riderNames} />
+      ) : null}
+
+      <GroupAlertSheet
+        visible={groupAlert.isSheetOpen}
+        isSending={groupAlert.isSending}
+        onSend={() => void groupAlert.send()}
+        onClose={groupAlert.closeSheet}
+      />
     </View>
   );
 }

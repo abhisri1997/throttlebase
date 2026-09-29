@@ -60,7 +60,7 @@ Both hosted APIs run on Railway and answered `/health` on 2026-09-28. The databa
 ### In progress
 
 - First real-world ride on a physical phone to prove per-rider progress and motion-based stop detection end to end.
-- Live-session reliability: reconnect after token refresh, background/resume.
+- Live-session reliability: background/resume.
 
 ## Known gaps
 
@@ -81,8 +81,6 @@ Both hosted APIs run on Railway and answered `/health` on 2026-09-28. The databa
 
 ### Client
 
-- `GET /api/riders/me` still returns `is_admin` via a JSON fallback on a dropped column, so it is always `false`. The settings screen uses it to show "Admin - Manage Tickets", so admins never see that entry. It should read roles instead (support is flagged off for the beta).
-- The `/live` socket reconnects with the token it was given at `connect()`. After the access token expires, Socket.IO's automatic reconnect uses the stale token until the app calls `connect()` again with a fresh one.
 - Two HTTP clients coexist (fetch adapter and legacy axios).
 - `app/ride/[id].tsx` (~2,560 lines) and `app/ride/[id]/navigation.tsx` (~980 lines) are due to be split.
 - No feedback channel for testers while support is hidden.
@@ -92,15 +90,13 @@ Both hosted APIs run on Railway and answered `/health` on 2026-09-28. The databa
 ### P0 — beta readiness
 
 1. Real-phone ride validation of per-rider progress, motion readings and stop markers.
-2. Live socket reconnect with a refreshed token.
-3. Tester feedback channel.
+2. Tester feedback channel.
 
 ### P1 — security and delivery
 
 1. Enforce RLS: services on `withRiderTransaction`, API on `throttlebase_app`, then replace transitional policies.
 2. Real push and email providers with device registration.
-3. Fix admin detection on the client (roles instead of `is_admin`).
-4. Honour `leaderboard_opt_in` before Rank launches.
+3. Honour `leaderboard_opt_in` before Rank launches.
 
 ### P2 — scale and cleanup
 

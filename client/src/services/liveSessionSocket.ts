@@ -1,5 +1,7 @@
 import { io, type Socket } from "socket.io-client";
 import { resolveBaseUrl } from "../adapters/http/baseUrl";
+import { keepSocketAuthenticated } from "../core/auth/socketAuth";
+import { currentAccessToken } from "./socketToken";
 import type { FinishReason, RiderProgress } from "../features/rides/core/riderProgress";
 import type { MotionActivityLabel } from "./motionReading";
 
@@ -65,8 +67,12 @@ export type IncidentCreatedEvent = {
   incidentId: string;
   riderId: string;
   severity: "low" | "medium" | "high" | "critical";
-  kind: "sos" | "crash" | "medical" | "mechanical" | "other";
+  /** "sos" only on incidents from before the rename; the server stores "group_alert". */
+  kind: "group_alert" | "sos" | "crash" | "medical" | "mechanical" | "other";
   createdAt: string;
+  /** Where the rider was when they reported it, when their phone knew. */
+  lon?: number;
+  lat?: number;
 };
 
 export type SessionErrorEvent = {
@@ -142,7 +148,7 @@ export type LiveSocketClientEvents = {
   "incident:create": (payload: {
     rideId: string;
     severity: "low" | "medium" | "high" | "critical";
-    kind: "sos" | "crash" | "medical" | "mechanical" | "other";
+    kind: "group_alert" | "crash" | "medical" | "mechanical" | "other";
     lon?: number;
     lat?: number;
     metadata?: Record<string, unknown>;
@@ -155,27 +161,26 @@ const getBaseUrl = resolveBaseUrl;
 
 class LiveSessionSocketService {
   private socket: LiveSocket | null = null;
-  private authToken: string | null = null;
+  private stopAuthenticating: (() => void) | null = null;
 
-  connect(token: string): LiveSocket {
-    this.authToken = token;
-
+  /**
+   * Connects, or reconnects a dropped socket. The access token is fetched on
+   * every connection attempt, never held, so reconnects after the token
+   * expires still get in.
+   */
+  connect(): LiveSocket {
     if (this.socket) {
       if (!this.socket.connected) {
-        this.socket.auth = { token };
         this.socket.connect();
       }
       return this.socket;
     }
 
-    const socket = io(`${getBaseUrl()}/live`, {
+    const socket: LiveSocket = io(`${getBaseUrl()}/live`, {
       transports: ["websocket"],
       autoConnect: false,
-      auth: { token },
-      extraHeaders: {
-        Authorization: `Bearer ${token}`,
-      },
     });
+    this.stopAuthenticating = keepSocketAuthenticated(socket, currentAccessToken);
 
     socket.connect();
     this.socket = socket;
@@ -226,6 +231,8 @@ class LiveSessionSocketService {
       return;
     }
 
+    this.stopAuthenticating?.();
+    this.stopAuthenticating = null;
     this.socket.removeAllListeners();
     this.socket.disconnect();
     this.socket = null;

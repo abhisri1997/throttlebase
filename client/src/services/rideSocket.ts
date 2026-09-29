@@ -1,5 +1,7 @@
 import { io, type Socket } from "socket.io-client";
 import { resolveBaseUrl } from "../adapters/http/baseUrl";
+import { keepSocketAuthenticated } from "../core/auth/socketAuth";
+import { currentAccessToken } from "./socketToken";
 
 const getBaseUrl = resolveBaseUrl;
 
@@ -36,6 +38,8 @@ export type RideSocketServerEvents = {
   "ride:joined": (event: RideJoinedEvent) => void;
   "ride:stop_requested": (event: RideStopRequestedEvent) => void;
   "ride:stop_updated": (event: RideStopUpdatedEvent) => void;
+  /** Someone left, or the captain changed. */
+  "ride:roster_changed": (event: { rideId: string }) => void;
   "ride:error": (event: RideErrorEvent) => void;
 };
 
@@ -48,11 +52,12 @@ type RideSocket = Socket<RideSocketServerEvents, RideSocketClientEvents>;
 
 class RideSocketService {
   private socket: RideSocket | null = null;
+  private stopAuthenticating: (() => void) | null = null;
 
-  connect(token: string): RideSocket {
+  /** Same token handling as the live-session socket. */
+  connect(): RideSocket {
     if (this.socket) {
       if (!this.socket.connected) {
-        this.socket.auth = { token };
         this.socket.connect();
       }
       return this.socket;
@@ -61,11 +66,8 @@ class RideSocketService {
     const socket: RideSocket = io(`${getBaseUrl()}/rides`, {
       transports: ["websocket"],
       autoConnect: false,
-      auth: { token },
-      extraHeaders: {
-        Authorization: `Bearer ${token}`,
-      },
     });
+    this.stopAuthenticating = keepSocketAuthenticated(socket, currentAccessToken);
 
     socket.connect();
     this.socket = socket;
@@ -105,6 +107,8 @@ class RideSocketService {
 
   disconnect(): void {
     if (!this.socket) return;
+    this.stopAuthenticating?.();
+    this.stopAuthenticating = null;
     this.socket.removeAllListeners();
     this.socket.disconnect();
     this.socket = null;

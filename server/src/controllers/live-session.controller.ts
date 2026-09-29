@@ -11,7 +11,7 @@ import {
   CreateIncidentSchema,
   EndLiveSessionSchema,
 } from "../schemas/live-session.schemas.js";
-import { emitToLiveRoom } from "../realtime/gateway.js";
+import { emitToLiveRoom, incidentCreatedEvent } from "../realtime/gateway.js";
 import { buildLiveRoomKey } from "../realtime/session-room.js";
 import {
   LiveSessionError,
@@ -157,10 +157,13 @@ export const reportIncident = async (
 ): Promise<void> => {
   try {
     const data = CreateIncidentSchema.parse(req.body);
-    const incident = await createLiveIncident(
-      req.params.id as string,
-      rid(req),
-      data,
+    const rideId = req.params.id as string;
+    const incident = await createLiveIncident(rideId, rid(req), data);
+    // Sent over HTTP when the rider is not in the room; the room still hears it.
+    emitToLiveRoom(
+      buildLiveRoomKey(rideId, incident.session_id as string),
+      "incident:created",
+      incidentCreatedEvent(incident, rid(req), data),
     );
     res.status(201).json({ incident });
   } catch (error: any) {
