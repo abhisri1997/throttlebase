@@ -91,9 +91,11 @@ Account routes (`server/src/adapters/http/riderAccountRoutes.ts`) are mounted be
 - `GET /api/routes` — public routes plus your private ones. Each carries `start_name`, `end_name`, `start_lat/lng`, `end_lat/lng`, `via` (stop names in order), `highlights`, `ridden_duration_s`
 - `GET /api/routes/search?from_lat&from_lng&from_name&to_lat&to_lng&to_name&min_km&max_km&highlights=a,b` — all optional. A place matches a route end named after it, a stop, or a point within the route's radius (15% of its length, 5–25 km). Same-direction matches first, then reversed. Each result has `match: { direction, start_gap_km, end_gap_km }`. Max 50
 - `POST /api/routes`
-- `GET /api/routes/:id` — route plus `stops` (position, name, lat/lng, `note`, `distance_from_start_km`), visibility-aware
+- `GET /api/routes/:id` — route plus `stops` (position, name, lat/lng, `note`, `distance_from_start_km`), visibility-aware. A share grants access only while the route is `specific_riders`
+- `PATCH /api/routes/:id` — `{ visibility: private | specific_riders | public }`, owner only (404 otherwise). Made private, the route leaves search, the Routes list and other riders' bookmarks at once
+- `DELETE /api/routes/:id` — owner only (404 otherwise); for good. Stops, shares, bookmarks and road feedback go with it; rides planned on it keep their `road_via` and lose only `route_id`
 - `POST /api/routes/:id/bookmark`, `DELETE /api/routes/:id/bookmark`
-- `POST /api/routes/:id/share` — share with another rider
+- `POST /api/routes/:id/share` — `{ rider_id }`: the owner shares their route with another rider. 404 unless the route is yours and the rider exists
 - `POST /api/routes/traces` — legacy batch GPS upload. No client uses it
 - `GET /api/routes/traces/:rideId` — reads that legacy table
 

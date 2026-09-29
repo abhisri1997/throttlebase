@@ -33,6 +33,9 @@ import {
   type RouteRoadFeedback,
 } from "../../src/features/routes/core/roadFeedback";
 import { PlanRideSection } from "../../src/features/routes/components/PlanRideSection";
+import { RouteOwnerActions } from "../../src/features/routes/components/RouteOwnerActions";
+import { isRouteOwner } from "../../src/features/routes/core/routeOwner";
+import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { parseRideDirection, type RideDirection } from "../../src/features/routes/core/planRide";
 
 const fetchRouteDetails = async (id: string) => {
@@ -77,6 +80,7 @@ export default function RouteDetailScreen() {
   // Found by searching the other way round: ready to be ridden that way.
   const [direction, setDirection] = useState<RideDirection>(() => parseRideDirection(directionParam));
   const queryClient = useQueryClient();
+  const currentRider = useCurrentRider().rider;
   const mapRef = useRef<InstanceType<typeof MapView> | null>(null);
 
   const {
@@ -342,7 +346,11 @@ export default function RouteDetailScreen() {
           <RouteItinerary rows={itinerary} />
         </View>
 
-        <View className='px-5 pb-10'>
+        {isRouteOwner(route, currentRider?.id) ? (
+          <RouteOwnerActions route={route} onDeleted={() => goBackOr(router, "/(tabs)/routes")} />
+        ) : null}
+
+        <View className='px-5 pt-5 pb-10'>
           {/* Only what is known: where it came from. Nothing here rates the
               road, and nothing claims it is safe. */}
           <Text className='text-sm leading-5' style={{ color: colors.textMuted }}>
