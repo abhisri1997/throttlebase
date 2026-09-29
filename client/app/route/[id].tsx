@@ -34,7 +34,7 @@ import {
 } from "../../src/features/routes/core/roadFeedback";
 import { PlanRideSection } from "../../src/features/routes/components/PlanRideSection";
 import { RouteOwnerActions } from "../../src/features/routes/components/RouteOwnerActions";
-import { isRouteOwner } from "../../src/features/routes/core/routeOwner";
+import { isCommunityRoute, isRouteOwner, routeAuthor } from "../../src/features/routes/core/routeOwner";
 import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { parseRideDirection, type RideDirection } from "../../src/features/routes/core/planRide";
 
@@ -136,6 +136,7 @@ export default function RouteDetailScreen() {
     );
   }
 
+  const isCommunity = isCommunityRoute(route);
   const coords: [number, number][] = route.geojson?.coordinates || [];
   const mapCoords = coords.map((c) => ({ latitude: c[1], longitude: c[0] }));
   const startCoord = mapCoords[0];
@@ -293,11 +294,11 @@ export default function RouteDetailScreen() {
             </Text>
           ) : null}
           <Text className='text-sm mt-2' style={{ color: colors.textMuted }}>
-            Saved by{" "}
+            {isCommunity ? "" : "Saved by "}
             <Text className='font-bold' style={{ color: colors.text }}>
-              {route.creator_name}
-            </Text>{" "}
-            on {dateStr}
+              {routeAuthor(route, currentRider?.id)}
+            </Text>
+            {isCommunity ? " · saved" : ""} on {dateStr}
           </Text>
           <PlanRideSection
             startName={route.start_name ?? null}
@@ -318,7 +319,7 @@ export default function RouteDetailScreen() {
             <HighlightChips highlights={highlights} />
             {/* The saver's view, never the app's claim. */}
             <Text className='text-xs' style={{ color: colors.textMuted }}>
-              {route.creator_name}'s own view of the ride.
+              {isCommunity ? "The saver's own view of the ride." : `${route.creator_name}'s own view of the ride.`}
             </Text>
           </View>
         ) : null}
@@ -354,9 +355,11 @@ export default function RouteDetailScreen() {
           {/* Only what is known: where it came from. Nothing here rates the
               road, and nothing claims it is safe. */}
           <Text className='text-sm leading-5' style={{ color: colors.textMuted }}>
-            {route.ride_id
-              ? `Recorded on ${route.creator_name}'s ride. Distances are measured along the road they rode.`
-              : `Saved by ${route.creator_name}.`}
+            {isCommunity
+              ? "A community route, kept without the name of the rider who saved it. Its first and last few hundred metres may have been trimmed."
+              : route.ride_id
+                ? `Recorded on ${route.creator_name}'s ride. Distances are measured along the road they rode.`
+                : `Saved by ${route.creator_name}.`}
           </Text>
         </View>
       </ScrollView>

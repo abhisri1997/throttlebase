@@ -88,7 +88,7 @@ Account routes (`server/src/adapters/http/riderAccountRoutes.ts`) are mounted be
 
 ## Routes
 
-- `GET /api/routes` — public routes plus your private ones. Each carries `start_name`, `end_name`, `start_lat/lng`, `end_lat/lng`, `via` (stop names in order), `highlights`, `ridden_duration_s`
+- `GET /api/routes` — public routes plus your private ones. `creator_id` and `creator_name` are null on a community route: a deleted rider's public route, kept anonymised. Each carries `start_name`, `end_name`, `start_lat/lng`, `end_lat/lng`, `via` (stop names in order), `highlights`, `ridden_duration_s`
 - `GET /api/routes/search?from_lat&from_lng&from_name&to_lat&to_lng&to_name&min_km&max_km&highlights=a,b` — all optional. A place matches a route end named after it, a stop, or a point within the route's radius (15% of its length, 5–25 km). Same-direction matches first, then reversed. Each result has `match: { direction, start_gap_km, end_gap_km }`. Max 50
 - `POST /api/routes`
 - `GET /api/routes/:id` — route plus `stops` (position, name, lat/lng, `note`, `distance_from_start_km`), visibility-aware. A share grants access only while the route is `specific_riders`

@@ -11,8 +11,24 @@ export const PUBLIC_ROUTE_NOTICE =
 
 export type RouteVisibility = "public" | "private" | "specific_riders";
 
-export const isRouteOwner = (route: { creator_id: string }, riderId: string | undefined): boolean =>
-  riderId !== undefined && route.creator_id === riderId;
+/** A community route has no owner: nobody can edit, share or delete it. */
+export const isRouteOwner = (route: { creator_id: string | null }, riderId: string | undefined): boolean =>
+  riderId !== undefined && route.creator_id !== null && route.creator_id === riderId;
+
+/** A route kept, anonymised, after the rider who saved it left ThrottleBase. */
+export const COMMUNITY_ROUTE_LABEL = "Community route";
+
+export const isCommunityRoute = (route: { creator_id: string | null }): boolean => route.creator_id === null;
+
+/** Who saved a route, as the app names them: you, the rider, or nobody at all. */
+export const routeAuthor = (
+  route: { creator_id: string | null; creator_name?: string | null },
+  viewerId: string | null | undefined,
+): string => {
+  if (isCommunityRoute(route)) return COMMUNITY_ROUTE_LABEL;
+  if (viewerId && route.creator_id === viewerId) return "You";
+  return route.creator_name ?? "A rider";
+};
 
 /** The one switch the app offers: public, or only me. */
 export const visibilityTarget = (current: RouteVisibility): "public" | "private" =>

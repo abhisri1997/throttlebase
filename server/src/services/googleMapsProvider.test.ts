@@ -103,6 +103,21 @@ test("sends the search field mask on searchNearby", async () => {
   assert.equal(headerOf(calls[0]!.init, "X-Goog-FieldMask"), PLACES_FIELD_MASK);
 });
 
+test("searchNearby sends excluded types and nearest-first ranking only when asked", async () => {
+  const { calls, fetchImpl } = recordingFetch({ places: [] });
+  const provider = createGoogleMapsProvider({ apiKey: API_KEY, fetchImpl });
+  const at = { lat: 12.9, lng: 77.5, radiusMeters: 50 };
+
+  await provider.searchNearby({ ...at, includedTypes: ["hotel"], excludedTypes: ["guest_house"], rankByDistance: true });
+  await provider.searchNearby({ ...at, includedTypes: ["hotel"] });
+
+  const [asked, plain] = calls.map((call) => JSON.parse(String(call.init?.body)) as Record<string, unknown>);
+  assert.deepEqual(asked!.excludedTypes, ["guest_house"]);
+  assert.equal(asked!.rankPreference, "DISTANCE");
+  assert.equal("excludedTypes" in plain!, false);
+  assert.equal("rankPreference" in plain!, false);
+});
+
 test("sends the details field mask on getPlaceDetails", async () => {
   const { calls, fetchImpl } = recordingFetch({
     id: "p1",

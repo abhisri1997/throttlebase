@@ -46,7 +46,7 @@ Alert my group sends an alert with your location to the other riders on your rid
 
 - You own the posts, comments, reviews, routes and other content you add.
 - You give us a non-exclusive, royalty-free licence to store, show, copy and adapt it as needed to run ThrottleBase, for the people you share it with.
-- When you make a route public, you also let us keep a copy after you delete your account, without your name or any link to you and with the first and last part of the route removed. This lets other riders keep using it. This licence does not apply to private routes or routes shared with specific riders.
+- When you make a route public, you also let us keep a copy after you delete your account, without your name or any link to you. Any end of the route that isn't at a public place (such as a hotel, café, fuel station, viewpoint or station) is shortened by about 500 m, and your own words on it (its name, stop names and notes) are replaced or removed. This lets other riders keep using it. This licence does not apply to private routes or routes shared with specific riders.
 - Only add content you have the right to share.
 
 ## What you must not do

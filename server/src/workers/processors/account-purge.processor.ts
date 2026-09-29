@@ -18,6 +18,11 @@
  * (comments and likes on their posts, stops and bookmarks on their routes),
  * as deleting that content does in the app.
  *
+ * Public routes are kept for the community, anonymised, before the rest of
+ * the rider's routes are deleted (services/community-route.service.ts). The
+ * places and area names they need are looked up before the rider's
+ * transaction, so no Google call holds a database connection.
+ *
  * Rides and groups are handed over when the account is deleted. Each run
  * first hands over any open ride or group still tied to a deleted account —
  * accounts deleted before hand-over existed — so a purge never meets one.
@@ -34,6 +39,12 @@ import type { PoolClient } from "pg";
 import pool, { query } from "../../config/db.js";
 import { handOverGroupsOfDeletedRiders } from "../../services/group-roster.service.js";
 import { handOffRidesOfDeletedRiders } from "../../services/ride-roster.service.js";
+import {
+  GOOGLE_LOOKUPS,
+  keepCommunityRoutes,
+  planCommunityRoutesOf,
+  type CommunityRouteLookups,
+} from "../../services/community-route.service.js";
 
 /** Days between deleting an account and purging its data. */
 export const ACCOUNT_PURGE_GRACE_DAYS = 30;
@@ -54,6 +65,7 @@ const OWN_DATA_DELETES: ReadonlyArray<{ table: string; sql: string }> = [
   { table: "route_road_feedback", sql: "DELETE FROM route_road_feedback WHERE rider_id = $1" },
   { table: "route_bookmarks", sql: "DELETE FROM route_bookmarks WHERE rider_id = $1" },
   { table: "route_shares", sql: "DELETE FROM route_shares WHERE shared_with_rider_id = $1" },
+  // Public routes kept for the community no longer have the rider as creator.
   { table: "routes", sql: "DELETE FROM routes WHERE creator_id = $1" },
   // Community
   { table: "comments", sql: "DELETE FROM comments WHERE rider_id = $1" },
@@ -179,16 +191,20 @@ const addCounts = (total: RowCounts, more: RowCounts): RowCounts =>
 
 export const processAccountPurge = async (
   _payload: Record<string, unknown>,
+  lookups: CommunityRouteLookups = GOOGLE_LOOKUPS,
 ): Promise<Record<string, unknown>> => {
   const ridesHandedOff = await handOffRidesOfDeletedRiders();
   const groupsHandedOver = await handOverGroupsOfDeletedRiders();
   const riderIds = await findRidersDueForPurge();
   let rowsDeleted: RowCounts = {};
+  let routesKept = 0;
 
   for (const riderId of riderIds) {
+    const communityRoutes = await planCommunityRoutesOf(riderId, lookups);
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      routesKept += await keepCommunityRoutes(client, riderId, communityRoutes);
       const counts = await purgeRider(client, riderId);
       await client.query("COMMIT");
       rowsDeleted = addCounts(rowsDeleted, counts);
@@ -205,6 +221,7 @@ export const processAccountPurge = async (
     ridesHandedOff,
     groupsHandedOver,
     ridersPurged: riderIds.length,
+    routesKept,
     rowsDeleted,
     handledAt: new Date().toISOString(),
   };

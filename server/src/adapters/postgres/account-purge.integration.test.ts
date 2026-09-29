@@ -20,6 +20,8 @@ if (CONNECTION) {
 }
 
 const db = CONNECTION ? await import("../../config/db.js") : null;
+// Never Google in tests: the local .env may hold a real key.
+const lookups = CONNECTION ? await import("../../services/community-route.service.js") : null;
 const purge = CONNECTION
   ? await import("../../workers/processors/account-purge.processor.js")
   : null;
@@ -197,7 +199,7 @@ test("purging a deleted account removes only that rider's data", { skip: !CONNEC
   // The recently deleted rider still has a post: not due for purge yet.
   const recentPost = await insertPost(admin, RECENT, "Recent leaver's post");
 
-  await purge!.processAccountPurge({});
+  await purge!.processAccountPurge({}, lookups!.NO_LOOKUPS);
 
   await t.test("the leaver's own rows are gone", async () => {
     const owned: Array<[string, string]> = [
@@ -321,7 +323,7 @@ test("purging a deleted account removes only that rider's data", { skip: !CONNEC
   });
 
   await t.test("running the purge again is harmless", async () => {
-    await purge!.processAccountPurge({});
+    await purge!.processAccountPurge({}, lookups!.NO_LOOKUPS);
     assert.equal(await countOf(admin, `SELECT count(*) FROM rides WHERE id = $1`, [leaversRide]), 1);
     assert.equal(await countOf(admin, `SELECT count(*) FROM posts WHERE id = $1`, [stayersPost]), 1);
   });
