@@ -10,7 +10,7 @@ import { haversineMeters } from "../utils/polyline.js";
 import { snapToNearestPlace } from "./meetingPoint.service.js";
 import { enqueueRideStatsRecompute } from "./jobs.service.js";
 import { getRouteById } from "./route.service.js";
-import { syncRiderCounts } from "./ride-roster.service.js";
+import { previewNextCaptain, syncRiderCounts } from "./ride-roster.service.js";
 
 /** Rides a rider can still join. */
 const JOINABLE_RIDE_STATUSES: ReadonlySet<string> = new Set(["scheduled", "active"]);
@@ -33,6 +33,8 @@ export interface Ride {
   updated_at: string;
   // Included from JOIN
   captain_name?: string;
+  /** Only for the captain: who would lead if they left (null: nobody). */
+  next_captain?: { rider_id: string; display_name: string } | null;
 }
 
 export interface RideStop {
@@ -393,7 +395,13 @@ export const getRideById = async (
        ${visibilityClause}`,
     params,
   );
-  return result.rows.length ? (result.rows[0] as Ride) : null;
+  const ride = result.rows[0] as Ride | undefined;
+  if (!ride) return null;
+  // The captain sees who would lead if they left, before they decide to.
+  if (viewerRiderId && ride.captain_id === viewerRiderId) {
+    return { ...ride, next_captain: await previewNextCaptain(id, viewerRiderId) };
+  }
+  return ride;
 };
 
 /**

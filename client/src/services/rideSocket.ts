@@ -38,6 +38,8 @@ export type RideSocketServerEvents = {
   "ride:joined": (event: RideJoinedEvent) => void;
   "ride:stop_requested": (event: RideStopRequestedEvent) => void;
   "ride:stop_updated": (event: RideStopUpdatedEvent) => void;
+  /** Someone left, or the captain changed. */
+  "ride:roster_changed": (event: { rideId: string }) => void;
   "ride:error": (event: RideErrorEvent) => void;
 };
 
