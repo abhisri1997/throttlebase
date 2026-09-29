@@ -54,7 +54,7 @@ The following are intentionally excluded from this UAT plan:
 
 Pass a scenario only when all expected UI outcomes occur without manual database fixes during execution.
 
-Known issue (2026-09-28): the settings screen decides whether to show "Admin - Manage Tickets" from `is_admin` on the rider profile, which is always `false` since that column was replaced by `rider_roles`. Scenario 3 fails at step 4 until the client reads roles. The admin endpoints themselves check roles correctly.
+Settings shows "Admin - Manage Tickets" when the rider's profile `roles` include `admin` (from `rider_roles`). The admin endpoints check the roles in the access token.
 
 Fail a scenario when:
 

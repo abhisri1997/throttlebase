@@ -19,7 +19,8 @@ import type { UpdateRiderInput } from "../schemas/rider.schemas.js";
 export interface RiderProfile {
   id: string;
   email: string;
-  is_admin: boolean;
+  /** From rider_roles ('admin', 'support'); empty for most riders. Never public. */
+  roles: string[];
   display_name: string;
   username: string | null;
   bio: string | null;
@@ -53,7 +54,7 @@ export interface MentionSuggestion {
 const PROFILE_COLUMNS = `
   id,
   email,
-  COALESCE((to_jsonb(riders)->>'is_admin')::boolean, false) AS is_admin,
+  ARRAY(SELECT rr.role FROM rider_roles rr WHERE rr.rider_id = riders.id ORDER BY rr.role) AS roles,
   display_name,
   username,
   bio,

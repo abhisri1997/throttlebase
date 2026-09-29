@@ -85,7 +85,6 @@ ThrottleBase: mobile-first platform for motorcycle group rides.
 1. Real-phone ride validating per-rider progress, motion readings, stop markers.
 2. Enforce RLS: services onto `withRiderTransaction`, API onto `throttlebase_app`.
 3. Push/email providers + device registration.
-4. Client admin check: read roles, not `is_admin` (always false today).
 
 ## Assistant Operating Notes
 
