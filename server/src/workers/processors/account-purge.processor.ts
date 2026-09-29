@@ -18,8 +18,12 @@
  * (comments and likes on their posts, stops and bookmarks on their routes),
  * as deleting that content does in the app.
  *
- * Not yet handled here (later E1 slices): handing off upcoming rides and
- * groups the rider led, and the sealed 180-day registration record.
+ * Rides are handed off when the account is deleted. Each run first hands
+ * off any open ride still led or joined by a deleted account — accounts
+ * deleted before hand-off existed — so a purge never meets one.
+ *
+ * Not yet handled here (later E1 slices): handing off groups the rider led,
+ * and the sealed 180-day registration record.
  *
  * One transaction per rider; safe to run repeatedly. The job result carries
  * counts only, never identifiers of what was removed.
@@ -27,6 +31,7 @@
 
 import type { PoolClient } from "pg";
 import pool, { query } from "../../config/db.js";
+import { handOffRidesOfDeletedRiders } from "../../services/ride-roster.service.js";
 
 /** Days between deleting an account and purging its data. */
 export const ACCOUNT_PURGE_GRACE_DAYS = 30;
@@ -162,6 +167,7 @@ const addCounts = (total: RowCounts, more: RowCounts): RowCounts =>
 export const processAccountPurge = async (
   _payload: Record<string, unknown>,
 ): Promise<Record<string, unknown>> => {
+  const ridesHandedOff = await handOffRidesOfDeletedRiders();
   const riderIds = await findRidersDueForPurge();
   let rowsDeleted: RowCounts = {};
 
@@ -182,6 +188,7 @@ export const processAccountPurge = async (
 
   return {
     processor: "account-purge",
+    ridesHandedOff,
     ridersPurged: riderIds.length,
     rowsDeleted,
     handledAt: new Date().toISOString(),
