@@ -24,10 +24,26 @@
 | The rider's own tracks (`ride_live_location_samples` for this rider), presence, `ride_history_stats`, `ride_participants` rows | Deleted at purge. Other riders' rows in the same rides are untouched |
 | Upcoming rides the rider **captains** | At deletion time: transfer to a confirmed co-captain if one exists, otherwise cancel and notify participants |
 | Completed or cancelled rides the rider captained | Kept for the other participants. The captain is shown as "Deleted rider" |
-| Routes the rider created | Private and shared routes deleted. Rides planned on them keep their copied `road_via` (mig 034 already copies it) |
+| Routes the rider created | Hidden immediately. At purge, private and shared routes are deleted. **Public** routes are kept for the community in anonymised form, as disclosed at registration (decision B, 2026-09-29, below). Rides planned on them keep their copied `road_via` (mig 034 already copies it) |
 | Consent evidence ([consent.md](consent.md)) | Minimal pseudonymous evidence kept for the proof period. ⚖️ |
 | `security_events` ([logging.md](logging.md)) | Kept until normal expiry (≤180 days or 1 year), with rider_id only |
 | Content under a complaint or legal order | Preserved for up to 180 days (IT Rules) in a restricted table, then purged |
+
+## Keeping public routes for the community (decision B, 2026-09-29)
+
+A route is location data: one that starts or ends at the rider's home still identifies them without a name. Public routes are kept after deletion **only in anonymised form**. Once anonymised, a route is no longer personal data under the DPDP Act, so keeping it needs no consent. It needs clear notice, and the rider must keep control while the account is active. ⚖️
+
+1. **What is kept can't lead back to them.** At purge, each public route:
+   - is re-attributed to a community owner and shown as "Community route", never linked to the tombstone;
+   - loses its first and last ~500 m, and its start and end names and points are recomputed from the trimmed line;
+   - loses free-text stop notes and `ridden_duration_s`;
+   - keeps its highlights and other riders' road feedback.
+
+   Private and shared routes are always deleted.
+2. **Notice, not an opt-in** (user's choice, 2026-09-29). The Privacy Policy and Terms, accepted at registration, say that public routes are kept without the rider's name after they delete their account, and the Terms carry a licence to keep contributed routes. The deletion screen and web page restate it as information, not a choice. Recommended as well: a one-line notice where a route is made public ("Public routes stay for the community, without your name, if you delete your account"). ⚖️
+3. **Control while the account is active.** Riders can delete a route or make it private at any time. Without this, a rider who doesn't want a route kept has no way out. **Today there is no endpoint for either** (`routes/route.routes.ts` has create, read, search, bookmark and share only). The DPDP right to erasure (s.12) needs it regardless of deletion. ⚖️
+
+Delivered as its own slice after the hiding slice: route delete and make-private, then trimming and re-attribution in `account.purge`.
 
 ## Mechanism
 

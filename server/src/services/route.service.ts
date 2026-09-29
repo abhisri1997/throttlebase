@@ -139,12 +139,15 @@ export const getRouteById = async (
   routeId: string,
   viewerId: string,
 ): Promise<RouteWithStops | null> => {
-  // Fetch route with creator name, respecting visibility
+  // Fetch route with creator name, respecting visibility. A creator who has
+  // deleted their account takes their routes with them until the purge,
+  // which deletes them or, if the rider chose, keeps them anonymised.
   const result = await query(
     `SELECT ${ROUTE_COLUMNS}, rd.display_name AS creator_name
      FROM routes r
      JOIN riders rd ON r.creator_id = rd.id
      WHERE r.id = $1
+       AND rd.deleted_at IS NULL
        AND (
          r.visibility = 'public'
          OR r.creator_id = $2
@@ -171,7 +174,7 @@ export const listVisibleRoutes = async (viewerId: string): Promise<Route[]> => {
     `SELECT ${ROUTE_COLUMNS}, rd.display_name AS creator_name
      FROM routes r
      JOIN riders rd ON r.creator_id = rd.id
-     WHERE r.visibility = 'public' OR r.creator_id = $1
+     WHERE (r.visibility = 'public' OR r.creator_id = $1) AND rd.deleted_at IS NULL
      ORDER BY r.created_at DESC
      LIMIT 50`,
     [viewerId],
@@ -349,6 +352,7 @@ export const searchRoutes = async (viewerId: string, search: RouteSearchQuery): 
      FROM routes r
      JOIN riders rd ON r.creator_id = rd.id
      WHERE (r.visibility = 'public' OR r.creator_id = $1)
+       AND rd.deleted_at IS NULL
        ${placeConditions.length > 0 ? `AND (${placeConditions.join(" OR ")})` : ""}
      ORDER BY r.created_at DESC
      LIMIT ${MAX_SEARCH_CANDIDATES}`,

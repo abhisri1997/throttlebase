@@ -346,16 +346,18 @@ export const listGroups = async (
 ) => {
   await ensureCreatorAdminMembership(riderId);
 
+  // A deleted rider's group stays with its members but is hidden from anyone new.
+  const listedPublicly = `(g.visibility = 'public' AND r.deleted_at IS NULL)`;
   const whereClause =
     scope === "public"
-      ? `g.visibility = 'public'`
+      ? listedPublicly
       : scope === "joined"
         ? `(g.created_by = $1 OR EXISTS (
             SELECT 1
             FROM group_members gm
             WHERE gm.group_id = g.id AND gm.rider_id = $1
           ))`
-        : `(g.visibility = 'public' OR g.created_by = $1 OR EXISTS (
+        : `(${listedPublicly} OR g.created_by = $1 OR EXISTS (
             SELECT 1
             FROM group_members gm
             WHERE gm.group_id = g.id AND gm.rider_id = $1
@@ -363,7 +365,8 @@ export const listGroups = async (
 
   const result = await query(
     `SELECT g.*, r.display_name AS creator_name,
-            (SELECT COUNT(*)::int FROM group_members gm WHERE gm.group_id = g.id) AS member_count,
+            (SELECT COUNT(*)::int FROM group_members gm JOIN riders gr ON gr.id = gm.rider_id
+              WHERE gm.group_id = g.id AND gr.deleted_at IS NULL) AS member_count,
             (
               g.created_by = $1 OR EXISTS (
                 SELECT 1
@@ -395,7 +398,8 @@ export const getGroupById = async (groupId: string, riderId: string) => {
 
   const result = await query(
     `SELECT g.*, r.display_name AS creator_name,
-            (SELECT COUNT(*)::int FROM group_members gm WHERE gm.group_id = g.id) AS member_count,
+            (SELECT COUNT(*)::int FROM group_members gm JOIN riders gr ON gr.id = gm.rider_id
+              WHERE gm.group_id = g.id AND gr.deleted_at IS NULL) AS member_count,
             (
               g.created_by = $2 OR EXISTS(
                 SELECT 1
@@ -429,12 +433,12 @@ export const getGroupById = async (groupId: string, riderId: string) => {
               )
               FROM group_members gm
               JOIN riders m ON gm.rider_id = m.id
-              WHERE gm.group_id = g.id
+              WHERE gm.group_id = g.id AND m.deleted_at IS NULL
             ) AS members
      FROM groups g
      JOIN riders r ON g.created_by = r.id
      WHERE g.id = $1
-       AND (g.visibility = 'public' OR g.created_by = $2 OR EXISTS (
+       AND ((g.visibility = 'public' AND r.deleted_at IS NULL) OR g.created_by = $2 OR EXISTS (
          SELECT 1
          FROM group_members gm
          WHERE gm.group_id = g.id AND gm.rider_id = $2
@@ -448,6 +452,9 @@ export const getGroupById = async (groupId: string, riderId: string) => {
 export const joinGroup = async (groupId: string, riderId: string) => {
   const groupResult = await query(
     `SELECT g.id, g.visibility,
+            EXISTS (
+              SELECT 1 FROM riders c WHERE c.id = g.created_by AND c.deleted_at IS NOT NULL
+            ) AS creator_deleted,
             EXISTS (
               SELECT 1
               FROM group_members gm
@@ -470,9 +477,15 @@ export const joinGroup = async (groupId: string, riderId: string) => {
 
   const group = groupResult.rows[0] as {
     visibility: "public" | "private";
+    creator_deleted: boolean;
     is_member: boolean;
     current_user_role: "admin" | "member" | null;
   };
+
+  // Nobody new joins a group whose creator has deleted their account.
+  if (group.creator_deleted && !group.is_member) {
+    throw new Error("Group not found");
+  }
 
   if (group.is_member) {
     return {
@@ -560,7 +573,7 @@ export const getRideReviews = async (rideId: string) => {
   const result = await query(
     `SELECT rr.*, r.display_name AS reviewer_name
      FROM ride_reviews rr JOIN riders r ON rr.rider_id = r.id
-     WHERE rr.ride_id = $1
+     WHERE rr.ride_id = $1 AND r.deleted_at IS NULL
      ORDER BY rr.created_at DESC`,
     [rideId],
   );
