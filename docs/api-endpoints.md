@@ -135,7 +135,7 @@ The only path to Google. The client never calls `googleapis.com`. Rate-limited t
 - `GET /api/notifications/preferences`, `PUT /api/notifications/preferences`
 - `GET /api/notifications/settings`, `PATCH /api/notifications/settings`
 - `GET /api/notifications/privacy`, `PATCH /api/notifications/privacy`
-- `GET /api/notifications/blocked`, `POST /api/notifications/blocked/:id`, `DELETE /api/notifications/blocked/:id`
+- `GET /api/notifications/blocked` (`blocked_id`, `blocked_name`, `blocked_at`), `POST /api/notifications/blocked/:id` (also ends follows both ways), `DELETE /api/notifications/blocked/:id`. A block works both ways: see `server/src/services/blocks.ts` for what it hides
 
 ## Rewards (flagged: `FEATURE_RANK`)
 

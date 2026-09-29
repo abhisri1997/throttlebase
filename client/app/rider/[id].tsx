@@ -5,6 +5,7 @@ import {
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -12,7 +13,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
 import { FEATURES } from "../../src/core/features/features";
 import { goBackOr } from "../../src/utils/goBack";
-import { ChevronLeft, UserPlus, UserMinus } from "lucide-react-native";
+import { Ban, ChevronLeft, UserPlus, UserMinus } from "lucide-react-native";
 import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { useTheme } from "../../src/theme/ThemeContext";
 
@@ -24,6 +25,10 @@ const fetchRiderProfile = async (id: string) => {
 const followRider = async (id: string) => {
   const { data } = await apiClient.post(`/api/community/riders/${id}/follow`);
   return data;
+};
+
+const blockRider = async (id: string) => {
+  await apiClient.post(`/api/notifications/blocked/${id}`);
 };
 
 const unfollowRider = async (id: string) => {
@@ -61,6 +66,26 @@ export default function RiderProfileScreen() {
       queryClient.invalidateQueries({ queryKey: ["rider", id] });
     },
   });
+
+  const blockMutation = useMutation({
+    mutationFn: () => blockRider(id!),
+    onSuccess: () => {
+      // Their posts, comments, routes and rides disappear everywhere.
+      void queryClient.invalidateQueries();
+      goBackOr(router, "/(tabs)/feed");
+    },
+    onError: () => Alert.alert("Couldn't block", "Check your connection and try again."),
+  });
+
+  const confirmBlock = (name: string) =>
+    Alert.alert(
+      `Block ${name}?`,
+      "You won't see each other's posts, comments, routes or rides, and you'll stop following each other. They won't be told. You can unblock them in Settings.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Block", style: "destructive", onPress: () => blockMutation.mutate() },
+      ],
+    );
 
   if (isLoading) {
     return (
@@ -183,6 +208,20 @@ export default function RiderProfileScreen() {
                 }}
               >
                 {rider.is_following ? "Unfollow" : "Follow Rider"}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {!isMe && (
+            <TouchableOpacity
+              accessibilityRole='button'
+              onPress={() => confirmBlock(rider.display_name || "this rider")}
+              disabled={blockMutation.isPending}
+              className='mt-3 px-4 py-2 flex-row items-center'
+            >
+              <Ban size={14} color={colors.textMuted} />
+              <Text className='text-sm ml-1' style={{ color: colors.textMuted }}>
+                {blockMutation.isPending ? "Blocking…" : "Block"}
               </Text>
             </TouchableOpacity>
           )}

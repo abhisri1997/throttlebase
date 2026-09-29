@@ -68,7 +68,7 @@ export const getFeed = async (req: Request, res: Response): Promise<void> => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 100);
     const offset = Number(req.query.offset) || 0;
-    const posts = await CommunityService.getFeed(limit, offset);
+    const posts = await CommunityService.getFeed(limit, offset, rid(req));
     res.json(posts);
   } catch (error: any) {
     console.error("Error fetching feed:", error);
@@ -78,7 +78,7 @@ export const getFeed = async (req: Request, res: Response): Promise<void> => {
 
 export const getPost = async (req: Request, res: Response): Promise<void> => {
   try {
-    const post = await CommunityService.getPostById(req.params.id as string);
+    const post = await CommunityService.getPostById(req.params.id as string, rid(req));
     if (!post) {
       res.status(404).json({ error: "Post not found" });
       return;
@@ -193,6 +193,7 @@ export const getComments = async (
   try {
     const comments = await CommunityService.getComments(
       req.params.id as string,
+      rid(req),
     );
     res.json(comments);
   } catch (error: any) {
@@ -206,7 +207,7 @@ export const getComment = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const comment = await CommunityService.getCommentById(req.params.id as string);
+    const comment = await CommunityService.getCommentById(req.params.id as string, rid(req));
     if (!comment) {
       res.status(404).json({ error: "Comment not found" });
       return;
@@ -521,7 +522,7 @@ export const getReviews = async (
 ): Promise<void> => {
   try {
     res.json(
-      await CommunityService.getRideReviews(req.params.rideId as string),
+      await CommunityService.getRideReviews(req.params.rideId as string, rid(req)),
     );
   } catch (error: any) {
     console.error("Error fetching reviews:", error);

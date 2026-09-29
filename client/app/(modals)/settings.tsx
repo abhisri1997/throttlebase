@@ -93,8 +93,8 @@ export default function SettingsModal() {
   const unblockRider = useMutation({
     mutationFn: async (id: string) =>
       apiClient.delete(`/api/notifications/blocked/${id}`),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["settings", "blocked"] }),
+    // Their posts, routes and rides show again everywhere.
+    onSuccess: () => queryClient.invalidateQueries(),
   });
 
   const renderCycler = (
