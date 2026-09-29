@@ -4,6 +4,7 @@ export const JOB_TYPES = {
   CLEANUP_EXPIRED_SESSIONS: "cleanup.expired_sessions",
   ACCOUNT_PURGE: "account.purge",
   RIDE_LEADER_CHANGED: "ride.leader_changed",
+  GROUP_LEADER_CHANGED: "group.leader_changed",
   LIVE_SESSION_STARTED: "live_session.started",
   LIVE_SESSION_ENDED: "live_session.ended",
   LIVE_INCIDENT_REPORTED: "live_session.incident_reported",

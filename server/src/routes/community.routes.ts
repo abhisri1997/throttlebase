@@ -499,7 +499,7 @@ router.post("/groups/:id/join", cc.joinGroup);
  * @swagger
  * /api/community/groups/{id}/leave:
  *   delete:
- *     summary: Leave a group (admins cannot leave)
+ *     summary: Leave a group. The owner hands it to the next admin, or ends it if nobody else is in it
  *     tags: [Community]
  *     security:
  *       - bearerAuth: []
@@ -512,9 +512,9 @@ router.post("/groups/:id/join", cc.joinGroup);
  *           format: uuid
  *     responses:
  *       200:
- *         description: Left group
+ *         description: Left group; `outcome` is left, handed_over or group_deleted
  *       400:
- *         description: Cannot leave (admin or not a member)
+ *         description: Not a member of this group
  */
 router.delete("/groups/:id/leave", cc.leaveGroup);
 
