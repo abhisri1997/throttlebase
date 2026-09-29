@@ -17,7 +17,7 @@ Paths are relative to the repo root. `mig NNN` means `server/src/db/migrations/N
 - **Access control is application SQL only.** RLS policies exist (mig 027–028) but are not enforced, because the API connects as Supabase's `postgres` role (`docs/project-status.md`, "Known gaps").
 - **Account deletion anonymises the rider now and hard-deletes 30 days later.** The hard delete cascades into rides the rider led, which removes other riders' participation. See §9, decision D1.
 - **Background location is requested but is not required.** The code already records through a foreground service (§4).
-- **The "safety flow" is a button labelled "SOS".** It alerts ride leaders in-app only (§5).
+- **The safety flow is "Alert my group"** (renamed from "SOS" on 2026-09-29). It alerts everyone on the ride in-app, with a Call 112 hand-off (§5).
 - **Unused permissions are requested:** microphone, camera, photo library, external storage, and background `audio` and `fetch` modes (§3).
 
 ---
@@ -57,7 +57,7 @@ Retention abbreviations:
 | **`ride_live_location_samples`** (mig 013, 036): `location`, `speed_kmh`, `heading_deg`, `accuracy_m`, `activity` (automotive / cycling / walking / running / stationary), `captured_at` | **Precise location track; speed; motion activity** | Live sharing to the ride room **and** the rider's recorded ride. Ride stats and history read it (`server/src/services/stats.service.ts:175-195`). Written only while the rider is riding (`server/src/services/live-session.service.ts:1242-1270`) | Ride participants (live and timeline); the rider (history)                                | **forever**. Mig 015 line 29: "data is kept indefinitely for debugging and validation"                      |
 | `ride_live_presence` (mig 011, 032): `last_location`, `finish_location`, `ride_started_at`, `finished_at`, `arrived_at`                                                                  | Precise location; timestamps                       | Live presence, per-rider progress                                                                                                                                                                                                                  | Ride participants                                                                         | forever (cascades with the ride)                                                                            |
 | `ride_live_events` (mig 012): `payload`                                                                                                                                                  | Activity log                                       | Session timeline                                                                                                                                                                                                                                   | Ride participants                                                                         | forever                                                                                                     |
-| `ride_live_incidents` (mig 014): `kind`, `severity`, `location`, `metadata`                                                                                                              | Precise location; safety event                     | "SOS" flow (§5)                                                                                                                                                                                                                                    | Ride participants                                                                         | forever                                                                                                     |
+| `ride_live_incidents` (mig 014): `kind`, `severity`, `location`, `metadata`                                                                                                              | Precise location; safety event                     | Group alert (§5)                                                                                                                                                                                                                                   | Ride participants                                                                         | forever                                                                                                     |
 | `ride_live_sessions` (mig 011)                                                                                                                                                           | Activity                                           | Session lifecycle                                                                                                                                                                                                                                  | Participants                                                                              | forever                                                                                                     |
 | `rides` (mig 003, 009, 034): `start_point`, `end_point`, `start_point_name`, `end_point_name`, `route_geojson`, `road_via`, `scheduled_at`                                               | Location (planned)                                 | Ride planning                                                                                                                                                                                                                                      | `visibility` defaults to **public** (mig 003 line 10). Private rides are participant-only | forever. Hard-deleted if the captain's account is purged (`captain_id … ON DELETE CASCADE`, mig 003 line 6) |
 | `ride_participants` (mig 003, 004, 038): `dropout_coords`, `start_location_override`, `joined_at`, `left_at`, `promoted_at`                                                                                  | Precise location; membership                       | Participation                                                                                                                                                                                                                                      | Ride participants                                                                         | account                                                                                                     |
@@ -219,19 +219,21 @@ Sources: `client/app.config.ts`, config-plugin output, and the generated `client
 
 ## 5. What the "safety flow" actually does
 
-1. On ride detail, during a live session, the rider taps a button labelled **"SOS"** (`client/app/ride/[id].tsx:1976-1984`). The confirm dialog reads "Send SOS? This will report a critical incident to ride leaders immediately." (`:860-884`).
-2. The client emits `incident:create` or `POST /api/rides/:id/live/incident` with `kind: "sos"`, severity critical, and the current location if available (`client/src/store/liveSessionStore.ts:361-370`).
-3. The server inserts `ride_live_incidents` (`live-session.service.ts:803-843`), appends a `ride_live_events` row, and broadcasts `incident:created` to the ride room.
-4. A worker job runs every 45 s (`jobs.service.ts:226`). For critical or high incidents unacknowledged after 120 s, it creates **in-app notifications** for the captain and co-captains (`server/src/workers/processors/live-ops.processor.ts:16-40`, `:133-142`).
-5. Any participant can acknowledge or resolve the incident.
+Renamed from "SOS" on 2026-09-29 (decision D8, [plans/safety-flow.md](plans/safety-flow.md)).
+
+1. During a live session the rider taps **"Alert my group"**: a button on ride detail, or a 64 dp button above the sheet in full-screen navigation. A sheet asks "Send an alert with your location to everyone on this ride?" and shows the disclaimer (`client/src/features/rides/components/GroupAlertSheet.tsx`).
+2. The sheet has an equally large **"Call 112 (emergency)"** button. It opens the dialer with 112 (`tel:112`); the rider places the call. The app never dials.
+3. Sending asks for foreground location at that moment, then emits `incident:create` (in the room) or `POST /api/rides/:id/live/incident` with `kind: "group_alert"`, severity critical, and the location if available (`client/src/features/rides/hooks/useGroupAlert.ts`).
+4. The server inserts `ride_live_incidents`, appends a `ride_live_events` row, and broadcasts `incident:created` with the location to the ride room on both paths. A job creates an **in-app notification for every confirmed participant and the captain** except the sender ("Group alert").
+5. Everyone else on the ride sees a banner: who sent it, how long ago, **Navigate to** them (Google Maps directions to their live position, else where they sent it), Call 112, and Dismiss (`GroupAlertBanner.tsx`).
+6. Unacknowledged after 120 s, the captain and co-captains get a second in-app notification (`live-ops.processor.ts`). Leaders can acknowledge over the API; there is no acknowledge button in the app yet.
+7. Builds from before the rename still send `kind: "sos"`; the server stores it as `group_alert` (migration 039 also relabelled old rows). `'sos'` stays in the CHECK until those builds are gone.
 
 **What it does not do:**
 
-- It does not contact emergency services, send SMS or push, or share location outside the ride room.
-- It shows no 112 prompt and no "not an emergency service" disclaimer.
-- It does not detect crashes. The DB enum has `crash`, `medical`, `mechanical` and `other`, but the UI only sends `sos`.
-
-Both the label and the enum value conflict with E7 and Apple 5.1.5.
+- It does not contact emergency services, send SMS or push, or share location outside the ride.
+- It does not detect crashes. `crash`, `medical`, `mechanical` and `other` exist in the schema but the app sends only `group_alert`.
+- No first-ride safety screen yet, and no push: alerts reach riders only while the app is open (E7, D4).
 
 ---
 
@@ -351,10 +353,10 @@ Legend:
 ### E4. Location and ride recording
 
 - ✅ Foreground service with `foregroundServiceType=location` and a persistent notification (§4).
-- ⚠️ `ACCESS_BACKGROUND_LOCATION` and "Always" are requested every ride even though they are not required (§4).
+- ✅ `ACCESS_BACKGROUND_LOCATION` and "Always" are no longer requested (2026-09-29): the tracker runs on "While using the app" as a foreground service, and the permission is in `android.blockedPermissions` (§4).
 - ❌ No prominent-disclosure screen before the OS prompt.
 - 🟡 Stops at ride end (≤30 s). Not tied to leaving a live session. Kill behaviour unverified on iOS.
-- 🟡 iOS strings are specific. `UIBackgroundModes` also carries unused `fetch` and `audio`.
+- 🟡 iOS strings are specific. `UIBackgroundModes` no longer carries `fetch`; `audio` (added by expo-audio) is still unused.
 - ❌ `android.blockedPermissions` not used. Microphone, media-playback FGS, camera, photos and storage are all requested without use today (§3).
   - Per D9, feed uploads will use the system photo picker, which needs no library permission. Camera and microphone are needed only for in-app capture. Background `audio`/`fetch` and the media-playback service stay unneeded.
 
@@ -380,7 +382,7 @@ Legend:
 - ❌ No motion lock. Ride detail and navigation show modals and alerts while moving.
 - ✅ No speed ranking. The leaderboard ranks by badges earned, total rides or total distance (`server/src/services/rewards.service.ts:107-150`).
 - 🟡 Badge `criteria_type` is a free string (`server/src/schemas/rewards.schemas.ts:7`). An admin could create a speed badge. `ride_history_stats.max_speed_kmh` is stored.
-- ❌ The safety flow is labelled "SOS" in UI copy and in data (`kind='sos'`) (§5).
+- ✅ The safety flow is "Alert my group" in UI copy, notifications and data (`kind='group_alert'`), with a Call 112 hand-off and the disclaimer in the sheet (§5).
 
 ### E8. Legal pages and links
 

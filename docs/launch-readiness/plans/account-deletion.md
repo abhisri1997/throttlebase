@@ -59,7 +59,7 @@ Like a WhatsApp group whose admin leaves: the ride or group carries on under som
 
   Self-described `experience_level` is not used: it is unverified.
 - **Groups:** another admin first (by when they joined, since admins other than the owner only come from earlier hand-overs); otherwise the member who joined first. `groups.created_by` moves to them. ✅ slice 3b
-- **Telling people:** a `ride.leader_changed` job is queued in the same transaction; the worker notifies the new captain (who now also receives the ride's SOS alerts) and everyone still on the ride.
+- **Telling people:** a `ride.leader_changed` job is queued in the same transaction; the worker notifies the new captain (who now also receives the ride's group alerts) and everyone still on the ride.
 - **Nobody left:** an open ride is cancelled; a group is deleted at purge.
 - **Finished rides** keep their captain, shown as "Deleted rider".
 - **Leaving without deleting** uses the same hand-over. Groups ✅ 3b: admins can leave; the owner sees who takes over before confirming, and the last member leaving deletes the group (user's choice, 2026-09-29). Rides ✅ 3c: riders can leave before the start; a leaving captain hands over or cancels; a captain can also pass the ride to a chosen rider at any time and stays on as co-captain.

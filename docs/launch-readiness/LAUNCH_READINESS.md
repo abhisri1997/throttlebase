@@ -98,6 +98,8 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 > and stops tracking if the rider refuses. Still to do: confirm on a real device with the screen off.
 > Media permissions follow D9: the photo picker needs no library permission; camera and microphone only for in-app capture.
 > Background `audio`/`fetch` and the media-playback service are not needed. See **D7**, **D9**; inventory §3, §4.
+>
+> **Update (2026-09-29):** the app no longer asks for "Always". `ACCESS_BACKGROUND_LOCATION` is removed and blocked, iOS keeps only the `location` background mode, and the tracker restarts when the app returns to the foreground. Still to do: the disclosure screen, stopping on leaving the session, and a real-device check with the screen off.
 
 ### E5. Location privacy defaults
 
@@ -131,6 +133,8 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 > **Current state (Phase 0):** the leaderboard ranks by badges, rides or distance only (no speed). The safety flow is a button labelled
 > **"SOS"** (`kind='sos'`). It alerts ride leaders in-app and escalates to captain and co-captains after 120 s. There is no disclaimer
 > and no motion lock. Inventory §5.
+>
+> **Update (2026-09-29):** the safety flow is now **"Alert my group"** (`kind='group_alert'`, migration 039) on ride detail and in navigation. It alerts everyone on the ride, shows them a banner with Navigate to rider and Call 112, has a Call 112 dialer hand-off, and carries the disclaimer in the sheet and in the Terms draft. Still open: the first-ride safety screen, the motion lock, and push delivery.
 
 ### E8. Legal pages & links
 

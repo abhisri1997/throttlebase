@@ -36,7 +36,7 @@ Account routes (`server/src/adapters/http/riderAccountRoutes.ts`) are mounted be
 - `GET /api/riders/username-available?u=`
 - `PATCH /api/riders/me/onboarding` — set username (and profile basics) to finish onboarding
 - `DELETE /api/riders/me` — soft-delete: unlinks identities, revokes sessions; hard-deleted after 30 days
-- `GET /api/riders/me` — own full profile
+- `GET /api/riders/me` — own full profile, including `roles` (from `rider_roles`; never in another rider's view)
 - `PATCH /api/riders/me` — update own profile
 - `GET /api/riders/search?query=&limit=` — username-prefix search for mention suggestions (limit 1–10, default 8)
 - `GET /api/riders/:id` — public profile, privacy-aware

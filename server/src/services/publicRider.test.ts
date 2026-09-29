@@ -6,7 +6,7 @@ import type { RiderProfile } from "./rider.service.js";
 const fullProfile: RiderProfile = {
   id: "11111111-0000-0000-0000-000000000001",
   email: "rider@example.test",
-  is_admin: true,
+  roles: ["admin"],
   display_name: "Asha",
   username: "asha",
   bio: "Weekend tourer",
@@ -41,7 +41,7 @@ test("contact, body, admin and location details never leave the server", () => {
     "weight_kg",
     "location_coords",
     "location_region",
-    "is_admin",
+    "roles",
     "updated_at",
   ]) {
     assert.equal(field in view, false, `${field} must not be in a public profile`);

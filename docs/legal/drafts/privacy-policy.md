@@ -30,7 +30,7 @@ We collect only what the features you use need:
 - Routes: the routes you save, including their line on the map, start and end, stops, notes and highlights, and how long you took to ride them. Used to let you and, if you choose, other riders find and follow them.
 - Ride stats: distance, riding time and average and top speed for each ride, and your totals. Used for your ride history and profile.
 - Community: your posts, comments, likes, follows, ride reviews, road feedback, mentions and the riders you block. Used to run the feed and social features.
-- Safety alerts: when you send an SOS alert, its time and your location. Used to alert the leaders of your ride.
+- Group alerts: when you use Alert my group, its time and your location. Shared with the other riders on that ride so they can find you.
 - Garage and preferences: vehicles and gear you add, your app settings, privacy choices and notification preferences.
 
 We do not record audio, access your contacts, or collect photos from your device. We do not collect your date of birth, and we do not use your data for advertising or profiling.

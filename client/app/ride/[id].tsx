@@ -78,6 +78,9 @@ import {
   type ConfirmPrompt,
 } from "../../src/features/rides/core/rideLeadershipPrompts";
 import { useEndRideWithWarning } from "../../src/features/rides/hooks/useEndRideWithWarning";
+import { useGroupAlert } from "../../src/features/rides/hooks/useGroupAlert";
+import { GroupAlertSheet } from "../../src/features/rides/components/GroupAlertSheet";
+import { GroupAlertBanner } from "../../src/features/rides/components/GroupAlertBanner";
 import { RidePreviewView } from "../../src/features/rides/components/RidePreviewView";
 import { JoinRequestsCard } from "../../src/features/rides/components/JoinRequestsCard";
 import {
@@ -193,55 +196,6 @@ const startLiveSessionReq = async (rideId: string) => {
 const rollOutLiveSessionReq = async (rideId: string) => {
   const { data } = await apiClient.post(`/api/rides/${rideId}/live/roll-out`);
   return data;
-};
-
-const reportSOSReq = async (
-  rideId: string,
-  payload?: { lon: number; lat: number },
-) => {
-  const { data } = await apiClient.post(`/api/rides/${rideId}/live/incident`, {
-    severity: "critical",
-    kind: "sos",
-    ...(payload ? payload : {}),
-    metadata: {
-      source: "mobile",
-    },
-  });
-  return data;
-};
-
-const getSOSCoords = async (): Promise<
-  { lon: number; lat: number } | undefined
-> => {
-  if (Platform.OS === "web") {
-    return undefined;
-  }
-
-  try {
-    const permission = await ExpoLocation.requestForegroundPermissionsAsync();
-    if (permission.status !== "granted") {
-      return undefined;
-    }
-
-    const lastKnown = await ExpoLocation.getLastKnownPositionAsync();
-    if (lastKnown?.coords) {
-      return {
-        lon: lastKnown.coords.longitude,
-        lat: lastKnown.coords.latitude,
-      };
-    }
-
-    const current = await ExpoLocation.getCurrentPositionAsync({
-      accuracy: ExpoLocation.Accuracy.Balanced,
-    });
-
-    return {
-      lon: current.coords.longitude,
-      lat: current.coords.latitude,
-    };
-  } catch {
-    return undefined;
-  }
 };
 
 const hasGrantedForegroundLocation = async (): Promise<boolean> => {
@@ -632,7 +586,6 @@ export default function RideDetailScreen() {
     clearRideContext,
     sendHeartbeat,
     upsertLocation,
-    reportSOS,
     reset,
   } = useLiveSessionStore();
 
@@ -732,7 +685,18 @@ export default function RideDetailScreen() {
   const [showJoinOverridePicker, setShowJoinOverridePicker] = useState(false);
   const [reviewRating, setReviewRating] = useState<number>(0);
   const [reviewText, setReviewText] = useState("");
-  const [sosSubmitting, setSOSSubmitting] = useState(false);
+  const groupAlert = useGroupAlert(id);
+  // Who raised a group alert, for the banner the rest of the ride sees.
+  const riderNames = useMemo<Record<string, string>>(
+    () =>
+      Object.fromEntries(
+        (ride?.participants ?? []).map((participant: any) => [
+          participant.rider_id,
+          participant.display_name || "A rider",
+        ]),
+      ),
+    [ride?.participants],
+  );
   const [sampledLocation, setSampledLocation] = useState<LatLng | null>(null);
   const hasAutoFitLiveMarkersRef = useRef(false);
 
@@ -890,58 +854,6 @@ export default function RideDetailScreen() {
     rideId: id,
     onEnded: () => void refetchLiveSession(),
   });
-
-  const liveSOSMutation = useMutation({
-    mutationFn: (payload?: { lon: number; lat: number }) =>
-      reportSOSReq(id!, payload),
-    onSuccess: () => {
-      Alert.alert("SOS sent", "Your critical SOS incident has been reported.");
-      refetchLiveSession();
-    },
-    onError: (err: any) => {
-      Alert.alert("Error", getApiErrorMessage(err, "Failed to report SOS"));
-    },
-  });
-
-  const handleSOS = () => {
-    Alert.alert(
-      "Send SOS?",
-      "This will report a critical incident to ride leaders immediately.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Send SOS",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              if (sosSubmitting || liveSOSMutation.isPending) {
-                return;
-              }
-
-              setSOSSubmitting(true);
-
-              try {
-                const coords = await getSOSCoords();
-
-                if (inRoom) {
-                  reportSOS(coords);
-                  Alert.alert(
-                    "SOS sent",
-                    "Your critical SOS incident has been reported.",
-                  );
-                  void refetchLiveSession();
-                } else {
-                  await liveSOSMutation.mutateAsync(coords);
-                }
-              } finally {
-                setSOSSubmitting(false);
-              }
-            })();
-          },
-        },
-      ],
-    );
-  };
 
   useEffect(() => {
   if (isFocused) {
@@ -2042,15 +1954,14 @@ useEffect(() => {
                 liveStatus === "starting" ||
                 inRoom) && (
                 <TouchableOpacity
-                  onPress={handleSOS}
-                  disabled={liveSOSMutation.isPending || sosSubmitting}
+                  accessibilityRole='button'
+                  onPress={groupAlert.openSheet}
+                  disabled={groupAlert.isSending}
                   className='px-4 py-2 rounded-xl mr-2 mb-2'
-                  style={{ backgroundColor: colors.danger }}
+                  style={{ backgroundColor: colors.danger, minHeight: 44, justifyContent: "center" }}
                 >
                   <Text className='font-bold text-white'>
-                    {liveSOSMutation.isPending || sosSubmitting
-                      ? "Sending SOS..."
-                      : "SOS"}
+                    {groupAlert.isSending ? "Sending alert…" : "Alert my group"}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -2664,6 +2575,17 @@ useEffect(() => {
           customTrigger={() => <View />}
         />
       )}
+
+      {liveEnabled ? (
+        <GroupAlertBanner currentRiderId={currentRider?.id} riderNames={riderNames} />
+      ) : null}
+
+      <GroupAlertSheet
+        visible={groupAlert.isSheetOpen}
+        isSending={groupAlert.isSending}
+        onSend={() => void groupAlert.send()}
+        onClose={groupAlert.closeSheet}
+      />
     </View>
   );
 }

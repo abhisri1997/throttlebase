@@ -55,7 +55,8 @@ type LiveSessionState = {
   setRideContext: (rideId: string) => void;
   clearRideContext: () => void;
   sendHeartbeat: () => void;
-  reportSOS: (coords?: { lon: number; lat: number }) => void;
+  /** Alerts everyone on the ride, over the socket. False when not in the room. */
+  sendGroupAlert: (coords?: { lon: number; lat: number }) => boolean;
   upsertLocation: (input: {
     lon: number;
     lat: number;
@@ -358,16 +359,16 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
     });
   },
 
-  reportSOS: (coords) => {
+  sendGroupAlert: (coords) => {
     const { rideId, inRoom } = get();
     if (!rideId || !inRoom) {
-      return;
+      return false;
     }
 
     liveSessionSocket.emit("incident:create", {
       rideId,
       severity: "critical",
-      kind: "sos",
+      kind: "group_alert",
       ...(coords
         ? {
             lon: coords.lon,
@@ -378,6 +379,8 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
         source: "mobile",
       },
     });
+
+    return true;
   },
 
   upsertLocation: (input) => {

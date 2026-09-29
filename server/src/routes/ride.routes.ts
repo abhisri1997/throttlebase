@@ -495,7 +495,7 @@ router.post("/:id/live/me/resume", authenticate, rideProgressController.resumeMy
  *                 enum: [low, medium, high, critical]
  *               kind:
  *                 type: string
- *                 enum: [sos, crash, medical, mechanical, other]
+ *                 enum: [group_alert, crash, medical, mechanical, other]
  *               lon:
  *                 type: number
  *               lat:

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { type Href, useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
-import { LocateFixed } from "lucide-react-native";
+import { LocateFixed, Siren } from "lucide-react-native";
 import MapView, { PROVIDER_GOOGLE } from "../../../src/components/MapWrapper";
 import { useCurrentRider } from "../../../src/services/useCurrentRider";
 import { useTheme } from "../../../src/theme/ThemeContext";
@@ -50,6 +50,9 @@ import { useNavigationSession } from "../../../src/features/navigation/hooks/use
 import { usePlannedRoute } from "../../../src/features/navigation/hooks/usePlannedRoute";
 import { useSimulatedNavigationFix } from "../../../src/features/navigation/hooks/useSimulatedNavigationFix";
 import { useRideLiveSession } from "../../../src/features/navigation/hooks/useRideLiveSession";
+import { useGroupAlert } from "../../../src/features/rides/hooks/useGroupAlert";
+import { GroupAlertSheet } from "../../../src/features/rides/components/GroupAlertSheet";
+import { GroupAlertBanner } from "../../../src/features/rides/components/GroupAlertBanner";
 import { useRideParticipants } from "../../../src/features/navigation/hooks/useRideParticipants";
 import { useScreenAwake } from "../../../src/features/navigation/hooks/useScreenAwake";
 import { useTripProgress } from "../../../src/features/navigation/hooks/useTripProgress";
@@ -500,6 +503,8 @@ export default function RideNavigationScreen() {
     bottomInset: sheetCollapsedHeight,
   });
 
+  const groupAlert = useGroupAlert(id);
+
   const { participants, peers } = useRideParticipants({
     ride: live.ride,
     presence: live.presence,
@@ -507,6 +512,15 @@ export default function RideNavigationScreen() {
     currentRiderId,
     sessionParticipants: live.sessionParticipants,
   });
+
+  // Who raised a group alert, for the banner the rest of the ride sees.
+  const riderNames = useMemo<Record<string, string>>(
+    () =>
+      Object.fromEntries(
+        participants.map((participant) => [participant.riderId, participant.displayName]),
+      ),
+    [participants],
+  );
 
   // This rider's own ride: finish when they are done, even while the group rides on.
   const destination = waypoints?.[waypoints.length - 1];
@@ -866,6 +880,17 @@ export default function RideNavigationScreen() {
         </TouchableOpacity>
       ) : null}
 
+      {/* One tap from anywhere in navigation, never hidden behind the sheet. */}
+      <TouchableOpacity
+        accessibilityRole='button'
+        accessibilityLabel='Alert my group'
+        onPress={groupAlert.openSheet}
+        disabled={groupAlert.isSending}
+        style={[styles.alertButton, { bottom: sheetHeight + RECENTER_GAP, backgroundColor: colors.danger }]}
+      >
+        <Siren color='white' size={26} />
+      </TouchableOpacity>
+
       <NavigationBottomSheet
         rideName={live.ride.title}
         participants={participants}
@@ -895,6 +920,15 @@ export default function RideNavigationScreen() {
           onResume: myRide.resumeMyRide,
           isBusy: myRide.isFinishingMyRide || myRide.isResumingMyRide,
         }}
+      />
+
+      <GroupAlertBanner currentRiderId={currentRiderId} riderNames={riderNames} />
+
+      <GroupAlertSheet
+        visible={groupAlert.isSheetOpen}
+        isSending={groupAlert.isSending}
+        onSend={() => void groupAlert.send()}
+        onClose={groupAlert.closeSheet}
       />
 
       {showArrivalPrompt && arrivedAtMs !== null ? (
@@ -929,6 +963,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     zIndex: 65,
     elevation: 65,
+  },
+  alertButton: {
+    position: "absolute",
+    right: 16,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 66,
+    elevation: 66,
   },
   recenterText: {
     fontSize: 14,

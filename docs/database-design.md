@@ -326,7 +326,7 @@ Session timeline: `session_id`, `actor_rider_id`, `event_type`, `payload` jsonb,
 
 | Column | Notes |
 | --- | --- |
-| `kind` | `sos`, `crash`, `medical`, `mechanical`, `other` |
+| `kind` | `group_alert`, `crash`, `medical`, `mechanical`, `other`; `sos` still accepted from old builds and stored as `group_alert` (migration 039) |
 | `severity` | `low`, `medium`, `high`, `critical` |
 | `status` | `open`, `acknowledged`, `resolved` |
 | `location`, `metadata` | |

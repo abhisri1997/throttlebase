@@ -1,4 +1,4 @@
--- 039_ride_join_requests.sql
+-- 040_ride_join_requests.sql
 -- Rides that need approval (visibility 'private') show on Discover, and
 -- riders ask to join them; the captain or a co-captain accepts or declines.
 --

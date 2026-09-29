@@ -81,7 +81,6 @@ Both hosted APIs run on Railway and answered `/health` on 2026-09-28. The databa
 
 ### Client
 
-- `GET /api/riders/me` still returns `is_admin` via a JSON fallback on a dropped column, so it is always `false`. The settings screen uses it to show "Admin - Manage Tickets", so admins never see that entry. It should read roles instead (support is flagged off for the beta).
 - Two HTTP clients coexist (fetch adapter and legacy axios).
 - `app/ride/[id].tsx` (~2,560 lines) and `app/ride/[id]/navigation.tsx` (~980 lines) are due to be split.
 - No feedback channel for testers while support is hidden.
@@ -97,8 +96,7 @@ Both hosted APIs run on Railway and answered `/health` on 2026-09-28. The databa
 
 1. Enforce RLS: services on `withRiderTransaction`, API on `throttlebase_app`, then replace transitional policies.
 2. Real push and email providers with device registration.
-3. Fix admin detection on the client (roles instead of `is_admin`).
-4. Honour `leaderboard_opt_in` before Rank launches.
+3. Honour `leaderboard_opt_in` before Rank launches.
 
 ### P2 — scale and cleanup
 
