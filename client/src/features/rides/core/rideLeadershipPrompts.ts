@@ -45,6 +45,6 @@ export const leaveRidePrompt = (ride: LeavableRide): ConfirmPrompt => {
 
 export const makeCaptainPrompt = (riderName: string): ConfirmPrompt => ({
   title: `Make ${riderName} the captain?`,
-  message: `${riderName} will lead the ride and receive its SOS alerts. You stay on as a co-captain.`,
+  message: `${riderName} will lead the ride and receive its group alerts. You stay on as a co-captain.`,
   confirmLabel: "Make captain",
 });

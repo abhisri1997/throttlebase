@@ -345,7 +345,7 @@ Ride captain and confirmed participant
 2. The participant sees the live session become active.
 3. Ending the session updates both devices to show the ended state.
 
-## Scenario 10 - Report A Live Incident Or SOS
+## Scenario 10 - Send A Group Alert
 
 ### Objective
 
@@ -362,14 +362,14 @@ Confirmed participant reporting to captain
 
 ### Steps
 
-1. On the participant device, trigger the SOS or incident action from ride detail.
+1. On the participant device, tap "Alert my group" on ride detail (or in navigation) and send the alert. Check that "Call 112 (emergency)" opens the dialer with 112 without calling.
 2. Keep the captain device on the same ride detail screen.
 3. Observe the live session UI on both devices.
 
 ### Expected Result
 
 1. The participant action succeeds without crashing the session UI.
-2. The captain device receives visible incident state changes.
+2. The captain device shows the group alert banner with the participant's name, Navigate to and Call 112.
 3. The participant remains in the live session after reporting.
 
 ## Final Sign-Off Checklist

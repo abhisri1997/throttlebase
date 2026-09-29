@@ -51,10 +51,10 @@ export const TERMS: LegalDocument = {
       ],
     },
     {
-      heading: "SOS alerts are not an emergency service",
+      heading: "Group alerts are not an emergency service",
       blocks: [
         paragraph(
-          "The SOS button alerts the leaders of your ride inside the app. It does not contact the police, an ambulance or anyone outside the ride, and it depends on your network, battery and permissions. In an emergency, call 112.",
+          "Alert my group sends an alert with your location to the other riders on your ride, inside the app. It is not an emergency service and does not contact the police, an ambulance, fire services or anyone outside the ride. Alerts need network coverage and may be delayed, and they depend on your battery and permissions. In an emergency, call 112. The Call 112 button only opens your phone's dialer; you place the call yourself.",
         ),
       ],
     },

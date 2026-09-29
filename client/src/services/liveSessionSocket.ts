@@ -67,8 +67,12 @@ export type IncidentCreatedEvent = {
   incidentId: string;
   riderId: string;
   severity: "low" | "medium" | "high" | "critical";
-  kind: "sos" | "crash" | "medical" | "mechanical" | "other";
+  /** "sos" only on incidents from before the rename; the server stores "group_alert". */
+  kind: "group_alert" | "sos" | "crash" | "medical" | "mechanical" | "other";
   createdAt: string;
+  /** Where the rider was when they reported it, when their phone knew. */
+  lon?: number;
+  lat?: number;
 };
 
 export type SessionErrorEvent = {
@@ -144,7 +148,7 @@ export type LiveSocketClientEvents = {
   "incident:create": (payload: {
     rideId: string;
     severity: "low" | "medium" | "high" | "critical";
-    kind: "sos" | "crash" | "medical" | "mechanical" | "other";
+    kind: "group_alert" | "crash" | "medical" | "mechanical" | "other";
     lon?: number;
     lat?: number;
     metadata?: Record<string, unknown>;

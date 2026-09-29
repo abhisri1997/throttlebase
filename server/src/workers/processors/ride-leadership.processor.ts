@@ -90,7 +90,7 @@ export const processRideLeaderChanged = async (
     ...shared,
     riderIds: [newCaptainId],
     title: `You're now the captain of ${rideLabel}`,
-    body: `${why}, so you lead this ride now and receive its SOS alerts.`,
+    body: `${why}, so you lead this ride now and receive its group alerts.`,
   });
 
   const riders = (await loadRiders(rideId)).filter((riderId) => riderId !== newCaptainId);
