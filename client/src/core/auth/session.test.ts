@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   decideSessionAction,
+  isRefreshRefused,
   REFRESH_SKEW_MS,
   sessionFromResponse,
   type Session,
@@ -104,4 +105,15 @@ test("defaults onboarding to false when nothing is known", () => {
   });
 
   assert.equal(result.needsOnboarding, false);
+});
+
+test("only a 401 or a 400 from the refresh endpoint ends the session", () => {
+  // The backend's answers about the refresh token itself.
+  assert.equal(isRefreshRefused(401), true);
+  assert.equal(isRefreshRefused(400), true);
+
+  // Answers that say nothing about the token.
+  for (const status of [403, 404, 408, 429, 500, 502, 503, 504]) {
+    assert.equal(isRefreshRefused(status), false, `status ${status}`);
+  }
 });

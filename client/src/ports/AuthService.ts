@@ -34,6 +34,10 @@ export interface AuthService {
   /**
    * The current session, refreshed if it is about to expire.
    *
+   * Null only when the rider is signed out. If the refresh gets no answer
+   * (no signal, a timeout, a 5xx) the session comes back as it is, access
+   * token possibly stale, and the next call tries the refresh again.
+   *
    * Safe to call from a background task: it reads storage rather than React
    * state, and concurrent callers share one refresh.
    */

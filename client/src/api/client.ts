@@ -19,6 +19,12 @@ import { authService } from "../services/auth";
  * everything else, including the refresh and rotation handling. Without this
  * they would read a storage key nothing writes any more and silently 401.
  *
+ * A 401 here never signs the rider out. When a refresh gets no answer (no
+ * signal, the API mid-deploy) the auth service keeps the session and hands
+ * back the token it has, and the API rejecting that stale token says nothing
+ * about the refresh token. Only the auth service ends the session, when the
+ * server refuses the refresh token itself.
+ *
  * This whole module is replaced by adapters/http/apiClient in the next phase.
  */
 apiClient.interceptors.request.use(async (config) => {
@@ -28,26 +34,3 @@ apiClient.interceptors.request.use(async (config) => {
   }
   return config;
 });
-
-apiClient.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const status = error.response?.status;
-    const errorMessage = error.response?.data?.error;
-    const requestUrl =
-      typeof error.config?.url === "string" ? error.config.url : "";
-    const isAuthEndpoint = requestUrl.startsWith("/auth/");
-
-    if (
-      error.response &&
-      (status === 401 || status === 403) &&
-      errorMessage === "Invalid or expired token."
-    ) {
-      // The token could not be refreshed, so the session is genuinely over.
-      // Signing out flips the auth state and the root layout redirects.
-      await authService.signOut();
-    }
-
-    return Promise.reject(error);
-  },
-);

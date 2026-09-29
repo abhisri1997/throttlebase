@@ -1,12 +1,13 @@
 import {
   decideSessionAction,
+  isRefreshRefused,
   sessionFromResponse,
   type Session,
   type SessionResponse,
 } from "../core/auth/session";
 import { createSingleFlight } from "../core/auth/singleFlight";
 import { TERMS } from "../core/legal/terms";
-import type { ApiClient } from "../ports/ApiClient";
+import { ApiError, type ApiClient } from "../ports/ApiClient";
 import type {
   AuthService,
   AuthState,
@@ -147,6 +148,11 @@ export const createAuthService = (deps: AuthServiceDeps): AuthService => {
    * having to infer one from the other. Written as two `const` arrows it
    * type-checks, but only by recursing deeply enough to exhaust the stack on
    * a project this size.
+   *
+   * Resolves to the new session, or to null when the server refused the
+   * refresh token and the rider has been signed out. Rejects, leaving the
+   * session untouched, when the server could not give an answer about the
+   * token at all.
    */
   async function refresh(): Promise<Session | null> {
     return await refreshOnce(async (): Promise<Session | null> => {
@@ -155,25 +161,40 @@ export const createAuthService = (deps: AuthServiceDeps): AuthService => {
         return null;
       }
 
+      let response: SessionResponse;
       try {
-        const response = await api.request<SessionResponse>({
+        response = await api.request<SessionResponse>({
           path: "/auth/refresh",
           method: "POST",
           anonymous: true,
           body: { refreshToken: current.refreshToken },
         });
+      } catch (error) {
+        if (error instanceof ApiError && isRefreshRefused(error.status)) {
+          // The token was rotated away, revoked or expired. None of those
+          // are recoverable, so the rider signs in again.
+          await persist(null);
+          return null;
+        }
 
-        const next = sessionFromResponse(response, current);
-        await persist(next);
-        return next;
-      } catch {
-        // A refusal here means the token was rotated away, revoked or
-        // expired. None of those are recoverable, so the rider signs in again.
-        await persist(null);
-        return null;
+        // No signal, a timeout, or the API failing mid-deploy. The refresh
+        // token is probably still good, and signing out here would throw
+        // it away, which riders out of coverage hit every 15 minutes.
+        throw error;
       }
+
+      const next = sessionFromResponse(response, current);
+      await persist(next);
+      return next;
     });
   }
+
+  /** Tells subscribers about a session they have not been told about yet. */
+  const announce = (session: Session): void => {
+    if (state.status !== "signed-in" || state.session !== session) {
+      setState({ status: "signed-in", session });
+    }
+  };
 
   const api: ApiClient =
     deps.apiClient ??
@@ -245,12 +266,25 @@ export const createAuthService = (deps: AuthServiceDeps): AuthService => {
           // through persist(), so it has to be announced here or the app
           // sits at "loading" and shows the sign-in screen. Only announced
           // once: this runs on every API call and GPS sample.
-          if (session && (state.status !== "signed-in" || state.session !== session)) {
-            setState({ status: "signed-in", session });
+          if (session) {
+            announce(session);
           }
           return session;
         case "refresh":
-          return await refresh();
+          try {
+            return await refresh();
+          } catch {
+            // The server could not be asked. The rider stays signed in on
+            // the session they have, so a launch with no signal opens the
+            // app rather than the sign-in screen. A request sent with the
+            // old access token meanwhile fails on its own, and the next
+            // call tries the refresh again.
+            const kept = await load();
+            if (kept) {
+              announce(kept);
+            }
+            return kept;
+          }
         case "sign-out":
           if (session) {
             await persist(null);
