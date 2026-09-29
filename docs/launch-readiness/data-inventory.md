@@ -433,5 +433,5 @@ Legend:
 - ~~Rotate the Google Maps key found in git history~~ Done: verified dead on 2026-09-29. Still confirm the current iOS and Android keys are restricted by bundle ID, package and SHA-1.
 - Disable the Supabase Data API (PostgREST), which the app does not use ([plans/rls-enforcement.md](plans/rls-enforcement.md) Phase 1).
 - Record Railway's region, and whether Railway and Cloudflare logs stay in India (CERT-In 180-day, India jurisdiction).
-- Fill in the placeholders in the Privacy Policy and Terms (entity, address, grievance officer, email provider, security-log retention, liability cap, jurisdiction), get them reviewed, then mark them `final`.
+- Fill in the placeholders in the Privacy Policy and Terms (operator name — an individual developer until a company is registered, contact address, grievance officer, email provider, security-log retention, liability cap, jurisdiction), get them reviewed, then mark them `final`.
 - Sign or accept DPAs with Supabase, Railway, Cloudflare and Google.

@@ -21,7 +21,10 @@ export const TERMS: LegalDocument = {
       heading: "About these terms",
       blocks: [
         paragraph(
-          "These terms are an agreement between you and [LEGAL ENTITY NAME], [REGISTERED ADDRESS] (\"we\", \"us\"), and apply to the ThrottleBase apps and throttlebase.in. By creating an account you agree to them and to our Privacy Policy.",
+          "These terms are an agreement between you and [OPERATOR FULL NAME], an individual developer in India (\"we\", \"us\"), and apply to the ThrottleBase apps and throttlebase.in. By creating an account you agree to them and to our Privacy Policy.",
+        ),
+        paragraph(
+          "If ThrottleBase moves to a company we set up, these terms and your account move to that company. We will tell you before it happens, and you can delete your account if you don't want to continue.",
         ),
       ],
     },
@@ -164,7 +167,7 @@ export const TERMS: LegalDocument = {
       heading: "Grievance Officer",
       blocks: [
         paragraph("For complaints about content, another rider, or these terms, contact our Grievance Officer:"),
-        list("[GRIEVANCE OFFICER NAME]", "Email: [GRIEVANCE OFFICER EMAIL]", "Address: [REGISTERED ADDRESS]"),
+        list("[GRIEVANCE OFFICER NAME]", "Email: [GRIEVANCE OFFICER EMAIL]", "Address: [CONTACT ADDRESS]"),
         paragraph("We acknowledge complaints within 24 hours and aim to resolve them within 7 days."),
       ],
     },

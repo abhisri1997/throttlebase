@@ -14,7 +14,7 @@ Version 2026-09-29
 
 ## Who we are
 
-ThrottleBase is operated by [LEGAL ENTITY NAME], [REGISTERED ADDRESS] ("we", "us"). We decide why and how your personal data is processed, which makes us the Data Fiduciary under India's Digital Personal Data Protection Act, 2023.
+ThrottleBase is run by [OPERATOR FULL NAME], an individual developer in India ("we", "us"). We decide why and how your personal data is processed, which makes us the Data Fiduciary under India's Digital Personal Data Protection Act, 2023. If ThrottleBase moves to a company, we will update this policy and tell you before it happens.
 
 This policy covers the ThrottleBase apps for Android and iOS and the website throttlebase.in. Questions: [CONTACT EMAIL].
 
@@ -114,6 +114,6 @@ For any complaint about your personal data or this policy, contact our Grievance
 
 - [GRIEVANCE OFFICER NAME]
 - Email: [GRIEVANCE OFFICER EMAIL]
-- Address: [REGISTERED ADDRESS]
+- Address: [CONTACT ADDRESS]
 
 We acknowledge complaints within 24 hours and aim to resolve them within 7 days.

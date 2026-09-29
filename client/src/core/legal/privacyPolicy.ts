@@ -22,7 +22,7 @@ export const PRIVACY_POLICY: LegalDocument = {
       heading: "Who we are",
       blocks: [
         paragraph(
-          "ThrottleBase is operated by [LEGAL ENTITY NAME], [REGISTERED ADDRESS] (\"we\", \"us\"). We decide why and how your personal data is processed, which makes us the Data Fiduciary under India's Digital Personal Data Protection Act, 2023.",
+          "ThrottleBase is run by [OPERATOR FULL NAME], an individual developer in India (\"we\", \"us\"). We decide why and how your personal data is processed, which makes us the Data Fiduciary under India's Digital Personal Data Protection Act, 2023. If ThrottleBase moves to a company, we will update this policy and tell you before it happens.",
         ),
         paragraph(
           "This policy covers the ThrottleBase apps for Android and iOS and the website throttlebase.in. Questions: [CONTACT EMAIL].",
@@ -163,7 +163,7 @@ export const PRIVACY_POLICY: LegalDocument = {
       heading: "Grievance Officer",
       blocks: [
         paragraph("For any complaint about your personal data or this policy, contact our Grievance Officer:"),
-        list("[GRIEVANCE OFFICER NAME]", "Email: [GRIEVANCE OFFICER EMAIL]", "Address: [REGISTERED ADDRESS]"),
+        list("[GRIEVANCE OFFICER NAME]", "Email: [GRIEVANCE OFFICER EMAIL]", "Address: [CONTACT ADDRESS]"),
         paragraph("We acknowledge complaints within 24 hours and aim to resolve them within 7 days."),
       ],
     },
