@@ -116,6 +116,17 @@ test("a deleted rider disappears from routes, rides, reviews, groups and road fe
     `INSERT INTO group_members (group_id, rider_id, role) VALUES ($1, $2, 'admin'), ($1, $3, 'member'), ($1, $4, 'member')`,
     [groupId, ASHA, GONE, BALA],
   );
+  // …and the deleted rider's own public group, which Bala joined.
+  const goneGroup = (
+    await admin.query(
+      `INSERT INTO groups (name, visibility, created_by) VALUES ('Deleted rider''s club', 'public', $1) RETURNING id`,
+      [GONE],
+    )
+  ).rows[0].id as string;
+  await admin.query(
+    `INSERT INTO group_members (group_id, rider_id, role) VALUES ($1, $2, 'admin'), ($1, $3, 'member')`,
+    [goneGroup, GONE, BALA],
+  );
 
   await t.test("road feedback totals leave out the deleted rider", async () => {
     const totals = await feedback!.getRouteRoadFeedback(ashaRoute);
@@ -162,6 +173,12 @@ test("a deleted rider disappears from routes, rides, reviews, groups and road fe
     assert.equal(forBala.includes(goneRide), true);
   });
 
+  await t.test("a ride led by a deleted rider can't be opened or joined by its ID by anyone new", async () => {
+    assert.equal(await rides!.getRideById(goneRide, ASHA), null);
+    assert.notEqual(await rides!.getRideById(goneRide, BALA), null);
+    await assert.rejects(rides!.joinRide(goneRide, ASHA), /Ride not found/);
+  });
+
   await t.test("the deleted rider's start point no longer shapes the meeting point", async () => {
     const contributors = await rides!.listMeetingPointContributors(ashaRide);
     assert.deepEqual(contributors.map((c) => c.riderId).sort(), [ASHA, BALA].sort());
@@ -184,5 +201,19 @@ test("a deleted rider disappears from routes, rides, reviews, groups and road fe
       (row: { id: string }) => row.id === groupId,
     );
     assert.equal(Number(listed.member_count), 2);
+  });
+
+  await t.test("a group created by a deleted rider stays with its members but is hidden from and closed to anyone new", async () => {
+    for (const scope of ["all", "public"] as const) {
+      const ids = (await community!.listGroups(ASHA, scope)).map((row: { id: string }) => row.id);
+      assert.equal(ids.includes(goneGroup), false, `listed in "${scope}"`);
+      assert.equal(ids.includes(groupId), true, `own group missing from "${scope}"`);
+    }
+    assert.equal(await community!.getGroupById(goneGroup, ASHA), null);
+    await assert.rejects(community!.joinGroup(goneGroup, ASHA), /Group not found/);
+
+    const forBala = (await community!.listGroups(BALA, "joined")).map((row: { id: string }) => row.id);
+    assert.equal(forBala.includes(goneGroup), true);
+    assert.notEqual(await community!.getGroupById(goneGroup, BALA), null);
   });
 });

@@ -324,7 +324,8 @@ export const getRideById = async (
         (
           r.status <> 'active'
           AND (
-            r.visibility = 'public'
+            -- A deleted captain's ride stays with the riders already on it.
+            (r.visibility = 'public' AND c.deleted_at IS NULL)
             OR r.captain_id = $2
             OR EXISTS (
               SELECT 1
@@ -680,12 +681,16 @@ export const joinRide = async (
 
     // Lock the ride row and check capacity
     const rideResult = await client.query(
-      `SELECT id, max_capacity, current_rider_count, status, visibility, start_point_auto
+      `SELECT id, max_capacity, current_rider_count, status, visibility, start_point_auto,
+              EXISTS (
+                SELECT 1 FROM riders c WHERE c.id = rides.captain_id AND c.deleted_at IS NOT NULL
+              ) AS captain_deleted
        FROM rides WHERE id = $1 FOR UPDATE`,
       [rideId],
     );
 
-    if (rideResult.rows.length === 0) {
+    // Nobody new joins a ride whose captain has deleted their account.
+    if (rideResult.rows.length === 0 || rideResult.rows[0].captain_deleted) {
       await client.query("ROLLBACK");
       throw new Error("Ride not found");
     }
