@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   advanceLegProgress,
   buildLegGeometry,
+  shouldAdoptRefreshedLeg,
+  type CurrentLeg,
   type LegGeometry,
   type LegProgress,
 } from "../core/routeProgress";
@@ -87,12 +89,15 @@ export const useLiveLeg = ({
   targetRef.current = target;
   const viaRef = useRef(via);
   viaRef.current = via;
+  // What is being ridden now, for judging a traffic refresh against.
+  const currentLegRef = useRef<CurrentLeg | null>(null);
 
   const targetId = target?.id ?? null;
   const hasFix = fix !== null;
 
   const leg = route?.legs[0] ?? null;
   const geometry = useMemo(() => (leg ? buildLegGeometry(leg) : null), [leg]);
+  currentLegRef.current = leg && geometry ? { leg, geometry, progress } : null;
 
   const fetchLeg = useCallback(async (reason: FetchReason) => {
     const currentTarget = targetRef.current;
@@ -125,6 +130,20 @@ export const useLiveLeg = ({
         console.warn("[live-leg] keeping last good route:", next.errorStatus);
       }
       setStatus("ready");
+      return;
+    }
+
+    // A traffic refresh must not trade the road being ridden for a longer one
+    // Google put the rider on by mistake (a flyover above them, say).
+    const refreshedLeg = next.legs[0];
+    if (
+      reason === "traffic" &&
+      refreshedLeg &&
+      !shouldAdoptRefreshedLeg(currentLegRef.current, refreshedLeg)
+    ) {
+      if (__DEV__) {
+        console.log("[live-leg] traffic refresh kept the current route: refreshed leg is longer and not faster");
+      }
       return;
     }
 

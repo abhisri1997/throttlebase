@@ -9,6 +9,7 @@ import {
   locateStep,
   placeRiderOnTrip,
   remainingLegSeconds,
+  shouldAdoptRefreshedLeg,
   type LegProgress,
   type ProgressFix,
 } from "./routeProgress";
@@ -162,4 +163,57 @@ test("a rider joining on the route heads to the next waypoint, not the start", (
 
 test("a rider away from the route heads to the start", () => {
   assert.equal(placeRiderOnTrip(at(0.005, 0.01), buildTripGeometry(plannedRoute)), 0);
+});
+
+// ── Traffic refresh ─────────────────────────────────────────────────────────
+
+/** A 10-unit (about 11 km) leg, one step per unit, 60 s each. */
+const longLeg = makeLeg(
+  Array.from({ length: 11 }, (_, i) => at(i * 0.01)),
+  Array.from({ length: 10 }, (_, i) => at((i + 1) * 0.01)),
+);
+const longGeometry = buildLegGeometry(longLeg);
+/** Ridden 7 of 10 units: about 3.3 km and 180 s left. */
+const sevenUnitsIn = ride(longGeometry, [east(at(0.069)), east(at(0.07))]);
+const current = { leg: longLeg, geometry: longGeometry, progress: sevenUnitsIn };
+
+const refreshed = (distanceMeters: number, durationSeconds: number): RouteLeg =>
+  makeLeg([at(0.07), at(0.1)], [at(0.1)], { distanceMeters, durationSeconds });
+
+test("a refresh down the same road replaces the leg, for the fresher traffic", () => {
+  // Same length as what is left, but slower: traffic got worse. Still taken.
+  assert.equal(shouldAdoptRefreshedLeg(current, refreshed(3 * UNIT, 400)), true);
+});
+
+test("a refresh a little longer than what is left still counts as the same way", () => {
+  assert.equal(shouldAdoptRefreshedLeg(current, refreshed(3 * UNIT * 1.1 + 150, 400)), true);
+});
+
+test("a refresh that doubles the distance and is slower keeps the current leg", () => {
+  // Under the Electronic City flyover: 3.4 km left, and a refresh that put the
+  // rider on the flyover came back 6.8 km and slower.
+  assert.equal(shouldAdoptRefreshedLeg(current, refreshed(6 * UNIT, 900)), false);
+});
+
+test("a longer refresh is taken when it is clearly faster, around a jam", () => {
+  assert.equal(shouldAdoptRefreshedLeg(current, refreshed(6 * UNIT, 120)), true);
+});
+
+test("a longer refresh that saves only a few seconds keeps the current leg", () => {
+  assert.equal(shouldAdoptRefreshedLeg(current, refreshed(6 * UNIT, 170)), false);
+});
+
+test("the refreshed leg's traffic time is what is compared", () => {
+  const jamFree = { ...refreshed(6 * UNIT, 900), durationInTrafficSeconds: 100 };
+  assert.equal(shouldAdoptRefreshedLeg(current, jamFree), true);
+});
+
+test("with no leg, no progress, or the rider off it, the refresh is taken", () => {
+  const longer = refreshed(6 * UNIT, 900);
+  assert.equal(shouldAdoptRefreshedLeg(null, longer), true);
+  assert.equal(shouldAdoptRefreshedLeg({ ...current, progress: null }, longer), true);
+  assert.equal(
+    shouldAdoptRefreshedLeg({ ...current, progress: { ...sevenUnitsIn, isOnRoute: false } }, longer),
+    true,
+  );
 });
