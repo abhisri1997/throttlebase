@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Session } from "../core/auth/session";
-import type { ApiClient, ApiRequest } from "../ports/ApiClient";
+import { ApiError, type ApiClient, type ApiRequest } from "../ports/ApiClient";
 import type { SecureStorage } from "../ports/SecureStorage";
 import { createAuthService, type ProviderSignIn } from "./authService";
 import { TERMS } from "../core/legal/terms";
@@ -168,7 +168,7 @@ test("concurrent callers trigger exactly ONE refresh", async () => {
 
 test("a rejected refresh signs the rider out and clears storage", async () => {
   const { service, storage } = buildService(
-    () => Promise.reject(new Error("401")),
+    () => Promise.reject(new ApiError(401, "Session has been revoked.", "REFRESH_TOKEN_INVALID")),
     storedSession({ accessTokenExpiresAt: NOW - 1 }),
   );
 
@@ -177,6 +177,102 @@ test("a rejected refresh signs the rider out and clears storage", async () => {
   assert.equal(session, null);
   assert.equal(storage.items.size, 0);
   assert.equal(service.getState().status, "signed-out");
+});
+
+test("a refresh the server cannot read signs the rider out", async () => {
+  const { service, storage } = buildService(
+    () => Promise.reject(new ApiError(400, "Validation failed")),
+    storedSession({ accessTokenExpiresAt: NOW - 1 }),
+  );
+
+  assert.equal(await service.getValidSession(), null);
+  assert.equal(storage.items.size, 0);
+  assert.equal(service.getState().status, "signed-out");
+});
+
+for (const [label, failure] of [
+  ["no signal", () => new TypeError("Network request failed")],
+  ["a timeout", () => new DOMException("The operation was aborted.", "AbortError")],
+  ["a server error", () => new ApiError(500, "Internal server error")],
+  ["a bad gateway mid-deploy", () => new ApiError(502, "Request failed (502)")],
+  ["rate limiting", () => new ApiError(429, "Too many requests", "RATE_LIMITED")],
+] as const) {
+  test(`a refresh that fails with ${label} keeps the rider signed in`, async () => {
+    // Arrange: the access token has expired and the refresh gets no answer
+    // about the refresh token itself.
+    const stored = storedSession({ accessTokenExpiresAt: NOW - 1 });
+    const { service, storage } = buildService(() => Promise.reject(failure()), stored);
+
+    // Act
+    const session = await service.getValidSession();
+
+    // Assert: same session, still stored, still signed in.
+    assert.equal(session?.refreshToken, "refresh-1");
+    assert.equal(session?.accessToken, "access-1");
+    assert.equal(
+      JSON.parse(storage.items.get("throttlebase.session.v1") as string).refreshToken,
+      "refresh-1",
+    );
+    assert.equal(service.getState().status, "signed-in");
+  });
+}
+
+test("launching with no signal and an expired access token opens the app", async () => {
+  // Arrange: the app was closed for an hour and is opened out of coverage.
+  const { service } = buildService(
+    () => Promise.reject(new TypeError("Network request failed")),
+    storedSession({ accessTokenExpiresAt: NOW - 60 * 60_000 }),
+  );
+  assert.equal(service.getState().status, "loading");
+
+  // Act: what the root layout does on launch.
+  await service.getValidSession();
+
+  // Assert: signed in, not stuck on the splash or sent to sign-in.
+  assert.equal(service.getState().status, "signed-in");
+});
+
+test("the refresh is tried again once the signal comes back", async () => {
+  // Arrange: the first refresh gets no answer, the second succeeds.
+  let online = false;
+  const { service, calls } = buildService(async () => {
+    if (!online) throw new TypeError("Network request failed");
+    return refreshResponse(2);
+  }, storedSession({ accessTokenExpiresAt: NOW - 1 }));
+
+  await service.getValidSession();
+
+  // Act
+  online = true;
+  const session = await service.getValidSession();
+
+  // Assert
+  assert.equal(session?.accessToken, "access-2");
+  assert.equal(calls.filter((call) => call.path === "/auth/refresh").length, 2);
+});
+
+test("a 401 retry whose refresh gets no answer fails the request, not the session", async () => {
+  // Arrange: the HTTP adapter calls refreshAccessToken after a 401.
+  const storage = new MemoryStorage();
+  storage.items.set("throttlebase.session.v1", JSON.stringify(storedSession()));
+  let options!: { refreshAccessToken: () => Promise<string | null> };
+  const service = createAuthService({
+    storage,
+    providers: noProviders,
+    now: () => NOW,
+    createApi: (given) => {
+      options = given;
+      return {
+        request: () => Promise.reject(new TypeError("Network request failed")),
+      };
+    },
+  });
+  await service.getValidSession();
+
+  // Act + Assert
+  await assert.rejects(options.refreshAccessToken(), TypeError);
+  assert.equal(service.getState().status, "signed-in");
+  assert.equal(storage.items.size, 1);
 });
 
 test("an expired refresh token signs out without a doomed request", async () => {

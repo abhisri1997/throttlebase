@@ -7,7 +7,8 @@ export interface ApiClientOptions {
   getAccessToken: () => Promise<string | null>;
   /**
    * Called once after a 401, to obtain a fresh token. Returning null means
-   * the session is unrecoverable and the request should fail.
+   * the session is unrecoverable and the request should fail. Rejecting
+   * (the refresh itself got no answer) fails the request with that error.
    */
   refreshAccessToken: () => Promise<string | null>;
 }

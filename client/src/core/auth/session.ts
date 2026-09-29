@@ -49,6 +49,18 @@ export const decideSessionAction = (
   return isAccessTokenUsable(session, nowMs) ? "use" : "refresh";
 };
 
+/**
+ * Whether a failed refresh means the session is over.
+ *
+ * The backend answers 401 for every refresh token it will never accept
+ * (expired, revoked, or already rotated) and 400 for a request it cannot
+ * read. Anything else, such as no signal, a timeout, a 429 or a 5xx during a
+ * deploy, says nothing about the token, so the rider stays signed in and the
+ * refresh is tried again on the next request.
+ */
+export const isRefreshRefused = (status: number): boolean =>
+  status === 400 || status === 401;
+
 export interface SessionResponse {
   riderId: string;
   accessToken: string;

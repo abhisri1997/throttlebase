@@ -59,6 +59,7 @@ ThrottleBase: mobile-first platform for motorcycle group rides.
 - Auth passwordless: Google, Apple, email code. No passwords. No TOTP.
 - Access token: ES256 JWT, 15 min. Verified by signature only. No session lookup per request.
 - Refresh token: 30 days. Hashed in `sessions`. Rotates each refresh. Reuse revokes family.
+- Client signs out only when `/auth/refresh` answers 400/401. Offline, timeout, 5xx keep the session.
 - Admin: `rider_roles` table, roles in token. `riders.is_admin` dropped (migration 024).
 - JWKS path: `/.well-known/jwks.json`. Not under `/auth`.
 - DB connection: API uses Supabase `postgres` role (BYPASSRLS). RLS policies exist but unenforced.
