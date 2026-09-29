@@ -471,6 +471,8 @@ export const createGoogleMapsProvider = ({
     searchNearby(params: SearchNearbyParams): Promise<PlaceResult[]> {
       return searchPlaces("places-search-nearby", PLACES_SEARCH_NEARBY_URL, {
         includedTypes: params.includedTypes,
+        ...(params.excludedTypes?.length ? { excludedTypes: params.excludedTypes } : {}),
+        ...(params.rankByDistance ? { rankPreference: "DISTANCE" } : {}),
         maxResultCount: params.maxResultCount ?? 1,
         locationRestriction: {
           circle: {

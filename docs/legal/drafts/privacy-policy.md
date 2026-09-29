@@ -70,7 +70,7 @@ Some of these providers process data outside India. We transfer data only to cou
 - Most of your data, including your ride history, routes and posts, is kept until you delete it or your account.
 - When you delete your account, you are signed out everywhere and your profile and content are hidden at once. Your data is deleted 30 days later.
 - Registration details (your email, name, username and sign-in method) are kept sealed for 180 days after your account is deleted, as the Information Technology Rules, 2021 require. They are used only if the law requires it, never to contact you or for anything else.
-- Public routes you created are kept after your account is deleted, without your name or any link to you, with the first and last part of each route removed so it can't lead back to where you start or finish. Private routes and routes shared with specific riders are deleted.
+- Public routes you created are kept after your account is deleted, without your name or any link to you. Where a route starts or finishes somewhere other than a public place such as a hotel, café, fuel station, viewpoint or station, about 500 m of that end is removed so it can't lead back to where you start or finish, and a route with less than 5 km left is deleted instead. The route's name, your stop notes and the name of each stop are replaced, and its ride time is removed. Private routes and routes shared with specific riders are deleted.
 - Rides you took part in with other riders stay in their ride history; your own track, stats and participation are deleted.
 - Sign-in and security records are kept for [SECURITY LOG RETENTION PERIOD].
 - Records of your consent are kept for as long as we may need to show that you gave it.

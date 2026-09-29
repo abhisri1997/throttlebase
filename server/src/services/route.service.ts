@@ -26,7 +26,8 @@ import type {
 
 export interface Route {
   id: string;
-  creator_id: string;
+  /** Null for a community route: kept, anonymised, after its rider left. */
+  creator_id: string | null;
   ride_id: string | null;
   parent_route_id: string | null;
   title: string;
@@ -68,6 +69,14 @@ export type RouteWithStops = Route & {
   /** Points that hold a ride to this road, start to end; see core/routes/roadVia. */
   road_via: [number, number][];
 };
+
+/**
+ * A route whose rider is still here, or a community route, which has no
+ * rider. A rider who deleted their account takes their routes with them
+ * until the purge, which deletes them or keeps public ones anonymised.
+ * For queries that LEFT JOIN riders as `rd` on the creator.
+ */
+const LIVE_OR_COMMUNITY = "(r.creator_id IS NULL OR rd.deleted_at IS NULL)";
 
 /** Every route read uses these, so points come back as numbers, not PostGIS hex. */
 export const ROUTE_COLUMNS = `
@@ -141,16 +150,15 @@ export const getRouteById = async (
   routeId: string,
   viewerId: string,
 ): Promise<RouteWithStops | null> => {
-  // Fetch route with creator name, respecting visibility. A creator who has
-  // deleted their account takes their routes with them until the purge,
-  // which deletes them or, if the rider chose, keeps them anonymised.
+  // Fetch route with creator name, respecting visibility.
   const result = await query(
     `SELECT ${ROUTE_COLUMNS}, rd.display_name AS creator_name
      FROM routes r
-     JOIN riders rd ON r.creator_id = rd.id
+     LEFT JOIN riders rd ON r.creator_id = rd.id
      WHERE r.id = $1
-       AND rd.deleted_at IS NULL
-       -- Hidden from, and never shown by, a rider blocked either way.
+       AND ${LIVE_OR_COMMUNITY}
+       -- Hidden from, and never shown by, a rider blocked either way. A
+       -- community route has no rider, so no block hides it.
        AND (r.creator_id = $2 OR NOT ${blockedBetweenSql("$2::uuid", "r.creator_id")})
        AND (
          r.visibility = 'public'
@@ -182,8 +190,8 @@ export const listVisibleRoutes = async (viewerId: string): Promise<Route[]> => {
   const result = await query(
     `SELECT ${ROUTE_COLUMNS}, rd.display_name AS creator_name
      FROM routes r
-     JOIN riders rd ON r.creator_id = rd.id
-     WHERE (r.visibility = 'public' OR r.creator_id = $1) AND rd.deleted_at IS NULL
+     LEFT JOIN riders rd ON r.creator_id = rd.id
+     WHERE (r.visibility = 'public' OR r.creator_id = $1) AND ${LIVE_OR_COMMUNITY}
        AND (r.creator_id = $1 OR NOT ${blockedBetweenSql("$1::uuid", "r.creator_id")})
      ORDER BY r.created_at DESC
      LIMIT 50`,
@@ -414,9 +422,9 @@ export const searchRoutes = async (viewerId: string, search: RouteSearchQuery): 
   const result = await query(
     `SELECT ${ROUTE_COLUMNS}, rd.display_name AS creator_name
      FROM routes r
-     JOIN riders rd ON r.creator_id = rd.id
+     LEFT JOIN riders rd ON r.creator_id = rd.id
      WHERE (r.visibility = 'public' OR r.creator_id = $1)
-       AND rd.deleted_at IS NULL
+       AND ${LIVE_OR_COMMUNITY}
        AND (r.creator_id = $1 OR NOT ${blockedBetweenSql("$1::uuid", "r.creator_id")})
        ${placeConditions.length > 0 ? `AND (${placeConditions.join(" OR ")})` : ""}
      ORDER BY r.created_at DESC

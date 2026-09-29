@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  COMMUNITY_ROUTE_LABEL,
   deleteRoutePrompt,
+  routeAuthor,
   isRouteOwner,
   PUBLIC_ROUTE_NOTICE,
   visibilityLabel,
@@ -20,6 +22,17 @@ test("only the rider who saved a route owns it", () => {
   assert.equal(isRouteOwner({ creator_id: "r1" }, "r1"), true);
   assert.equal(isRouteOwner({ creator_id: "r1" }, "r2"), false);
   assert.equal(isRouteOwner({ creator_id: "r1" }, undefined), false);
+});
+
+test("a community route belongs to nobody", () => {
+  assert.equal(isRouteOwner({ creator_id: null }, "r1"), false);
+  assert.equal(routeAuthor({ creator_id: null, creator_name: null }, "r1"), COMMUNITY_ROUTE_LABEL);
+});
+
+test("a route's author reads as you, the rider, or a rider", () => {
+  assert.equal(routeAuthor({ creator_id: "r1", creator_name: "Asha" }, "r1"), "You");
+  assert.equal(routeAuthor({ creator_id: "r1", creator_name: "Asha" }, "r2"), "Asha");
+  assert.equal(routeAuthor({ creator_id: "r1" }, null), "A rider");
 });
 
 test("a public route can be made private; anything else can be made public", () => {

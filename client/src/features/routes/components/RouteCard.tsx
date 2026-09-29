@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../../../theme/ThemeContext";
 import { routeFacts, routeHeadline, viaLine, type RouteSummaryInput } from "../core/routeSummary";
+import { routeAuthor } from "../core/routeOwner";
 import { HighlightChips } from "./HighlightChips";
 import { RouteShape } from "./RouteShape";
 
@@ -12,8 +13,9 @@ export interface RouteListItem extends RouteSummaryInput {
   id: string;
   visibility: string;
   created_at: string;
-  creator_id: string;
-  creator_name?: string;
+  /** Null for a community route. */
+  creator_id: string | null;
+  creator_name?: string | null;
   geojson?: { coordinates?: number[][] } | null;
   /** Present on search results: how the route answers the search. */
   match?: { direction: "forward" | "reverse"; start_gap_km: number | null; end_gap_km: number | null };
@@ -38,9 +40,8 @@ export function RouteCard({ route, viewerId, matchNote, onPress }: RouteCardProp
   const headline = routeHeadline(route);
   const facts = routeFacts(route);
   const via = viaLine(route.via);
-  const isMine = viewerId !== null && route.creator_id === viewerId;
   const savedOn = new Date(route.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-  const author = isMine ? "You" : route.creator_name ?? "A rider";
+  const author = routeAuthor(route, viewerId);
   const isReversed = route.match?.direction === "reverse";
 
   return (

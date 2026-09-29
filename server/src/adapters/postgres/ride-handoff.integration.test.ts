@@ -21,6 +21,8 @@ if (CONNECTION) {
 }
 
 const db = CONNECTION ? await import("../../config/db.js") : null;
+// Never Google in tests: the local .env may hold a real key.
+const lookups = CONNECTION ? await import("../../services/community-route.service.js") : null;
 const repository = CONNECTION ? await import("./riderRepository.js") : null;
 const rides = CONNECTION ? await import("../../services/ride.service.js") : null;
 const join = CONNECTION ? await import("../../services/ride-join.service.js") : null;
@@ -236,13 +238,13 @@ test("a deleting captain's open rides pass to the next leader", { skip: !CONNECT
   });
 
   await t.test("the hourly purge hands off rides of riders deleted before this existed", async () => {
-    const result = await purge!.processAccountPurge({});
+    const result = await purge!.processAccountPurge({}, lookups!.NO_LOOKUPS);
     assert.ok(Number(result.ridesHandedOff) >= 1);
     assert.equal((await captainOf(rideH)).captain_id, NEW);
   });
 
   await t.test("handing off again finds nothing left to do", async () => {
-    const result = await purge!.processAccountPurge({});
+    const result = await purge!.processAccountPurge({}, lookups!.NO_LOOKUPS);
     assert.equal(result.ridesHandedOff, 0);
   });
 });
