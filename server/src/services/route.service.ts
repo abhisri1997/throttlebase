@@ -9,6 +9,7 @@ import {
 import { roadViaPoints, routeLine } from "../core/routes/roadVia.js";
 import { enqueueRideStatsRecompute } from "./jobs.service.js";
 import { getRouteRoadFeedback, type RouteRoadFeedback } from "./road-feedback.service.js";
+import { blockedBetweenSql } from "./blocks.js";
 import type {
   CreateRouteInput,
   GpsTraceBatchInput,
@@ -156,6 +157,9 @@ export const getRouteById = async (
      LEFT JOIN riders rd ON r.creator_id = rd.id
      WHERE r.id = $1
        AND ${LIVE_OR_COMMUNITY}
+       -- Hidden from, and never shown by, a rider blocked either way. A
+       -- community route has no rider, so no block hides it.
+       AND (r.creator_id = $2 OR NOT ${blockedBetweenSql("$2::uuid", "r.creator_id")})
        AND (
          r.visibility = 'public'
          OR r.creator_id = $2
@@ -188,6 +192,7 @@ export const listVisibleRoutes = async (viewerId: string): Promise<Route[]> => {
      FROM routes r
      LEFT JOIN riders rd ON r.creator_id = rd.id
      WHERE (r.visibility = 'public' OR r.creator_id = $1) AND ${LIVE_OR_COMMUNITY}
+       AND (r.creator_id = $1 OR NOT ${blockedBetweenSql("$1::uuid", "r.creator_id")})
      ORDER BY r.created_at DESC
      LIMIT 50`,
     [viewerId],
@@ -420,6 +425,7 @@ export const searchRoutes = async (viewerId: string, search: RouteSearchQuery): 
      LEFT JOIN riders rd ON r.creator_id = rd.id
      WHERE (r.visibility = 'public' OR r.creator_id = $1)
        AND ${LIVE_OR_COMMUNITY}
+       AND (r.creator_id = $1 OR NOT ${blockedBetweenSql("$1::uuid", "r.creator_id")})
        ${placeConditions.length > 0 ? `AND (${placeConditions.join(" OR ")})` : ""}
      ORDER BY r.created_at DESC
      LIMIT ${MAX_SEARCH_CANDIDATES}`,

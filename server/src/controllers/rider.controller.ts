@@ -3,6 +3,7 @@ import { UpdateRiderSchema } from "../schemas/rider.schemas.js";
 import * as RiderService from "../services/rider.service.js";
 import { toPublicRider } from "../services/publicRider.js";
 import { query } from "../config/db.js";
+import { isBlockedBetween } from "../services/blocks.js";
 
 /**
  * RiderController — Handles HTTP request/response for rider profile endpoints.
@@ -55,7 +56,10 @@ export const getPublicProfile = async (
       return;
     }
 
-    const rider = await RiderService.getById(id);
+    const viewerId = req.rider!.riderId;
+    // Blocked either way reads as not found, so the block isn't revealed.
+    const rider =
+      viewerId !== id && (await isBlockedBetween(viewerId, id)) ? null : await RiderService.getById(id);
 
     if (!rider) {
       res.status(404).json({ error: "Rider not found" });
@@ -63,7 +67,6 @@ export const getPublicProfile = async (
     }
 
     // Check if the authenticated viewer already follows this rider
-    const viewerId = req.rider!.riderId;
     let is_following = false;
     if (viewerId !== id) {
       const followCheck = await query(
