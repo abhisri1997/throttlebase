@@ -52,6 +52,9 @@ Account routes (`server/src/adapters/http/riderAccountRoutes.ts`) are mounted be
 - `DELETE /api/rides/:id` — captain; not for active or completed rides
 - `POST /api/rides/:id/join` — scheduled or active rides only; enforces capacity. Broadcasts `ride:joined`
 - `POST /api/rides/:id/promote` — captain promotes a rider to co-captain
+- `POST /api/rides/:id/leave` — leave before the ride starts (409 once live: finish your ride instead). The captain hands the ride to the next leader, or cancels it with nobody left. Returns `outcome`: `left`, `handed_over` or `ride_cancelled`. Broadcasts `ride:roster_changed`
+- `POST /api/rides/:id/captain` — `{ rider_id }`: the captain hands the ride to a confirmed rider, before or during it, and stays on as co-captain. Broadcasts `ride:roster_changed`
+- `GET /api/rides/:id` gives the captain `next_captain` — who would lead if they left, or `null`
 - `PATCH /api/rides/:id/start-location` — your own start point, for auto-start rides
 - `GET /api/rides/:id/stops`
 - `POST /api/rides/:id/stops` — any participant requests a stop. Broadcasts `ride:stop_requested`
@@ -119,7 +122,7 @@ The only path to Google. The client never calls `googleapis.com`. Rate-limited t
 - `GET /api/community/groups`, `POST /api/community/groups`
 - `GET /api/community/groups/:id`
 - `POST /api/community/groups/:id/join`
-- `DELETE /api/community/groups/:id/leave` — admins cannot leave
+- `DELETE /api/community/groups/:id/leave` — anyone can leave; the owner hands the group to the next admin, or ends it as the only member. Returns `outcome`: `left`, `handed_over` or `group_deleted`. `GET /api/community/groups/:id` gives the owner `next_admin`
 
 ## Notifications, settings, privacy
 
@@ -200,6 +203,6 @@ Server → client:
 Lightweight ride-detail updates. Room `ride:<rideId>`; subscribing requires the ride to be public, or you to be captain or a confirmed participant.
 
 - Client → server: `ride:subscribe`, `ride:unsubscribe` — `{ rideId }`
-- Server → client: `ride:subscribed`, `ride:joined`, `ride:stop_requested`, `ride:stop_updated`, `ride:error`
+- Server → client: `ride:subscribed`, `ride:joined`, `ride:roster_changed` (someone left, or the captain changed), `ride:stop_requested`, `ride:stop_updated`, `ride:error`
 
 Events emitted by the worker process do not reach sockets: the worker has no Socket.IO server. For example, an auto-finish by `ride_progress.sweep` reaches clients on their next poll.
