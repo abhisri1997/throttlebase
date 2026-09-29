@@ -67,6 +67,7 @@ ThrottleBase: mobile-first platform for motorcycle group rides.
 - Client base URL: `EXPO_PUBLIC_API_URL`. Unset release build → dev API, never prod.
 - Track source: `ride_live_location_samples`. `gps_traces` unused.
 - Sample kept per 20 m, per 30 s, or on motion change. Stale/future/out-of-order fixes dropped.
+- Sockets (`/live`, `/rides`) fetch a fresh access token on every (re)connect via `core/auth/socketAuth.ts`; a refused handshake is retried with backoff. Never hold a token for a socket.
 - Worker cannot emit socket events. Worker-side changes reach clients via polling.
 - One API instance only. Sampling state in memory. No Socket.IO adapter.
 - Push/email delivery: stubs. In-app notifications only.
@@ -82,10 +83,9 @@ ThrottleBase: mobile-first platform for motorcycle group rides.
 ## Active Priorities
 
 1. Real-phone ride validating per-rider progress, motion readings, stop markers.
-2. Live socket reconnect after token refresh.
-3. Enforce RLS: services onto `withRiderTransaction`, API onto `throttlebase_app`.
-4. Push/email providers + device registration.
-5. Client admin check: read roles, not `is_admin` (always false today).
+2. Enforce RLS: services onto `withRiderTransaction`, API onto `throttlebase_app`.
+3. Push/email providers + device registration.
+4. Client admin check: read roles, not `is_admin` (always false today).
 
 ## Assistant Operating Notes
 
