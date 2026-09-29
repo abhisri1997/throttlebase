@@ -6,7 +6,7 @@
  * background location task.
  *
  * Lifecycle:
- *   1. App detects rider is participant of an active ride → startTracking(rideId, token)
+ *   1. App detects rider is participant of an active ride → startTracking(rideId)
  *   2. Location updates emitted to live-session socket every ~5s, each with the
  *      phone's motion reading when it has a recent one
  *   3. Ride ends / rider leaves / app logs out → stopTracking()
@@ -22,7 +22,6 @@ const BACKGROUND_LOCATION_TASK = "THROTTLEBASE_BG_LOCATION";
 
 // ── Module-level state ──────────────────────────────────────────────────────
 let _activeRideId: string | null = null;
-let _authToken: string | null = null;
 let _foregroundSubscription: ExpoLocation.LocationSubscription | null = null;
 let _heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -67,9 +66,10 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
     return;
   }
 
-  // Ensure socket connected
-  if (!liveSessionSocket.isConnected() && _authToken) {
-    liveSessionSocket.connect(_authToken);
+  // Ensure socket connected. The socket fetches a current access token
+  // itself, so this works hours into a ride.
+  if (!liveSessionSocket.isConnected()) {
+    liveSessionSocket.connect();
   }
 
   // The OS batches fixes while the app is backgrounded. Send all of them, oldest
@@ -204,10 +204,7 @@ const stopHeartbeat = (): void => {
  * Start tracking for an active ride. Connects socket, starts foreground +
  * background location updates, and begins heartbeat.
  */
-export const startTracking = async (
-  rideId: string,
-  token: string,
-): Promise<void> => {
+export const startTracking = async (rideId: string): Promise<void> => {
   // Already tracking this ride
   if (_activeRideId === rideId) {
     return;
@@ -217,10 +214,9 @@ export const startTracking = async (
   await stopTracking();
 
   _activeRideId = rideId;
-  _authToken = token;
 
   // Connect socket and join room
-  liveSessionSocket.connect(token);
+  liveSessionSocket.connect();
   liveSessionSocket.emit("session:join", { rideId });
 
   // Start location tracking
@@ -248,7 +244,6 @@ export const stopTracking = async (): Promise<void> => {
   }
 
   _activeRideId = null;
-  // Keep _authToken — might need for reconnect
 };
 
 /**

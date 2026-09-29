@@ -49,7 +49,7 @@ type LiveSessionState = {
   /** This rider reached the destination; drives the "finish your ride?" prompt. */
   arrival: (RideArrivalEvent & { receivedAtMs: number }) | null;
   dismissArrival: () => void;
-  connect: (token: string) => void;
+  connect: () => void;
   joinRoom: (rideId: string) => void;
   leaveRoom: () => void;
   setRideContext: (rideId: string) => void;
@@ -233,8 +233,8 @@ export const useLiveSessionStore = create<LiveSessionState>((set, get) => ({
 
   dismissArrival: () => set((state) => ({ ...state, arrival: null })),
 
-  connect: (token: string) => {
-    const socket = liveSessionSocket.connect(token);
+  connect: () => {
+    const socket = liveSessionSocket.connect();
 
     attachSocketListeners();
 

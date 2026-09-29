@@ -80,7 +80,7 @@ export function useBackgroundLocationTracker() {
 
     if (activeRide && activeRide.id !== currentlyTracking) {
       // New active ride found — start tracking
-      startTracking(activeRide.id, token).catch(logTrackingError("start"));
+      startTracking(activeRide.id).catch(logTrackingError("start"));
     } else if (!activeRide && currentlyTracking) {
       // No active ride anymore — stop tracking
       stopTrackingSafely();

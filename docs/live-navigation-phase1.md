@@ -66,7 +66,7 @@ Status of the Phase 2 socket-gateway contract, reviewed against the code on 2026
 | `session:ended` | Done | REST controller emits `{ rideId, sessionId, endedAt, endedBy, reason }` | None |
 | Sampled persistence | Done | `realtime/sampleThrottle.ts`: keep a sample per 20 m, per 30 s, or on a motion-reading change | None |
 | Drop stale or out-of-order updates | Done | `updateLivePresenceLocation()` drops fixes older than 2 min, more than 30 s ahead, or out of order | None |
-| Reconnect with token refresh | Partial | Client reconnects and rejoins | Socket.IO auto-reconnect reuses the token from the last `connect()`; refresh the token on `connect_error` or before reconnecting |
+| Reconnect with token refresh | Done | `core/auth/socketAuth.ts`: the socket's `auth` callback fetches a current access token on every (re)connect, and a refused handshake is retried with backoff (1 s doubling to 30 s) | None |
 | Presence online/offline | Done, needs field QA | Heartbeat, leave, disconnect, presence sweep job | Validate under background and network churn |
 | No unauthorized room joins | Done | Socket auth + confirmed-participant check | None |
 
@@ -74,6 +74,5 @@ Added since the original contract: `rider:progress`, `ride:arrival`, `regroup:re
 
 ## Still Open for Navigation UX
 
-- Reconnect that survives an access-token refresh.
 - Field QA for background/resume, poor networks and multi-rider load. The first real-phone ride for per-rider progress is pending.
 - Server-pushed updates for worker-side changes (auto-finish, idle end); today the client learns of them by polling.

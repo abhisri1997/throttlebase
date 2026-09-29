@@ -809,7 +809,7 @@ export default function RideDetailScreen() {
         queryClient.invalidateQueries({ queryKey: ["live-session", id] }),
       ]);
       if (token) {
-        connect(token);
+        connect();
       }
       await refetchLiveSession();
       joinRoom(id!);
@@ -918,7 +918,7 @@ useEffect(() => {
       return;
     }
 
-    connect(token);
+    connect();
 
     return () => {
       reset();
@@ -1131,7 +1131,7 @@ useEffect(() => {
   useEffect(() => {
     if (!id || !token) return;
 
-    rideSocket.connect(token);
+    rideSocket.connect();
     rideSocket.subscribe(id);
 
     const handleJoined = () => {

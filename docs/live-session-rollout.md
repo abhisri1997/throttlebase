@@ -63,7 +63,6 @@ Reviewed against the code on 2026-09-28.
 - Tracking runs from the app-level background tracker on any screen, not only while a live screen is open.
 - Phase 4 is partial: presence sweep, incident escalation, cleanup and the ride-progress sweep run in the worker. Push and email delivery are stubs.
 - Still open:
-  - Reconnect after an access-token refresh. The socket reconnects with the token from its last `connect()`.
   - Worker-side changes (auto-finish, idle end) are not pushed over sockets.
   - Only one API instance is supported (in-memory sampling state, no Socket.IO adapter).
 - Phase 5 (progressive release) has not started; the closed beta is the first release.
