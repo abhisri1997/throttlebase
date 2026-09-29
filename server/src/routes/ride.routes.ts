@@ -744,6 +744,81 @@ router.post("/:id/promote", authenticate, rideController.promoteCoCaptain);
 
 /**
  * @swagger
+ * /api/rides/{id}/leave:
+ *   post:
+ *     summary: Leave a ride before it starts
+ *     description: >
+ *       A rider drops out and frees their seat. The captain hands the ride to
+ *       the next leader (the co-captain appointed first, otherwise the rider
+ *       with the most completed rides), or cancels it when nobody else is on it.
+ *       Once the ride is live, riders finish their ride instead.
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Left; `outcome` is left, handed_over or ride_cancelled
+ *       403:
+ *         description: Not on this ride
+ *       404:
+ *         description: Ride not found
+ *       409:
+ *         description: The ride has started or is over
+ */
+router.post("/:id/leave", authenticate, rideController.leaveRide);
+
+/**
+ * @swagger
+ * /api/rides/{id}/captain:
+ *   post:
+ *     summary: Pass the ride to another rider on it
+ *     description: >
+ *       The captain makes a confirmed rider the captain, before or during the
+ *       ride, and stays on as a co-captain. Everyone on the ride is notified.
+ *     tags: [Rides]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rider_id]
+ *             properties:
+ *               rider_id:
+ *                 type: string
+ *                 format: uuid
+ *     responses:
+ *       200:
+ *         description: The ride has a new captain
+ *       400:
+ *         description: That rider is not on the ride, or is already the captain
+ *       403:
+ *         description: Only the captain can pass the ride on
+ *       404:
+ *         description: Ride not found
+ *       409:
+ *         description: The ride is over
+ */
+router.post("/:id/captain", authenticate, rideController.passCaptaincy);
+
+/**
+ * @swagger
  * /api/rides/{id}/stops:
  *   get:
  *     summary: List all stops for a ride

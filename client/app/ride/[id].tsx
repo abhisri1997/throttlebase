@@ -72,6 +72,11 @@ import { StartMyRideCard } from "../../src/features/rides/components/StartMyRide
 import { SaveRouteCard } from "../../src/features/rides/components/SaveRouteCard";
 import { RoadFeedbackCard } from "../../src/features/rides/components/RoadFeedbackCard";
 import { rideSummaryLabel } from "../../src/features/rides/core/rideSummary";
+import {
+  leaveRidePrompt,
+  makeCaptainPrompt,
+  type ConfirmPrompt,
+} from "../../src/features/rides/core/rideLeadershipPrompts";
 import { useEndRideWithWarning } from "../../src/features/rides/hooks/useEndRideWithWarning";
 import { useGroupAlert } from "../../src/features/rides/hooks/useGroupAlert";
 import { GroupAlertSheet } from "../../src/features/rides/components/GroupAlertSheet";
@@ -101,6 +106,18 @@ const updateStartLocationOverride = async (
 
 const promoteRider = async (rideId: string, riderId: string) => {
   const { data } = await apiClient.post(`/api/rides/${rideId}/promote`, {
+    rider_id: riderId,
+  });
+  return data;
+};
+
+const leaveRideRequest = async (rideId: string) => {
+  const { data } = await apiClient.post(`/api/rides/${rideId}/leave`);
+  return data as { message: string; outcome: "left" | "handed_over" | "ride_cancelled" };
+};
+
+const passCaptaincyRequest = async (rideId: string, riderId: string) => {
+  const { data } = await apiClient.post(`/api/rides/${rideId}/captain`, {
     rider_id: riderId,
   });
   return data;
@@ -714,6 +731,28 @@ export default function RideDetailScreen() {
     },
   });
 
+  const leaveMutation = useMutation({
+    mutationFn: () => leaveRideRequest(id!),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["ride", id] });
+      queryClient.invalidateQueries({ queryKey: ["rides"] });
+      Alert.alert("You left the ride", result.message);
+    },
+    onError: (err: any) => {
+      Alert.alert("Error", getApiErrorMessage(err, "Failed to leave the ride"));
+    },
+  });
+
+  const captainMutation = useMutation({
+    mutationFn: (riderId: string) => passCaptaincyRequest(id!, riderId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ride", id] });
+    },
+    onError: (err: any) => {
+      Alert.alert("Error", getApiErrorMessage(err, "Failed to pass the ride on"));
+    },
+  });
+
   const stopMutation = useMutation({
     mutationFn: ({ stopId, status }: { stopId: string; status: string }) =>
       handleStop(id!, stopId, status),
@@ -1059,14 +1098,21 @@ useEffect(() => {
       queryClient.invalidateQueries({ queryKey: ["ride", id] });
     };
 
+    // Someone left, or the captain changed: the rider list and leader moved.
+    const handleRosterChanged = () => {
+      queryClient.invalidateQueries({ queryKey: ["ride", id] });
+    };
+
     rideSocket.on("ride:joined", handleJoined);
     rideSocket.on("ride:stop_requested", handleStopRequested);
     rideSocket.on("ride:stop_updated", handleStopUpdated);
+    rideSocket.on("ride:roster_changed", handleRosterChanged);
 
     return () => {
       rideSocket.off("ride:joined", handleJoined);
       rideSocket.off("ride:stop_requested", handleStopRequested);
       rideSocket.off("ride:stop_updated", handleStopUpdated);
+      rideSocket.off("ride:roster_changed", handleRosterChanged);
       rideSocket.unsubscribe(id);
     };
   }, [id, token, queryClient]);
@@ -1383,6 +1429,17 @@ useEffect(() => {
       { text: "Promote", onPress: () => promoteMutation.mutate(riderId) },
     ]);
   };
+
+  const confirm = (prompt: ConfirmPrompt, onConfirm: () => void) =>
+    Alert.alert(prompt.title, prompt.message, [
+      { text: "Cancel", style: "cancel" },
+      { text: prompt.confirmLabel, style: "destructive", onPress: onConfirm },
+    ]);
+
+  const handleLeave = () => confirm(leaveRidePrompt(ride), () => leaveMutation.mutate());
+
+  const handleMakeCaptain = (riderId: string, name: string) =>
+    confirm(makeCaptainPrompt(name), () => captainMutation.mutate(riderId));
 
   const handleJoinAttempt = () => {
     if (ride.start_point_auto) {
@@ -2198,6 +2255,21 @@ useEffect(() => {
                   </Text>
                 </TouchableOpacity>
               )}
+              {/* Captain: hand the ride to anyone else on it, before or during it */}
+              {isCaptain && !isTerminalRideStatus && p.rider_id !== currentRider?.id && (
+                <TouchableOpacity
+                  onPress={() => handleMakeCaptain(p.rider_id, p.display_name)}
+                  disabled={captainMutation.isPending}
+                  className='ml-2 px-3 py-1.5 rounded-full'
+                  style={{ borderWidth: 1, borderColor: colors.primary }}
+                  accessibilityRole='button'
+                  accessibilityLabel={`Make ${p.display_name} the captain`}
+                >
+                  <Text className='text-xs font-bold' style={{ color: colors.primary }}>
+                    Make captain
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           ))}
         </View>
@@ -2429,6 +2501,23 @@ useEffect(() => {
                     </Text>
                   )}
                 </View>
+              )}
+              {/* Before the start only: once live, riders finish their ride instead. */}
+              {ride.status !== "active" && (
+                <TouchableOpacity
+                  onPress={handleLeave}
+                  disabled={leaveMutation.isPending}
+                  className='mt-3 py-2 items-center'
+                  accessibilityRole='button'
+                >
+                  {leaveMutation.isPending ? (
+                    <ActivityIndicator color={colors.danger} />
+                  ) : (
+                    <Text className='font-semibold' style={{ color: colors.danger }}>
+                      Leave ride
+                    </Text>
+                  )}
+                </TouchableOpacity>
               )}
             </View>
           ) : (
