@@ -124,14 +124,18 @@ export const saveRoadFeedback = async (
 export const getRouteRoadFeedback = async (routeId: string): Promise<RouteRoadFeedback> => {
   const [counts, reasons] = await Promise.all([
     query(
-      `SELECT count(*) FILTER (WHERE as_described)::int AS described, count(*)::int AS total
-       FROM route_road_feedback WHERE route_id = $1`,
+      // A rider who has deleted their account no longer counts.
+      `SELECT count(*) FILTER (WHERE f.as_described)::int AS described, count(*)::int AS total
+       FROM route_road_feedback f JOIN riders r ON r.id = f.rider_id
+       WHERE f.route_id = $1 AND r.deleted_at IS NULL`,
       [routeId],
     ),
     query(
       `SELECT reason, count(*)::int AS count
-       FROM route_road_feedback, unnest(reasons) AS reason
-       WHERE route_id = $1
+       FROM route_road_feedback f
+       JOIN riders r ON r.id = f.rider_id
+       CROSS JOIN unnest(f.reasons) AS reason
+       WHERE f.route_id = $1 AND r.deleted_at IS NULL
        GROUP BY reason
        ORDER BY count DESC, reason`,
       [routeId],

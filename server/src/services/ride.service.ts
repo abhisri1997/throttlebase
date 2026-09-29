@@ -362,6 +362,7 @@ export const getRideById = async (
               FROM ride_participants rp
               JOIN riders u ON rp.rider_id = u.id
               WHERE rp.ride_id = r.id AND rp.status = 'confirmed'
+                AND u.deleted_at IS NULL
             ) as participants,
             (
               SELECT json_agg(
@@ -409,7 +410,9 @@ export const listDiscoverableRides = async (
     JOIN riders c ON r.captain_id = c.id
     WHERE r.status NOT IN ('completed', 'cancelled')
       AND (
-        (r.visibility = 'public' AND r.status = 'scheduled')
+        -- A ride led by a rider who deleted their account leaves public
+        -- discovery at once; its own riders still see it.
+        (r.visibility = 'public' AND r.status = 'scheduled' AND c.deleted_at IS NULL)
         OR r.captain_id = $1
         OR EXISTS (
           SELECT 1
@@ -902,6 +905,35 @@ export const listRideStops = async (rideId: string): Promise<RideStop[]> => {
  * Uses the geographic centroid of all confirmed riders' locations,
  * then snaps to the nearest accessible place via Google Nearby Search.
  */
+/**
+ * The riders whose starting points shape an automatic meeting point: every
+ * confirmed participant with a saved start for this ride, or failing that a
+ * home location. A rider who has deleted their account no longer counts,
+ * even while their rows wait for the purge.
+ */
+export const listMeetingPointContributors = async (
+  rideId: string,
+): Promise<Array<{ riderId: string; lat: number; lng: number }>> => {
+  const result = await query(
+    `SELECT
+       rp.rider_id,
+       ST_X(COALESCE(rp.start_location_override, r.location_coords)::geometry) as lng,
+       ST_Y(COALESCE(rp.start_location_override, r.location_coords)::geometry) as lat
+     FROM ride_participants rp
+     JOIN riders r ON rp.rider_id = r.id
+     WHERE rp.ride_id = $1 AND rp.status = 'confirmed'
+       AND r.deleted_at IS NULL
+       AND COALESCE(rp.start_location_override, r.location_coords) IS NOT NULL`,
+    [rideId],
+  );
+
+  return result.rows.map((row) => ({
+    riderId: row.rider_id as string,
+    lat: parseFloat(row.lat),
+    lng: parseFloat(row.lng),
+  }));
+};
+
 export const recalculateStartPoint = async (
   rideId: string,
 ): Promise<{
@@ -937,22 +969,9 @@ export const recalculateStartPoint = async (
       ? { lat: parseFloat(destRow.dest_lat), lng: parseFloat(destRow.dest_lng) }
       : undefined;
 
-  // Get all confirmed riders' locations (preferring override, falling back to home location)
-  const participantResult = await query(
-    `SELECT 
-       rp.rider_id, 
-       ST_X(COALESCE(rp.start_location_override, r.location_coords)::geometry) as lng,
-       ST_Y(COALESCE(rp.start_location_override, r.location_coords)::geometry) as lat
-     FROM ride_participants rp
-     JOIN riders r ON rp.rider_id = r.id
-     WHERE rp.ride_id = $1 AND rp.status = 'confirmed'
-       AND COALESCE(rp.start_location_override, r.location_coords) IS NOT NULL`,
-    [rideId],
-  );
-
-  const locations = participantResult.rows.map((r: any) => ({
-    lat: parseFloat(r.lat),
-    lng: parseFloat(r.lng),
+  const locations = (await listMeetingPointContributors(rideId)).map(({ lat, lng }) => ({
+    lat,
+    lng,
   }));
 
   if (locations.length === 0) return null;

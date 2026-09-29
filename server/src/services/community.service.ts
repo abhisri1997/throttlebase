@@ -363,7 +363,8 @@ export const listGroups = async (
 
   const result = await query(
     `SELECT g.*, r.display_name AS creator_name,
-            (SELECT COUNT(*)::int FROM group_members gm WHERE gm.group_id = g.id) AS member_count,
+            (SELECT COUNT(*)::int FROM group_members gm JOIN riders gr ON gr.id = gm.rider_id
+              WHERE gm.group_id = g.id AND gr.deleted_at IS NULL) AS member_count,
             (
               g.created_by = $1 OR EXISTS (
                 SELECT 1
@@ -395,7 +396,8 @@ export const getGroupById = async (groupId: string, riderId: string) => {
 
   const result = await query(
     `SELECT g.*, r.display_name AS creator_name,
-            (SELECT COUNT(*)::int FROM group_members gm WHERE gm.group_id = g.id) AS member_count,
+            (SELECT COUNT(*)::int FROM group_members gm JOIN riders gr ON gr.id = gm.rider_id
+              WHERE gm.group_id = g.id AND gr.deleted_at IS NULL) AS member_count,
             (
               g.created_by = $2 OR EXISTS(
                 SELECT 1
@@ -429,7 +431,7 @@ export const getGroupById = async (groupId: string, riderId: string) => {
               )
               FROM group_members gm
               JOIN riders m ON gm.rider_id = m.id
-              WHERE gm.group_id = g.id
+              WHERE gm.group_id = g.id AND m.deleted_at IS NULL
             ) AS members
      FROM groups g
      JOIN riders r ON g.created_by = r.id
@@ -560,7 +562,7 @@ export const getRideReviews = async (rideId: string) => {
   const result = await query(
     `SELECT rr.*, r.display_name AS reviewer_name
      FROM ride_reviews rr JOIN riders r ON rr.rider_id = r.id
-     WHERE rr.ride_id = $1
+     WHERE rr.ride_id = $1 AND r.deleted_at IS NULL
      ORDER BY rr.created_at DESC`,
     [rideId],
   );
