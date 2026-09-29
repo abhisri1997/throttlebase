@@ -31,7 +31,9 @@ const config: ExpoConfig = {
         supportsTablet: true,
         bundleIdentifier: 'in.throttlebase.rider',
         infoPlist: {
-            UIBackgroundModes: ['location', 'fetch'],
+            // Location only: the ride tracker keeps running in the background
+            // once started in the foreground. Nothing uses background fetch.
+            UIBackgroundModes: ['location'],
         },
     },
     android: {
@@ -43,12 +45,15 @@ const config: ExpoConfig = {
             monochromeImage: './assets/android-icon-monochrome.png',
         },
         predictiveBackGestureEnabled: false,
+        // Ride tracking runs as a foreground service started while the app is
+        // open, which needs only "While using the app" (launch readiness D7).
+        // Blocked so no library can add the "all the time" permission back.
+        blockedPermissions: ['android.permission.ACCESS_BACKGROUND_LOCATION'],
         permissions: [
             'android.permission.RECORD_AUDIO',
             'android.permission.MODIFY_AUDIO_SETTINGS',
             'android.permission.ACCESS_COARSE_LOCATION',
             'android.permission.ACCESS_FINE_LOCATION',
-            'android.permission.ACCESS_BACKGROUND_LOCATION',
             'android.permission.FOREGROUND_SERVICE',
             'android.permission.FOREGROUND_SERVICE_LOCATION',
         ],
@@ -99,16 +104,15 @@ const config: ExpoConfig = {
         [
             'expo-location',
             {
-                locationAlwaysAndWhenInUsePermission:
-                    'ThrottleBase needs your location to share your position with your ride group, even when the app is in the background.',
-                locationAlwaysPermission:
-                    'ThrottleBase needs background location to keep sharing your position during an active group ride.',
-                locationWhenInUsePermission: 'ThrottleBase needs your location to show you on the ride map.',
+                // Never asks for "Always": a ride keeps sharing in the background
+                // because it started in the foreground (blue indicator on iOS).
+                locationWhenInUsePermission:
+                    'ThrottleBase uses your location to show you on the ride map and, while your ride is under way, to share your position with your ride group, including when the app is in the background. Sharing stops when you finish your ride.',
                 // Motion tells a stop from a traffic jam on the ride history.
                 motionUsagePermission:
                     'ThrottleBase uses motion to tell when you stop and get off the bike from waiting in traffic.',
                 isAndroidMotionActivityEnabled: true,
-                isAndroidBackgroundLocationEnabled: true,
+                isAndroidBackgroundLocationEnabled: false,
                 isAndroidForegroundServiceEnabled: true,
                 isIosBackgroundLocationEnabled: true,
             },

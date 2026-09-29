@@ -98,6 +98,8 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 > and stops tracking if the rider refuses. Still to do: confirm on a real device with the screen off.
 > Media permissions follow D9: the photo picker needs no library permission; camera and microphone only for in-app capture.
 > Background `audio`/`fetch` and the media-playback service are not needed. See **D7**, **D9**; inventory §3, §4.
+>
+> **Update (2026-09-29):** the app no longer asks for "Always". `ACCESS_BACKGROUND_LOCATION` is removed and blocked, iOS keeps only the `location` background mode, and the tracker restarts when the app returns to the foreground. Still to do: the disclosure screen, stopping on leaving the session, and a real-device check with the screen off.
 
 ### E5. Location privacy defaults
 

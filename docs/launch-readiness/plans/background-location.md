@@ -32,13 +32,16 @@
      - the rider leaves the live session (new: tie it to `session:leave`);
      - the rider signs out.
    - If the rider is already mid-ride when the app returns to the foreground, restart it.
+   - ✅ Done (`fix: ride tracking needs only "While using the app"`): `resumeTrackingInForeground` restarts a tracker that could not start, or that the OS stopped, when the app returns to the foreground. Still open: stopping on `session:leave`.
 2. **Remove the "Always" request.**
    - Delete `requestBackgroundPermissionsAsync` and its gate.
    - Delete `ACCESS_BACKGROUND_LOCATION` and set `isAndroidBackgroundLocationEnabled: false`.
    - Remove the `locationAlwaysPermission` / `locationAlwaysAndWhenInUsePermission` strings.
    - Keep `isAndroidForegroundServiceEnabled`, `FOREGROUND_SERVICE_LOCATION` and iOS `UIBackgroundModes: ["location"]`.
    - Remove the unused `fetch` mode.
+   - ✅ Done in the same change, plus `android.blockedPermissions` for `ACCESS_BACKGROUND_LOCATION`. A config test (`client/src/appConfig.test.ts`) fails if any of it comes back.
 3. **Make the notification honest and useful.** Title: "Ride in progress". Body: "Sharing your location with your ride group until you finish." Add a "Finish ride" action if expo-location allows it; otherwise tapping the notification opens the ride.
+   - ✅ Title and body done. The "Finish ride" action is still open.
 4. **Add a prominent disclosure screen.** Show it once, before the first location prompt. It says:
    - what is shared (live position, speed, and motion when allowed);
    - with whom (this ride's group);
