@@ -82,6 +82,8 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 
 > **Current state (Phase 0):** `blocked_riders` exists, but a block only filters notifications. There are no reports, filter,
 > moderation queue or grievance screen. Posts accept external image URLs (`media_urls`) that bypass moderation. Inventory §6, §9 E3.
+>
+> **Update (2026-09-29):** plan in [plans/ugc-safety.md](plans/ugc-safety.md). Blocking now works both ways and hides the other rider everywhere (PR 1 of 4). Still open: reports and the word filter, the moderation queue with 180-day retention, and grievances.
 
 ### E4. Location & ride recording
 

@@ -341,7 +341,7 @@ Legend:
 
 ### E3. UGC safety
 
-- 🟡 Block exists (`blocked_riders`; `server/src/services/notifications.service.ts:320-345`). It only filters notifications. Feed, comments, mentions, groups and ride rooms still show the blocked rider.
+- ✅ Blocking works both ways and hides posts, comments, reviews, routes, discoverable rides, profiles, search and mentions, and ends follows (`server/src/services/blocks.ts`, 2026-09-29). A ride both are already on is deliberately left alone; groups are not covered yet ([plans/ugc-safety.md](plans/ugc-safety.md)).
 - ❌ No `reports` table or endpoint.
 - ❌ No word filter.
 - ❌ No admin moderation queue. Admin UI covers support tickets only.
