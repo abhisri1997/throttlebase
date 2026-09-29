@@ -40,7 +40,7 @@ What each feature does and where it lives. For structure and flows see `architec
 
 - Captain or co-captain starts a session; a roll call at the start point comes before roll-out.
 - Each rider has their own ride inside the group ride: start early, arrive, finish, resume (see `architecture.md` → Per-rider ride lifecycle).
-- Presence heartbeats, live positions, incidents (SOS, crash, medical, mechanical) with acknowledgement and escalation.
+- Presence heartbeats, live positions, incidents (group alert, crash, medical, mechanical) with acknowledgement and escalation.
 - Regroup: propose a waiting point for a rider left behind (`POST /api/rides/:id/regroup`, `regroup:*` events).
 - Ending with riders still out needs explicit confirmation (`409 UNFINISHED_RIDERS`).
 - Timeline and replay endpoints read `ride_live_events` and `ride_live_location_samples`.

@@ -131,6 +131,8 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 > **Current state (Phase 0):** the leaderboard ranks by badges, rides or distance only (no speed). The safety flow is a button labelled
 > **"SOS"** (`kind='sos'`). It alerts ride leaders in-app and escalates to captain and co-captains after 120 s. There is no disclaimer
 > and no motion lock. Inventory §5.
+>
+> **Update (2026-09-29):** the safety flow is now **"Alert my group"** (`kind='group_alert'`, migration 039) on ride detail and in navigation. It alerts everyone on the ride, shows them a banner with Navigate to rider and Call 112, has a Call 112 dialer hand-off, and carries the disclaimer in the sheet and in the Terms draft. Still open: the first-ride safety screen, the motion lock, and push delivery.
 
 ### E8. Legal pages & links
 

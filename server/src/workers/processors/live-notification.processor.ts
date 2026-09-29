@@ -1,5 +1,6 @@
 import { query } from "../../config/db.js";
 import { createNotificationsForRiders } from "../../services/notifications.service.js";
+import { incidentReportedCopy } from "../../core/rides/incidentCopy.js";
 
 type IncidentDetails = {
   incident_id: string;
@@ -68,18 +69,6 @@ const getIncidentDetails = async (
   return (result.rows[0] as IncidentDetails | undefined) ?? null;
 };
 
-const buildIncidentTitle = (severity: string): string => {
-  if (severity === "critical") {
-    return "Critical incident reported";
-  }
-
-  if (severity === "high") {
-    return "High-priority incident reported";
-  }
-
-  return "Incident reported during live ride";
-};
-
 export const processLiveIncidentReported = async (
   payload: Record<string, unknown>,
 ): Promise<Record<string, unknown>> => {
@@ -121,18 +110,16 @@ export const processLiveIncidentReported = async (
   const reporterRiderId =
     payloadReporterRiderId ?? incidentDetails.reporter_rider_id;
   const reporterName = await getRiderName(reporterRiderId);
-  const reporterLabel = reporterName ?? "A participant";
   const recipientIds = (await getRideRecipientIds(rideId)).filter(
     (riderIdValue) => riderIdValue !== reporterRiderId,
   );
 
-  const title = buildIncidentTitle(incidentDetails.severity);
-  const rideLabel = incidentDetails.ride_title || "the ride";
-  const baseBody = `${reporterLabel} reported a ${incidentDetails.kind} incident on ${rideLabel}.`;
-  const body =
-    incidentDetails.severity === "critical"
-      ? `${baseBody} Immediate attention recommended.`
-      : baseBody;
+  const { title, body } = incidentReportedCopy({
+    kind: incidentDetails.kind,
+    severity: incidentDetails.severity,
+    reporterName,
+    rideTitle: incidentDetails.ride_title,
+  });
 
   const notificationOutcome = await createNotificationsForRiders({
     riderIds: recipientIds,

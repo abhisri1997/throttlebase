@@ -1,5 +1,6 @@
 import { query } from "../../config/db.js";
 import { createNotificationsForRiders } from "../../services/notifications.service.js";
+import { incidentUnacknowledgedCopy } from "../../core/rides/incidentCopy.js";
 
 type EscalatableIncident = {
   incident_id: string;
@@ -119,16 +120,11 @@ export const processLiveIncidentEscalation = async (): Promise<
       continue;
     }
 
-    const rideLabel = incident.ride_title || "the ride";
-    const title =
-      incident.severity === "critical"
-        ? "Critical incident needs acknowledgement"
-        : "High-priority incident needs acknowledgement";
-
-    const body =
-      incident.severity === "critical"
-        ? `A critical ${incident.kind} incident is still unacknowledged on ${rideLabel}. Please respond immediately.`
-        : `A high-priority ${incident.kind} incident is still unacknowledged on ${rideLabel}. Please review.`;
+    const { title, body } = incidentUnacknowledgedCopy({
+      kind: incident.kind,
+      severity: incident.severity,
+      rideTitle: incident.ride_title,
+    });
 
     const notificationOutcome = await createNotificationsForRiders({
       riderIds: recipientIds,

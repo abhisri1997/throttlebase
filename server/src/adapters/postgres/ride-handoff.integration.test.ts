@@ -180,7 +180,7 @@ test("a deleting captain's open rides pass to the next leader", { skip: !CONNECT
     assert.equal((await captainOf(rideG)).current_rider_count, 1);
   });
 
-  await t.test("on a live ride the new captain leads the session, so SOS alerts reach them", async () => {
+  await t.test("on a live ride the new captain leads the session, so group alerts reach them", async () => {
     assert.equal((await captainOf(rideG)).captain_id, CO);
     const presence = await admin.query(
       `SELECT rider_id::text, role, is_online FROM ride_live_presence WHERE session_id = $1`,
