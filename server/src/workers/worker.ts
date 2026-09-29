@@ -19,6 +19,7 @@ import { processCleanupExpiredSessions } from "./processors/cleanup.processor.js
 import { processAccountPurge } from "./processors/account-purge.processor.js";
 import { processRideLeaderChanged } from "./processors/ride-leadership.processor.js";
 import { processGroupLeaderChanged } from "./processors/group-leadership.processor.js";
+import { processRideJoinAnswered, processRideJoinRequested } from "./processors/ride-join-requests.processor.js";
 import {
   processLiveSessionEnded,
   processLiveSessionStarted,
@@ -55,6 +56,8 @@ const processors: Record<string, JobProcessor> = {
   [JOB_TYPES.ACCOUNT_PURGE]: processAccountPurge,
   [JOB_TYPES.RIDE_LEADER_CHANGED]: processRideLeaderChanged,
   [JOB_TYPES.GROUP_LEADER_CHANGED]: processGroupLeaderChanged,
+  [JOB_TYPES.RIDE_JOIN_REQUESTED]: processRideJoinRequested,
+  [JOB_TYPES.RIDE_JOIN_ANSWERED]: processRideJoinAnswered,
   [JOB_TYPES.LIVE_SESSION_STARTED]: processLiveSessionStarted,
   [JOB_TYPES.LIVE_SESSION_ENDED]: processLiveSessionEnded,
   [JOB_TYPES.LIVE_INCIDENT_REPORTED]: processLiveIncidentReported,

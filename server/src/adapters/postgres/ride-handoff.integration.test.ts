@@ -23,6 +23,7 @@ if (CONNECTION) {
 const db = CONNECTION ? await import("../../config/db.js") : null;
 const repository = CONNECTION ? await import("./riderRepository.js") : null;
 const rides = CONNECTION ? await import("../../services/ride.service.js") : null;
+const join = CONNECTION ? await import("../../services/ride-join.service.js") : null;
 const leadership = CONNECTION ? await import("../../workers/processors/ride-leadership.processor.js") : null;
 const purge = CONNECTION ? await import("../../workers/processors/account-purge.processor.js") : null;
 
@@ -230,7 +231,7 @@ test("a deleting captain's open rides pass to the next leader", { skip: !CONNECT
 
   await t.test("joining sets the rider count from who is on the ride, not by adding one", async () => {
     await admin.query(`UPDATE rides SET current_rider_count = 50 WHERE id = $1`, [rideF]);
-    assert.equal(await rides!.joinRide(rideF, EXTRA), true);
+    assert.equal(await join!.joinOrRequestRide(rideF, EXTRA), "joined");
     assert.equal((await captainOf(rideF)).current_rider_count, 3);
   });
 

@@ -23,7 +23,7 @@
 | Media (see [media-uploads.md](media-uploads.md)) | All variants and originals deleted at purge; CDN purged |
 | The rider's own tracks (`ride_live_location_samples` for this rider), presence, `ride_history_stats`, `ride_participants` rows | Deleted at purge. Other riders' rows in the same rides are untouched |
 | Open rides the rider **captains** (draft, scheduled, active) | At deletion time, in the same transaction: hand over to the next leader (see "Handing over leadership" below), or cancel when nobody is left. ✅ slice 3a |
-| Open rides the rider **joined** | At deletion time: they drop out, freeing the seat. ✅ slice 3a |
+| Open rides the rider **joined** | At deletion time: they drop out, freeing the seat. ✅ slice 3a. Requests to join rides that need approval are withdrawn too ✅ slice 3d |
 | Groups the rider owns (`groups.created_by`) | At deletion time, in the same transaction: hand over to the next admin; with nobody else in it, the group stays hidden and is deleted at purge. ✅ slice 3b |
 | Completed or cancelled rides the rider captained | Kept for the other participants. The captain is shown as "Deleted rider" |
 | Routes the rider created | Hidden immediately. At purge, private and shared routes are deleted. **Public** routes are kept for the community in anonymised form, as disclosed at registration (decision B, 2026-09-29, below). Rides planned on them keep their copied `road_via` (mig 034 already copies it) |

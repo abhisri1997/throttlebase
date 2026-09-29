@@ -71,6 +71,15 @@ export const PromoteCoCaptainSchema = z.object({
   rider_id: z.string().uuid('Must be a valid UUID'),
 });
 
+/** Joining, or asking to join: where the rider will ride from, if they said. */
+export const JoinRideSchema = z.object({
+  location_coords: LngLatSchema.optional(),
+});
+
+export const AnswerJoinRequestSchema = z.object({
+  accept: z.boolean(),
+});
+
 export const RequestStopSchema = z.object({
   type: z.enum(['fuel', 'rest', 'photo', 'unplanned']),
   ...StopFieldsSchema,

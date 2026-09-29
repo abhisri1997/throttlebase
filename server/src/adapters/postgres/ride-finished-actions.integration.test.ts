@@ -20,6 +20,7 @@ if (CONNECTION) {
 
 const db = CONNECTION ? await import("../../config/db.js") : null;
 const rides = CONNECTION ? await import("../../services/ride.service.js") : null;
+const join = CONNECTION ? await import("../../services/ride-join.service.js") : null;
 
 const CAPTAIN = "cccccccc-0000-0000-0000-0000000000f1";
 const RIDER = "aaaaaaaa-0000-0000-0000-0000000000f2";
@@ -74,7 +75,7 @@ test("actions refused once a ride is over", { skip: !CONNECTION }, async (t) => 
     await t.test(`nobody can join a ${status} ride`, async () => {
       const rideId = await createRide(admin, status);
 
-      await assert.rejects(rides!.joinRide(rideId, NEWCOMER), /Cannot join/);
+      await assert.rejects(join!.joinOrRequestRide(rideId, NEWCOMER), /Cannot join/);
       assert.equal(await roleOf(admin, rideId, NEWCOMER), null);
     });
 
@@ -89,7 +90,7 @@ test("actions refused once a ride is over", { skip: !CONNECTION }, async (t) => 
   await t.test("a scheduled ride can still be joined and its riders promoted", async () => {
     const rideId = await createRide(admin, "scheduled");
 
-    assert.equal(await rides!.joinRide(rideId, NEWCOMER), true);
+    assert.equal(await join!.joinOrRequestRide(rideId, NEWCOMER), "joined");
     assert.equal(await rides!.promoteToCoCaptain(rideId, CAPTAIN, RIDER), true);
     assert.equal(await roleOf(admin, rideId, RIDER), "co_captain");
   });

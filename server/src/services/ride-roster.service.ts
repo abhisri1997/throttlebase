@@ -166,6 +166,12 @@ const leaveOpenRides = async (client: SqlClient, riderId: string, at: Date): Pro
       WHERE s.id = p.session_id AND s.status <> 'ended' AND p.rider_id = $1`,
     [riderId],
   );
+  // Requests to join still waiting are withdrawn too; they hold no seat.
+  await client.query(
+    `UPDATE ride_participants SET status = 'dropped_out', left_at = $2
+      WHERE rider_id = $1 AND status = 'requested'`,
+    [riderId, at],
+  );
   return left.rows.map((row) => row.ride_id as string);
 };
 
@@ -247,7 +253,7 @@ export const handOffRidesOfDeletedRiders = async (): Promise<number> => {
 // ── Leaving a ride, and passing it on ──────────────────────────────────────
 
 /** Runs `work` in one transaction on its own client. */
-const inTransaction = async <T>(work: (client: SqlClient) => Promise<T>): Promise<T> => {
+export const inTransaction = async <T>(work: (client: SqlClient) => Promise<T>): Promise<T> => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

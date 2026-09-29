@@ -15,6 +15,7 @@ import {
   type LeaveRideOutcome,
   type RideRosterRefusal,
 } from "../services/ride-roster.service.js";
+import { getRideForViewer } from "../services/ride-join.service.js";
 import { emitToLiveRoom, emitToRideRoom } from "../realtime/gateway.js";
 import { buildLiveRoomKey } from "../realtime/session-room.js";
 import { getLiveSession } from "../services/live-session.service.js";
@@ -59,7 +60,8 @@ export const getRide = async (req: Request, res: Response): Promise<void> => {
   try {
     const rideId = req.params.id as string;
     const riderId = (req.rider as unknown as RiderPayload).riderId;
-    const ride = await RideService.getRideById(rideId, riderId);
+    // A rider not on a ride that needs approval gets its preview.
+    const ride = await getRideForViewer(rideId, riderId);
 
     if (!ride) {
       res.status(404).json({ error: "Ride not found" });
@@ -175,35 +177,6 @@ export const deleteRide = async (
   } catch (error: any) {
     console.error("Error deleting ride:", error);
     res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-export const joinRide = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const riderId = (req.rider as unknown as RiderPayload).riderId;
-    const rideId = req.params.id as string;
-
-    const success = await RideService.joinRide(rideId, riderId);
-
-    if (success) {
-      emitToRideRoom(rideId, "ride:joined", { rideId, riderId });
-      res.json({ message: "Successfully joined the ride" });
-    } else {
-      res
-        .status(400)
-        .json({ message: "You are already a participant of this ride" });
-    }
-  } catch (error: any) {
-    if (error.message?.includes("maximum capacity")) {
-      res.status(400).json({ error: error.message });
-    } else if (error.message?.includes("Cannot join")) {
-      res.status(400).json({ error: error.message });
-    } else if (error.message === "Ride not found") {
-      res.status(404).json({ error: "Ride not found" });
-    } else {
-      console.error("Error joining ride:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
   }
 };
 
@@ -421,6 +394,12 @@ export const getRideStops = async (
 ): Promise<void> => {
   try {
     const rideId = req.params.id as string;
+    const riderId = (req.rider as unknown as RiderPayload).riderId;
+    // Stops show where a ride goes: only for riders who may see the ride.
+    if (!(await RideService.getRideById(rideId, riderId))) {
+      res.status(404).json({ error: "Ride not found" });
+      return;
+    }
     const stops = await RideService.listRideStops(rideId);
     res.json({ stops });
   } catch (error) {

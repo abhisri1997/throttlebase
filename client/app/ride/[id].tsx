@@ -78,6 +78,13 @@ import {
   type ConfirmPrompt,
 } from "../../src/features/rides/core/rideLeadershipPrompts";
 import { useEndRideWithWarning } from "../../src/features/rides/hooks/useEndRideWithWarning";
+import { RidePreviewView } from "../../src/features/rides/components/RidePreviewView";
+import { JoinRequestsCard } from "../../src/features/rides/components/JoinRequestsCard";
+import {
+  isRidePreview,
+  joinedMessage,
+  type JoinOutcome,
+} from "../../src/features/rides/core/joinRequest";
 
 const fetchRideDetails = async (id: string) => {
   const { data } = await apiClient.get(`/api/rides/${id}`);
@@ -88,7 +95,7 @@ const joinRide = async (id: string, coords?: [number, number]) => {
   const { data } = await apiClient.post(`/api/rides/${id}/join`, {
     location_coords: coords,
   });
-  return data;
+  return data as { message: string; outcome: JoinOutcome };
 };
 
 const updateStartLocationOverride = async (
@@ -731,10 +738,10 @@ export default function RideDetailScreen() {
 
   const joinMutation = useMutation({
     mutationFn: (coords?: [number, number]) => joinRide(id!, coords),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["ride", id] });
       queryClient.invalidateQueries({ queryKey: ["rides"] });
-      Alert.alert("Success", "You have joined the ride!");
+      Alert.alert("Success", joinedMessage(data.outcome));
     },
     onError: (err: any) => {
       Alert.alert("Error", getApiErrorMessage(err, "Failed to join ride"));
@@ -1437,6 +1444,11 @@ useEffect(() => {
         </TouchableOpacity>
       </SafeAreaView>
     );
+  }
+
+  // A ride that needs approval, and this rider isn't on it yet.
+  if (isRidePreview(ride)) {
+    return <RidePreviewView ride={ride} onBack={handleBackPress} />;
   }
 
   const startCoords = ride.start_point_geojson?.coordinates;
@@ -2248,6 +2260,14 @@ useEffect(() => {
               </View>
             ))}
           </View>
+        )}
+
+        {isLeader && !isTerminalRideStatus && (
+          <JoinRequestsCard
+            rideId={id!}
+            requests={ride.join_requests ?? []}
+            onOpenRider={(riderId) => router.push(`/rider/${riderId}` as any)}
+          />
         )}
 
         {/* Participants */}

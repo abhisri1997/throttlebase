@@ -33,8 +33,12 @@ interface NotificationItem {
     contentId?: string;
     postId?: string | null;
     commentId?: string | null;
+    /** Ride notices: requests to join, their answers, captain changes. */
+    ride_id?: string;
   } | null;
 }
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const formatNotificationTime = (value: string): string => {
   const createdAt = new Date(value);
@@ -97,6 +101,13 @@ export default function NotificationsModal() {
   const openNotification = async (item: NotificationItem) => {
     if (!item.is_read) {
       await markAsRead.mutateAsync(item.id);
+    }
+
+    // A ride notice opens its ride.
+    const rideId = item.data?.ride_id;
+    if (typeof rideId === "string" && UUID_PATTERN.test(rideId)) {
+      router.push(`/ride/${rideId}` as any);
+      return;
     }
 
     if (item.type !== "mention") {
