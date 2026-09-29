@@ -4,6 +4,7 @@ import type { Session } from "../core/auth/session";
 import type { ApiClient, ApiRequest } from "../ports/ApiClient";
 import type { SecureStorage } from "../ports/SecureStorage";
 import { createAuthService, type ProviderSignIn } from "./authService";
+import { TERMS } from "../core/legal/terms";
 
 const NOW = Date.parse("2026-01-01T12:00:00.000Z");
 
@@ -267,4 +268,16 @@ test("signing out still clears local state when the server call fails", async ()
 
   assert.equal(storage.items.size, 0);
   assert.equal(service.getState().status, "signed-out");
+});
+
+test("signing up accepts the version of the Terms the app shows", async () => {
+  // Arrange
+  const { service, calls } = buildService(() => Promise.resolve(refreshResponse(1)), null);
+
+  // Act
+  await service.verifyEmailCode("asha@example.test", "123456");
+
+  // Assert
+  const body = calls[0]?.body as { acceptedTermsVersion?: string };
+  assert.equal(body.acceptedTermsVersion, TERMS.version);
 });
