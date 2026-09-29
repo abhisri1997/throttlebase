@@ -10,6 +10,7 @@ import type {
   RiderRepository,
   RiderTransaction,
 } from "../../ports/RiderRepository.js";
+import { handOffRidesOf } from "../../services/ride-roster.service.js";
 import { assumeRider, withRiderTransaction } from "./requestContext.js";
 
 interface RiderRow {
@@ -242,7 +243,13 @@ export const createRiderRepository = (pool: pg.Pool): RiderRepository => ({
           WHERE id = $1 AND deleted_at IS NULL`,
         [riderId, at],
       );
+      const deleted = (result.rowCount ?? 0) > 0;
 
-      return (result.rowCount ?? 0) > 0;
+      // In the same transaction, so no ride is ever left led by a deleted
+      // account: each open ride they lead passes to its next leader, or is
+      // cancelled with nobody left, and they leave every open ride they joined.
+      if (deleted) await handOffRidesOf(client, riderId, at);
+
+      return deleted;
     }),
 });
