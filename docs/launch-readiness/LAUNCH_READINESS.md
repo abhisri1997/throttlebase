@@ -140,6 +140,8 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 
 > **Current state (Phase 0):** Terms and Privacy links appear on sign-in only. There are no Settings links and no licences screen.
 > There is no CI: `.eas/workflows/` only runs EAS builds.
+>
+> **Update (2026-09-29):** draft Privacy Policy and Terms are live in the app at `/privacy` and `/terms` (also throttlebase.in once `main` deploys), linked from sign-in and Settings. The text lives in `client/src/core/legal/`, and `docs/legal/drafts/` is generated from it. Still open: placeholders and legal review, Community Guidelines, deletion page, grievance screen, licences.
 
 ### E9. Store configuration
 

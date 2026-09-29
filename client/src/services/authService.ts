@@ -5,6 +5,7 @@ import {
   type SessionResponse,
 } from "../core/auth/session";
 import { createSingleFlight } from "../core/auth/singleFlight";
+import { TERMS } from "../core/legal/terms";
 import type { ApiClient } from "../ports/ApiClient";
 import type {
   AuthService,
@@ -46,12 +47,11 @@ export const nativeProviders: ProviderSignIn = {
 const SESSION_KEY = "throttlebase.session.v1";
 
 /**
- * The terms version the app displays. Sent on account creation and checked by
- * the backend, so a stale build cannot silently enrol someone under terms it
- * never showed them.
+ * The version of the Terms this build shows at /terms. Sent on account
+ * creation and checked by the backend, so a stale build cannot silently enrol
+ * someone under terms it never showed them.
  */
-const ACCEPTED_TERMS_VERSION =
-  process.env.EXPO_PUBLIC_TERMS_VERSION?.trim() || "2026-01-01";
+const ACCEPTED_TERMS_VERSION = TERMS.version;
 
 export interface AuthServiceDeps {
   storage: SecureStorage;

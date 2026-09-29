@@ -17,7 +17,12 @@ import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { authService } from "../../src/services/auth";
 import { FEATURES } from "../../src/core/features/features";
 import type { ReactNode } from "react";
-import { Bell, ChevronLeft, LifeBuoy, Lock, Settings as SettingsIcon, Shield, Trash2, User, UserX } from "lucide-react-native";
+import { Bell, ChevronLeft, FileText, LifeBuoy, Lock, Settings as SettingsIcon, Shield, Trash2, User, UserX } from "lucide-react-native";
+
+const LEGAL_LINKS = [
+  { path: "/privacy", label: "Privacy Policy" },
+  { path: "/terms", label: "Terms of Use" },
+] as const;
 
 interface SectionHeaderProps {
   icon: ReactNode;
@@ -507,6 +512,37 @@ export default function SettingsModal() {
               </View>
               <Text style={{ color: colors.textMuted }}>➔</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+
+        <View className='pb-12'>
+          <SectionHeader
+            icon={<FileText color={colors.textMuted} size={18} />}
+            label='Legal'
+            color={colors.textMuted}
+          />
+          <View
+            style={{
+              backgroundColor: colors.surface,
+              borderTopWidth: 1,
+              borderBottomWidth: 1,
+              borderColor: colors.border,
+            }}
+          >
+            {LEGAL_LINKS.map((link, index) => (
+              <TouchableOpacity
+                key={link.path}
+                onPress={() => router.push(link.path)}
+                className='px-4 py-4 flex-row items-center justify-between'
+                style={index > 0 ? { borderTopWidth: 1, borderTopColor: colors.border } : undefined}
+                accessibilityRole='link'
+              >
+                <Text className='text-base font-medium' style={{ color: colors.text }}>
+                  {link.label}
+                </Text>
+                <Text style={{ color: colors.textMuted }}>➔</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
       </ScrollView>
