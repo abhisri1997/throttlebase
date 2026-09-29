@@ -16,6 +16,7 @@ import {
   startTracking,
   stopTracking,
   getActiveTrackingRideId,
+  resumeTrackingInForeground,
 } from "../services/backgroundLocationService";
 
 type RideSummary = {
@@ -92,7 +93,14 @@ export function useBackgroundLocationTracker() {
     const subscription = AppState.addEventListener(
       "change",
       (nextState: AppStateStatus) => {
+        const wasInBackground = appStateRef.current !== "active";
         appStateRef.current = nextState;
+
+        // The tracker can only start in the foreground; pick up one that
+        // could not start, or that the OS stopped, while the app was away.
+        if (nextState === "active" && wasInBackground && Platform.OS !== "web") {
+          resumeTrackingInForeground().catch(logTrackingError("resume"));
+        }
       },
     );
 

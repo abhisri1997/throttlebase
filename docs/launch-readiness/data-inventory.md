@@ -351,10 +351,10 @@ Legend:
 ### E4. Location and ride recording
 
 - ✅ Foreground service with `foregroundServiceType=location` and a persistent notification (§4).
-- ⚠️ `ACCESS_BACKGROUND_LOCATION` and "Always" are requested every ride even though they are not required (§4).
+- ✅ `ACCESS_BACKGROUND_LOCATION` and "Always" are no longer requested (2026-09-29): the tracker runs on "While using the app" as a foreground service, and the permission is in `android.blockedPermissions` (§4).
 - ❌ No prominent-disclosure screen before the OS prompt.
 - 🟡 Stops at ride end (≤30 s). Not tied to leaving a live session. Kill behaviour unverified on iOS.
-- 🟡 iOS strings are specific. `UIBackgroundModes` also carries unused `fetch` and `audio`.
+- 🟡 iOS strings are specific. `UIBackgroundModes` no longer carries `fetch`; `audio` (added by expo-audio) is still unused.
 - ❌ `android.blockedPermissions` not used. Microphone, media-playback FGS, camera, photos and storage are all requested without use today (§3).
   - Per D9, feed uploads will use the system photo picker, which needs no library permission. Camera and microphone are needed only for in-app capture. Background `audio`/`fetch` and the media-playback service stay unneeded.
 
