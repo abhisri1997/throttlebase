@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   ScrollView,
   Text,
@@ -20,9 +19,6 @@ import { authService } from "../../src/services/auth";
 import { isAppleSignInSupported } from "../../src/services/platformCapabilities";
 
 type Stage = "choose" | "email" | "code";
-
-const TERMS_URL = "https://throttlebase.in/terms";
-const PRIVACY_URL = "https://throttlebase.in/privacy";
 
 /**
  * One screen for signing in and signing up.
@@ -241,14 +237,14 @@ export default function SignInScreen() {
             By continuing you agree to the{" "}
             <Text
               style={{ color: colors.primary }}
-              onPress={() => void Linking.openURL(TERMS_URL)}
+              onPress={() => router.push("/terms")}
             >
               Terms
             </Text>{" "}
             and{" "}
             <Text
               style={{ color: colors.primary }}
-              onPress={() => void Linking.openURL(PRIVACY_URL)}
+              onPress={() => router.push("/privacy")}
             >
               Privacy Policy
             </Text>

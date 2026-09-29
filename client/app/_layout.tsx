@@ -9,6 +9,7 @@ import { useAuthState, useResolvedSession } from "../src/services/useAuthState";
 import { useBackgroundLocationTracker } from "../src/hooks/useBackgroundLocationTracker";
 import { installPerformanceBufferGuard } from "../src/dev/performanceBufferGuard";
 import { FEATURES, isPathEnabled } from "../src/core/features/features";
+import { isLegalPath } from "../src/core/legal/legalPages";
 import "../global.css";
 
 // Dev builds only: React's per-render performance entries otherwise pile up
@@ -53,8 +54,11 @@ function AppInner() {
   const topSegment = segments[0];
   const isAuthRoute = topSegment === "(auth)";
   const isSharedPostRoute = topSegment === "post";
+  // The Privacy Policy and Terms open for everyone, onboarding or not: they
+  // are linked from sign-in, the stores and throttlebase.in.
+  const isLegalRoute = isLegalPath(pathname);
 
-  if (!isAuthenticated && !isAuthRoute && !isSharedPostRoute) {
+  if (!isAuthenticated && !isAuthRoute && !isSharedPostRoute && !isLegalRoute) {
     return (
       <Redirect
         href={{
@@ -67,7 +71,7 @@ function AppInner() {
 
   // A signed-in rider who has not picked a username stays in onboarding —
   // otherwise they reach a feed where they cannot be mentioned or followed.
-  if (isAuthenticated && needsOnboarding && pathname !== "/onboarding") {
+  if (isAuthenticated && needsOnboarding && pathname !== "/onboarding" && !isLegalRoute) {
     return <Redirect href='/(auth)/onboarding' />;
   }
 

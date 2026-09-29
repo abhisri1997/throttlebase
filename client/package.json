@@ -12,6 +12,7 @@
     "clean:android": "node scripts/clean-native.mjs android",
     "web": "expo start --web",
     "test": "tsx --test 'src/**/*.test.ts'",
+    "legal:drafts": "tsx scripts/export-legal-drafts.mts",
     "lint": "eslint .",
     "lint:boundaries": "eslint . --config eslint.boundaries.config.mjs --max-warnings 0",
     "typecheck": "tsc --noEmit"
