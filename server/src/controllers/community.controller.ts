@@ -14,6 +14,12 @@ interface RiderPayload {
 }
 const rid = (req: Request) => (req.rider as unknown as RiderPayload).riderId;
 
+const LEAVE_MESSAGES = {
+  left: "Left group",
+  handed_over: "Left group; the next admin runs it now",
+  group_deleted: "Left group; it had no other members, so it was deleted",
+} as const;
+
 const getRiderDisplayName = async (riderId: string): Promise<string> => {
   const result = await query(
     `SELECT display_name FROM riders WHERE id = $1 AND deleted_at IS NULL`,
@@ -457,15 +463,15 @@ export const leaveGroup = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const left = await CommunityService.leaveGroup(
+    const outcome = await CommunityService.leaveGroup(
       req.params.id as string,
       rid(req),
     );
-    if (!left) {
-      res.status(400).json({ error: "Cannot leave (admin or not a member)" });
+    if (outcome === "not_member") {
+      res.status(400).json({ error: "You're not a member of this group" });
       return;
     }
-    res.json({ message: "Left group" });
+    res.json({ message: LEAVE_MESSAGES[outcome], outcome });
   } catch (error: any) {
     console.error("Error leaving group:", error);
     res.status(500).json({ error: "Internal server error" });

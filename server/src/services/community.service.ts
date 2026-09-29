@@ -6,6 +6,8 @@ import type {
   CreateReviewInput,
 } from "../schemas/community.schemas.js";
 import { attachMentionedRiders } from "./mention.service.js";
+import { pickGroupSuccessor } from "../core/groups/groupSuccessor.js";
+import { leaveGroup as leaveGroupAndHandOver, type LeaveGroupOutcome } from "./group-roster.service.js";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // POSTS
@@ -446,7 +448,31 @@ export const getGroupById = async (groupId: string, riderId: string) => {
     [groupId, riderId],
   );
 
-  return result.rows[0] || null;
+  const group = result.rows[0];
+  if (!group) return null;
+  if (group.created_by !== riderId) return group;
+
+  // The owner sees who takes over if they leave, before they decide to.
+  const members = group.members as Array<{
+    rider_id: string;
+    display_name: string;
+    role: string;
+    joined_at: string | null;
+  }>;
+  const successorId = pickGroupSuccessor(
+    members
+      .filter((member) => member.rider_id !== riderId)
+      .map((member) => ({
+        riderId: member.rider_id,
+        role: member.role === "admin" ? "admin" : "member",
+        joinedAt: member.joined_at ? new Date(member.joined_at) : null,
+      })),
+  );
+  const successor = members.find((member) => member.rider_id === successorId);
+  return {
+    ...group,
+    next_admin: successor ? { rider_id: successor.rider_id, display_name: successor.display_name } : null,
+  };
 };
 
 export const joinGroup = async (groupId: string, riderId: string) => {
@@ -512,14 +538,12 @@ export const joinGroup = async (groupId: string, riderId: string) => {
   };
 };
 
-export const leaveGroup = async (groupId: string, riderId: string) => {
-  const result = await query(
-    `DELETE FROM group_members WHERE group_id = $1 AND rider_id = $2 AND role != 'admin'
-     RETURNING group_id`,
-    [groupId, riderId],
-  );
-  return result.rows.length > 0;
-};
+/**
+ * Anyone can leave, admins included. A group's owner hands it to the next
+ * admin on the way out, or ends it when nobody else is in it.
+ */
+export const leaveGroup = (groupId: string, riderId: string): Promise<LeaveGroupOutcome> =>
+  leaveGroupAndHandOver(groupId, riderId);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // RIDE REVIEWS

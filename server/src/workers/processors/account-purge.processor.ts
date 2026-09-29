@@ -18,12 +18,13 @@
  * (comments and likes on their posts, stops and bookmarks on their routes),
  * as deleting that content does in the app.
  *
- * Rides are handed off when the account is deleted. Each run first hands
- * off any open ride still led or joined by a deleted account — accounts
- * deleted before hand-off existed — so a purge never meets one.
+ * Rides and groups are handed over when the account is deleted. Each run
+ * first hands over any open ride or group still tied to a deleted account —
+ * accounts deleted before hand-over existed — so a purge never meets one.
+ * A group they own with nobody else left is deleted with their data.
  *
- * Not yet handled here (later E1 slices): handing off groups the rider led,
- * and the sealed 180-day registration record.
+ * Not yet handled here (a later E1 slice): the sealed 180-day registration
+ * record.
  *
  * One transaction per rider; safe to run repeatedly. The job result carries
  * counts only, never identifiers of what was removed.
@@ -31,6 +32,7 @@
 
 import type { PoolClient } from "pg";
 import pool, { query } from "../../config/db.js";
+import { handOverGroupsOfDeletedRiders } from "../../services/group-roster.service.js";
 import { handOffRidesOfDeletedRiders } from "../../services/ride-roster.service.js";
 
 /** Days between deleting an account and purging its data. */
@@ -59,6 +61,17 @@ const OWN_DATA_DELETES: ReadonlyArray<{ table: string; sql: string }> = [
   { table: "posts", sql: "DELETE FROM posts WHERE rider_id = $1" },
   { table: "follows", sql: "DELETE FROM follows WHERE follower_id = $1 OR following_id = $1" },
   { table: "blocked_riders", sql: "DELETE FROM blocked_riders WHERE blocker_id = $1 OR blocked_id = $1" },
+  // Groups they still own have nobody else left: any that did were handed
+  // over first. The check keeps it that way even if a hand-over failed.
+  {
+    table: "groups",
+    sql: `DELETE FROM groups g
+           WHERE g.created_by = $1
+             AND NOT EXISTS (
+               SELECT 1 FROM group_members gm JOIN riders m ON m.id = gm.rider_id
+                WHERE gm.group_id = g.id AND gm.rider_id <> $1 AND m.deleted_at IS NULL
+             )`,
+  },
   { table: "group_members", sql: "DELETE FROM group_members WHERE rider_id = $1" },
   // Account
   { table: "notifications", sql: "DELETE FROM notifications WHERE rider_id = $1" },
@@ -168,6 +181,7 @@ export const processAccountPurge = async (
   _payload: Record<string, unknown>,
 ): Promise<Record<string, unknown>> => {
   const ridesHandedOff = await handOffRidesOfDeletedRiders();
+  const groupsHandedOver = await handOverGroupsOfDeletedRiders();
   const riderIds = await findRidersDueForPurge();
   let rowsDeleted: RowCounts = {};
 
@@ -189,6 +203,7 @@ export const processAccountPurge = async (
   return {
     processor: "account-purge",
     ridesHandedOff,
+    groupsHandedOver,
     ridersPurged: riderIds.length,
     rowsDeleted,
     handledAt: new Date().toISOString(),

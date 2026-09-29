@@ -16,6 +16,7 @@ import { apiClient } from "../../src/api/client";
 import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
 import { getApiErrorMessage } from "../../src/utils/apiError";
 import { useTheme } from "../../src/theme/ThemeContext";
+import { leaveGroupPrompt } from "../../src/core/groups/leaveGroupPrompt";
 
 type GroupMember = {
   rider_id: string;
@@ -33,6 +34,8 @@ type GroupDetail = {
   member_count: number;
   is_member: boolean;
   current_user_role?: "admin" | "member" | null;
+  /** Only for the group's owner: who takes over if they leave (null: nobody). */
+  next_admin?: { rider_id: string; display_name: string } | null;
   members: GroupMember[];
 };
 
@@ -92,8 +95,15 @@ export default function GroupDetailScreen() {
       );
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data: { outcome?: string }) => {
       queryClient.invalidateQueries({ queryKey: ["groups"] });
+      // A group its last member left no longer exists to come back to.
+      if (data?.outcome === "group_deleted") {
+        queryClient.removeQueries({ queryKey: ["group", normalizedGroupId] });
+        if (router.canGoBack()) router.back();
+        else router.replace("/(tabs)/groups");
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ["group", normalizedGroupId] });
     },
     onError: (err: any) => {
@@ -148,8 +158,16 @@ export default function GroupDetailScreen() {
     );
   }
 
-  const canLeave = group.is_member && group.current_user_role !== "admin";
+  const isAdmin = group.current_user_role === "admin";
   const ctaPending = joinMutation.isPending || leaveMutation.isPending;
+
+  const confirmLeave = () => {
+    const prompt = leaveGroupPrompt(group);
+    Alert.alert(prompt.title, prompt.message, [
+      { text: "Cancel", style: "cancel" },
+      { text: prompt.confirmLabel, style: "destructive", onPress: () => leaveMutation.mutate() },
+    ]);
+  };
 
   return (
     <SafeAreaView
@@ -241,38 +259,42 @@ export default function GroupDetailScreen() {
                 <Text className='font-bold text-white'>Join Group</Text>
               )}
             </TouchableOpacity>
-          ) : canLeave ? (
-            <TouchableOpacity
-              onPress={() => leaveMutation.mutate()}
-              disabled={ctaPending}
-              className='mt-5 p-3 rounded-xl items-center'
-              style={{ borderWidth: 1, borderColor: colors.danger }}
-            >
-              {ctaPending ? (
-                <ActivityIndicator size='small' color={colors.danger} />
-              ) : (
-                <Text className='font-bold' style={{ color: colors.danger }}>
-                  Leave Group
-                </Text>
-              )}
-            </TouchableOpacity>
           ) : (
-            <View
-              className='mt-5 p-3 rounded-xl flex-row items-center justify-center'
-              style={{
-                backgroundColor: colors.surface,
-                borderWidth: 1,
-                borderColor: colors.border,
-              }}
-            >
-              <Shield color={colors.primary} size={16} />
-              <Text
-                className='font-semibold ml-2'
-                style={{ color: colors.text }}
+            <>
+              {isAdmin ? (
+                <View
+                  className='mt-5 p-3 rounded-xl flex-row items-center justify-center'
+                  style={{
+                    backgroundColor: colors.surface,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <Shield color={colors.primary} size={16} />
+                  <Text
+                    className='font-semibold ml-2'
+                    style={{ color: colors.text }}
+                  >
+                    You are an admin of this group
+                  </Text>
+                </View>
+              ) : null}
+              <TouchableOpacity
+                onPress={confirmLeave}
+                disabled={ctaPending}
+                className='mt-3 p-3 rounded-xl items-center'
+                style={{ borderWidth: 1, borderColor: colors.danger }}
+                accessibilityRole='button'
               >
-                You are an admin of this group
-              </Text>
-            </View>
+                {ctaPending ? (
+                  <ActivityIndicator size='small' color={colors.danger} />
+                ) : (
+                  <Text className='font-bold' style={{ color: colors.danger }}>
+                    Leave Group
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </>
           )}
         </View>
 
