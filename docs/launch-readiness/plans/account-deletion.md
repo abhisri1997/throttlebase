@@ -22,7 +22,9 @@
 | Posts, comments, likes, reviews, road feedback, bookmarks, follows (both directions), blocks, notifications, notification prefs, settings, vehicles, gear, badges and achievements | Hidden immediately; **deleted** at purge. Instagram-style: the rider's content goes, it is not re-attributed |
 | Media (see [media-uploads.md](media-uploads.md)) | All variants and originals deleted at purge; CDN purged |
 | The rider's own tracks (`ride_live_location_samples` for this rider), presence, `ride_history_stats`, `ride_participants` rows | Deleted at purge. Other riders' rows in the same rides are untouched |
-| Upcoming rides the rider **captains** | At deletion time: transfer to a confirmed co-captain if one exists, otherwise cancel and notify participants |
+| Open rides the rider **captains** (draft, scheduled, active) | At deletion time, in the same transaction: hand over to the next leader (see "Handing over leadership" below), or cancel when nobody is left. ✅ slice 3a |
+| Open rides the rider **joined** | At deletion time: they drop out, freeing the seat. ✅ slice 3a |
+| Groups the rider created or administers | At deletion time: hand over to the next admin (slice 3b) |
 | Completed or cancelled rides the rider captained | Kept for the other participants. The captain is shown as "Deleted rider" |
 | Routes the rider created | Hidden immediately. At purge, private and shared routes are deleted. **Public** routes are kept for the community in anonymised form, as disclosed at registration (decision B, 2026-09-29, below). Rides planned on them keep their copied `road_via` (mig 034 already copies it) |
 | Consent evidence ([consent.md](consent.md)) | Minimal pseudonymous evidence kept for the proof period. ⚖️ |
@@ -44,6 +46,23 @@ A route is location data: one that starts or ends at the rider's home still iden
 3. **Control while the account is active.** Riders can delete a route or make it private at any time. Without this, a rider who doesn't want a route kept has no way out. **Today there is no endpoint for either** (`routes/route.routes.ts` has create, read, search, bookmark and share only). The DPDP right to erasure (s.12) needs it regardless of deletion. ⚖️
 
 Delivered as its own slice after the hiding slice: route delete and make-private, then trimming and re-attribution in `account.purge`.
+
+## Handing over leadership (agreed 2026-09-29)
+
+Like a WhatsApp group whose admin leaves: the ride or group carries on under someone else. It is never hidden from, or closed to, the people in it.
+
+- **When:** at deletion, in the same transaction, so a ride is never led by a deleted account. The hourly purge also hands off anything still led by a deleted account (accounts deleted before this existed).
+- **Rides:**
+  1. the co-captain appointed first (`ride_participants.promoted_at`; co-captains from before it existed count from when they joined);
+  2. otherwise, the confirmed rider with the most completed ThrottleBase rides;
+  3. if that ties, whoever joined the ride first.
+
+  Self-described `experience_level` is not used: it is unverified.
+- **Groups (slice 3b):** the admin appointed first; otherwise the member who joined first.
+- **Telling people:** a `ride.leader_changed` job is queued in the same transaction; the worker notifies the new captain (who now also receives the ride's SOS alerts) and everyone still on the ride.
+- **Nobody left:** an open ride is cancelled; a group is deleted at purge.
+- **Finished rides** keep their captain, shown as "Deleted rider".
+- **Leaving without deleting** (slice 3c for rides, 3b for groups) uses the same hand-over.
 
 ## Mechanism
 
@@ -83,7 +102,7 @@ Delivered as its own slice after the hiding slice: route delete and make-private
   - A's samples, posts, comments, likes and follows are gone;
   - B's samples, stats, posts and both rides still exist;
   - the completed ride shows captain "Deleted rider".
-- An upcoming ride captained by A with a co-captain transfers to the co-captain; without one it is cancelled and B is notified.
+- An open ride captained by A passes to the next leader by the rule below, and everyone on it is notified; with nobody left it is cancelled (`ride-handoff.integration.test.ts`).
 - A request without recent authentication is refused.
 - Running the purge job twice is harmless.
 - Deleting an account writes exactly one sealed registration record holding only registration fields. `throttlebase_app` cannot select it. The purge job removes it after 180 days, and a record under legal hold survives the purge.

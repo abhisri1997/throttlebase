@@ -7,6 +7,11 @@
  * The export is a single page: any path that isn't a file gets index.html,
  * and Expo Router takes it from there (/privacy, /terms, /post/:id, ...).
  *
+ * It listens on $PORT. Railway always sets PORT (8080 unless told
+ * otherwise), while the throttlebase.in and dev.throttlebase.in domains send
+ * traffic to 8081, so the service sets PORT=8081. The fallback below only
+ * matters for local runs.
+ *
  *   PORT=8081 npm run serve:web
  */
 import { createServer } from "node:http";

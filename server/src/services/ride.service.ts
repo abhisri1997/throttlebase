@@ -10,6 +10,7 @@ import { haversineMeters } from "../utils/polyline.js";
 import { snapToNearestPlace } from "./meetingPoint.service.js";
 import { enqueueRideStatsRecompute } from "./jobs.service.js";
 import { getRouteById } from "./route.service.js";
+import { syncRiderCounts } from "./ride-roster.service.js";
 
 /** Rides a rider can still join. */
 const JOINABLE_RIDE_STATUSES: ReadonlySet<string> = new Set(["scheduled", "active"]);
@@ -729,11 +730,8 @@ export const joinRide = async (
     const insertResult = await client.query(insertQuery, insertParams);
 
     if (insertResult.rows.length > 0) {
-      // If successfully joined, increment the counter
-      await client.query(
-        `UPDATE rides SET current_rider_count = current_rider_count + 1 WHERE id = $1`,
-        [rideId],
-      );
+      // Counted from who is on the ride, so it can never drift.
+      await syncRiderCounts(client, [rideId]);
       await client.query("COMMIT");
 
       // Auto-calculate start point if enabled
@@ -783,7 +781,7 @@ export const promoteToCoCaptain = async (
 
   const result = await query(
     `UPDATE ride_participants
-     SET role = 'co_captain'
+     SET role = 'co_captain', promoted_at = now()
      WHERE ride_id = $1 AND rider_id = $2 AND role = 'rider' AND status = 'confirmed'
      RETURNING id`,
     [rideId, targetRiderId],

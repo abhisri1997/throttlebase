@@ -17,6 +17,7 @@ import { processRideStatsRecompute } from "./processors/ride-stats.processor.js"
 import { processRewardsRecompute } from "./processors/rewards.processor.js";
 import { processCleanupExpiredSessions } from "./processors/cleanup.processor.js";
 import { processAccountPurge } from "./processors/account-purge.processor.js";
+import { processRideLeaderChanged } from "./processors/ride-leadership.processor.js";
 import {
   processLiveSessionEnded,
   processLiveSessionStarted,
@@ -51,6 +52,7 @@ const processors: Record<string, JobProcessor> = {
   [JOB_TYPES.REWARDS_RECOMPUTE]: processRewardsRecompute,
   [JOB_TYPES.CLEANUP_EXPIRED_SESSIONS]: processCleanupExpiredSessions,
   [JOB_TYPES.ACCOUNT_PURGE]: processAccountPurge,
+  [JOB_TYPES.RIDE_LEADER_CHANGED]: processRideLeaderChanged,
   [JOB_TYPES.LIVE_SESSION_STARTED]: processLiveSessionStarted,
   [JOB_TYPES.LIVE_SESSION_ENDED]: processLiveSessionEnded,
   [JOB_TYPES.LIVE_INCIDENT_REPORTED]: processLiveIncidentReported,
