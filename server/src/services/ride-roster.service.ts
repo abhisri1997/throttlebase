@@ -55,7 +55,10 @@ const loadSuccessorCandidates = async (
       WHERE p.ride_id = $1
         AND p.rider_id <> $2
         AND p.status = 'confirmed'
-        AND r.deleted_at IS NULL`,
+        AND r.deleted_at IS NULL
+      -- A candidate deleting their own account right now holds these rows:
+      -- wait for it, then look again, so the ride never goes to them.
+      FOR SHARE OF p, r`,
     [rideId, leavingRiderId],
   );
   return result.rows.map((row) => ({

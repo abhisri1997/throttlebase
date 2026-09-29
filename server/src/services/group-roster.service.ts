@@ -26,7 +26,10 @@ export const loadGroupSuccessorCandidates = async (
     `SELECT gm.rider_id::text AS rider_id, gm.role, gm.joined_at
        FROM group_members gm
        JOIN riders r ON r.id = gm.rider_id
-      WHERE gm.group_id = $1 AND gm.rider_id <> $2 AND r.deleted_at IS NULL`,
+      WHERE gm.group_id = $1 AND gm.rider_id <> $2 AND r.deleted_at IS NULL
+      -- A candidate deleting their own account right now holds their rider
+      -- row: wait for it, then look again, so the group never goes to them.
+      FOR SHARE OF gm, r`,
     [groupId, leavingRiderId],
   );
   return result.rows.map((row) => ({
