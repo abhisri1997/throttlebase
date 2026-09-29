@@ -44,6 +44,7 @@ The API and the worker share nothing but the database.
 
 - Two API environments on Railway, both behind Cloudflare DNS: production `api.throttlebase.in` and development `api-dev.throttlebase.in`. EAS `production` builds use the first; `development` and `preview` builds (including beta APKs) use the second.
 - Database: Supabase project `throttlebase`, region `ap-south-1` (Mumbai) — the only project on the account. Each environment's `DATABASE_URL` lives in Railway variables. Nothing in code is Supabase-specific beyond comments.
+- Website: Railway service `throttlebase-client` builds the web app from `client/` (`npx expo export --platform web`) and serves `client/dist` with `npm run serve:web` (`client/scripts/serve-web.mjs`). Production `throttlebase.in` deploys from `main`, development `dev.throttlebase.in` from `dev`. Never run `npm run web` there: it is Metro's development server.
 - Mobile builds: EAS (development and production workflows).
 - Share links: `https://throttlebase.in`.
 
