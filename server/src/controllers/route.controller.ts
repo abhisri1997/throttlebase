@@ -1,10 +1,24 @@
 import type { Request, Response } from 'express';
-import { CreateRouteSchema, GpsTraceBatchSchema, RouteSearchQuerySchema } from '../schemas/route.schemas.js';
+import { z } from 'zod';
+import {
+  CreateRouteSchema,
+  GpsTraceBatchSchema,
+  RouteSearchQuerySchema,
+  ShareRouteSchema,
+  UpdateRouteVisibilitySchema,
+} from '../schemas/route.schemas.js';
 import * as RouteService from '../services/route.service.js';
 
 interface RiderPayload {
   riderId: string;
 }
+
+const RouteIdSchema = z.string().uuid();
+
+/** Someone else's route, or none: the same answer, so neither is revealed. */
+const NOT_YOURS = { error: 'Route not found' };
+
+const isZodError = (error: unknown): error is z.ZodError => error instanceof z.ZodError;
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -82,6 +96,52 @@ export const listRoutes = async (req: Request, res: Response): Promise<void> => 
 };
 
 // ---------------------------------------------------------------------------
+// The owner's control over their routes
+// ---------------------------------------------------------------------------
+
+export const deleteRoute = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const ownerId = (req.rider as unknown as RiderPayload).riderId;
+    const routeId = RouteIdSchema.parse(req.params.id);
+
+    if (!(await RouteService.deleteRoute(routeId, ownerId))) {
+      res.status(404).json(NOT_YOURS);
+      return;
+    }
+    res.json({ message: 'Route deleted' });
+  } catch (error: unknown) {
+    if (isZodError(error)) {
+      res.status(400).json({ error: 'Validation failed', details: error.issues });
+      return;
+    }
+    console.error('Error deleting route:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const updateRouteVisibility = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const ownerId = (req.rider as unknown as RiderPayload).riderId;
+    const routeId = RouteIdSchema.parse(req.params.id);
+    const { visibility } = UpdateRouteVisibilitySchema.parse(req.body ?? {});
+
+    const route = await RouteService.setRouteVisibility(routeId, ownerId, visibility);
+    if (!route) {
+      res.status(404).json(NOT_YOURS);
+      return;
+    }
+    res.json({ route });
+  } catch (error: unknown) {
+    if (isZodError(error)) {
+      res.status(400).json({ error: 'Validation failed', details: error.issues });
+      return;
+    }
+    console.error('Error changing route visibility:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// ---------------------------------------------------------------------------
 // Bookmarks
 // ---------------------------------------------------------------------------
 
@@ -121,23 +181,24 @@ export const unbookmark = async (req: Request, res: Response): Promise<void> => 
 // Sharing
 // ---------------------------------------------------------------------------
 
+/** Only the owner shares their route: a share grants access to it. */
 export const shareRoute = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { rider_id: sharedWithRiderId } = req.body;
+    const ownerId = (req.rider as unknown as RiderPayload).riderId;
+    const routeId = RouteIdSchema.parse(req.params.id);
+    const { rider_id: sharedWithRiderId } = ShareRouteSchema.parse(req.body ?? {});
 
-    if (!sharedWithRiderId) {
-      res.status(400).json({ error: 'rider_id is required' });
+    const outcome = await RouteService.shareRouteWithRider(routeId, ownerId, sharedWithRiderId);
+    if (outcome === 'not_found') {
+      res.status(404).json({ error: 'Route or rider not found' });
       return;
     }
-
-    const shared = await RouteService.shareRouteWithRider(req.params.id as string, sharedWithRiderId);
-
-    if (shared) {
-      res.json({ message: 'Route shared successfully' });
-    } else {
-      res.json({ message: 'Already shared with this rider' });
+    res.json({ message: outcome === 'shared' ? 'Route shared successfully' : 'Already shared with this rider' });
+  } catch (error: unknown) {
+    if (isZodError(error)) {
+      res.status(400).json({ error: 'Validation failed', details: error.issues });
+      return;
     }
-  } catch (error: any) {
     console.error('Error sharing route:', error);
     res.status(500).json({ error: 'Internal server error' });
   }

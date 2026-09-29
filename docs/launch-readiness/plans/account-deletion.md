@@ -43,7 +43,7 @@ A route is location data: one that starts or ends at the rider's home still iden
 
    Private and shared routes are always deleted.
 2. **Notice, not an opt-in** (user's choice, 2026-09-29). The Privacy Policy and Terms, accepted at registration, say that public routes are kept without the rider's name after they delete their account, and the Terms carry a licence to keep contributed routes. The deletion screen and web page restate it as information, not a choice. Recommended as well: a one-line notice where a route is made public ("Public routes stay for the community, without your name, if you delete your account"). ⚖️
-3. **Control while the account is active.** Riders can delete a route or make it private at any time. Without this, a rider who doesn't want a route kept has no way out. **Today there is no endpoint for either** (`routes/route.routes.ts` has create, read, search, bookmark and share only). The DPDP right to erasure (s.12) needs it regardless of deletion. ⚖️
+3. **Control while the account is active.** Riders can delete a route or make it private at any time. Without this, a rider who doesn't want a route kept has no way out. The DPDP right to erasure (s.12) needs it regardless of deletion. ⚖️ ✅ `DELETE /api/routes/:id` and `PATCH /api/routes/:id` (owner only), with "Delete route" and "Make private" / "Make public" on the rider's own route page. The notice line shows wherever a route is made public. Sharing a route is now owner-only too: before, any rider could share any route with themselves and open it.
 
 Delivered as its own slice after the hiding slice: route delete and make-private, then trimming and re-attribution in `account.purge`.
 

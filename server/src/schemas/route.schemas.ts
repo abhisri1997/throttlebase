@@ -26,6 +26,17 @@ export const CreateRouteSchema = z.object({
 
 export type CreateRouteInput = z.infer<typeof CreateRouteSchema>;
 
+/** The owner changes who can see their route. */
+export const UpdateRouteVisibilitySchema = z.object({
+  visibility: z.enum(['private', 'specific_riders', 'public']),
+});
+
+export type RouteVisibility = z.infer<typeof UpdateRouteVisibilitySchema>['visibility'];
+
+export const ShareRouteSchema = z.object({
+  rider_id: z.string().uuid(),
+});
+
 export const GpsTracePointSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),

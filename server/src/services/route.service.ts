@@ -12,6 +12,7 @@ import { getRouteRoadFeedback, type RouteRoadFeedback } from "./road-feedback.se
 import type {
   CreateRouteInput,
   GpsTraceBatchInput,
+  RouteVisibility,
 } from "../schemas/route.schemas.js";
 
 /**
@@ -151,9 +152,14 @@ export const getRouteById = async (
        AND (
          r.visibility = 'public'
          OR r.creator_id = $2
-         OR EXISTS (
-           SELECT 1 FROM route_shares rs
-           WHERE rs.route_id = r.id AND rs.shared_with_rider_id = $2
+         -- Shares count only while the owner keeps the route shared: made
+         -- private, it is theirs alone again.
+         OR (
+           r.visibility = 'specific_riders'
+           AND EXISTS (
+             SELECT 1 FROM route_shares rs
+             WHERE rs.route_id = r.id AND rs.shared_with_rider_id = $2
+           )
          )
        )`,
     [routeId, viewerId],
@@ -180,6 +186,38 @@ export const listVisibleRoutes = async (viewerId: string): Promise<Route[]> => {
     [viewerId],
   );
   return result.rows as Route[];
+};
+
+// ---------------------------------------------------------------------------
+// The owner's control over their routes
+// ---------------------------------------------------------------------------
+
+/**
+ * The owner deletes their route, at once and for good. Its stops, shares,
+ * bookmarks and other riders' road feedback on it go with it. Rides planned
+ * on it keep the road they were planned on (copied into rides.road_via) and
+ * lose only the link. False when there is no such route of theirs.
+ */
+export const deleteRoute = async (routeId: string, ownerId: string): Promise<boolean> => {
+  const result = await query(`DELETE FROM routes WHERE id = $1 AND creator_id = $2 RETURNING id`, [routeId, ownerId]);
+  return result.rows.length > 0;
+};
+
+/**
+ * The owner changes who can see their route. Made private, it leaves search,
+ * the Routes list and other riders' bookmarks at once. Null when there is no
+ * such route of theirs.
+ */
+export const setRouteVisibility = async (
+  routeId: string,
+  ownerId: string,
+  visibility: RouteVisibility,
+): Promise<{ id: string; visibility: RouteVisibility } | null> => {
+  const result = await query(
+    `UPDATE routes SET visibility = $3 WHERE id = $1 AND creator_id = $2 RETURNING id, visibility`,
+    [routeId, ownerId, visibility],
+  );
+  return (result.rows[0] as { id: string; visibility: RouteVisibility } | undefined) ?? null;
 };
 
 // ---------------------------------------------------------------------------
@@ -217,18 +255,40 @@ export const unbookmarkRoute = async (
 // Sharing
 // ---------------------------------------------------------------------------
 
+export type ShareOutcome = "shared" | "already_shared" | "not_found";
+
+/**
+ * The owner shares their route with another rider. Only the owner can: a
+ * share grants access to the route. "not_found" when the route isn't theirs
+ * or the rider doesn't exist.
+ */
 export const shareRouteWithRider = async (
   routeId: string,
+  ownerId: string,
   sharedWithRiderId: string,
-): Promise<boolean> => {
+): Promise<ShareOutcome> => {
   const result = await query(
-    `INSERT INTO route_shares (route_id, shared_with_rider_id)
-     VALUES ($1, $2)
-     ON CONFLICT DO NOTHING
-     RETURNING id`,
-    [routeId, sharedWithRiderId],
+    `WITH target AS (
+       SELECT r.id AS route_id, rd.id AS rider_id
+         FROM routes r, riders rd
+        WHERE r.id = $1 AND r.creator_id = $2
+          AND rd.id = $3 AND rd.deleted_at IS NULL
+     ),
+     inserted AS (
+       INSERT INTO route_shares (route_id, shared_with_rider_id)
+       SELECT route_id, rider_id FROM target t
+        WHERE NOT EXISTS (
+          SELECT 1 FROM route_shares rs
+           WHERE rs.route_id = t.route_id AND rs.shared_with_rider_id = t.rider_id
+        )
+       RETURNING id
+     )
+     SELECT (SELECT count(*) FROM target)::int AS found, (SELECT count(*) FROM inserted)::int AS inserted`,
+    [routeId, ownerId, sharedWithRiderId],
   );
-  return result.rows.length > 0;
+  const { found, inserted } = result.rows[0] as { found: number; inserted: number };
+  if (found === 0) return "not_found";
+  return inserted > 0 ? "shared" : "already_shared";
 };
 
 // ---------------------------------------------------------------------------

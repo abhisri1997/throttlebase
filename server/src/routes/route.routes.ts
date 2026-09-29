@@ -193,7 +193,84 @@ router.get('/traces/:rideId', routeController.getTraces);
  */
 router.get('/search', routeController.searchRoutes);
 
+/**
+ * @swagger
+ * /api/routes/{id}:
+ *   get:
+ *     summary: A route the rider may see, with its stops and road feedback
+ *     tags: [Routes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: The route
+ *       404:
+ *         description: Not found, or not visible to this rider
+ *   patch:
+ *     summary: Change who can see your route (owner only)
+ *     description: >
+ *       Made private, the route leaves search, the Routes list and other
+ *       riders' bookmarks at once. Shares grant access only while the route
+ *       is set to specific_riders.
+ *     tags: [Routes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [visibility]
+ *             properties:
+ *               visibility:
+ *                 type: string
+ *                 enum: [private, specific_riders, public]
+ *     responses:
+ *       200:
+ *         description: "{ route: { id, visibility } }"
+ *       400:
+ *         description: Invalid input
+ *       404:
+ *         description: Not your route, or no such route
+ *   delete:
+ *     summary: Delete your route for good (owner only)
+ *     description: >
+ *       Its stops, shares, bookmarks and road feedback go with it. Rides
+ *       planned on it keep their road and lose only the link.
+ *     tags: [Routes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Route deleted
+ *       404:
+ *         description: Not your route, or no such route
+ */
 router.get('/:id', routeController.getRoute);
+router.patch('/:id', routeController.updateRouteVisibility);
+router.delete('/:id', routeController.deleteRoute);
 
 /**
  * @swagger
@@ -238,7 +315,7 @@ router.delete('/:id/bookmark', routeController.unbookmark);
  * @swagger
  * /api/routes/{id}/share:
  *   post:
- *     summary: Share a route with another rider
+ *     summary: Share your route with another rider (owner only)
  *     tags: [Routes]
  *     security:
  *       - bearerAuth: []
@@ -262,7 +339,11 @@ router.delete('/:id/bookmark', routeController.unbookmark);
  *                 format: uuid
  *     responses:
  *       200:
- *         description: Route shared successfully
+ *         description: Route shared, or already shared
+ *       400:
+ *         description: Invalid input
+ *       404:
+ *         description: Not your route, or no such rider
  */
 router.post('/:id/share', routeController.shareRoute);
 
