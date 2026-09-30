@@ -32,15 +32,15 @@ export interface VerificationKey {
   publicJwk: JWK;
 }
 
-const PEM_PRIVATE_HEADER = "-----BEGIN PRIVATE KEY-----";
+const PEM_PRIVATE_HEADER = "-----BEGIN PRIVATE KEY-----"; // gitleaks:allow (a PEM header, not a key)
 const PEM_PUBLIC_HEADER = "-----BEGIN PUBLIC KEY-----";
 
 /**
- * OpenSSL emits EC keys in SEC1 form by default, which reads
- * "-----BEGIN EC PRIVATE KEY-----". It carries exactly the same key as the
- * PKCS#8 form, in a different envelope.
+ * OpenSSL emits EC keys in SEC1 form by default, whose header names an
+ * "EC PRIVATE KEY". It carries exactly the same key as the PKCS#8 form, in a
+ * different envelope.
  */
-const PEM_SEC1_HEADER = "-----BEGIN EC PRIVATE KEY-----";
+const PEM_SEC1_HEADER = "-----BEGIN EC PRIVATE KEY-----"; // gitleaks:allow (a PEM header, not a key)
 
 /** Accepts a raw PEM or a base64 blob containing one. */
 export const normalizePem = (

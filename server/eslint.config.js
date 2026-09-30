@@ -24,5 +24,13 @@ export default tseslint.config(
     },
   },
 
+  // Plain Node scripts, run directly rather than compiled.
+  {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      globals: { process: "readonly", console: "readonly" },
+    },
+  },
+
   ...boundaryConfigs,
 );

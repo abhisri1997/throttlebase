@@ -1,0 +1,118 @@
+# Checks every pull request and every push to dev and main.
+#
+# Each job runs what a contributor runs locally (see CLAUDE.md), so a red
+# check here can be reproduced with the same command.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+
+# A newer push to the same branch or PR supersedes a run still going.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    name: Server
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: server
+    services:
+      # The same major version and extension as production (Supabase, PG 17 + PostGIS).
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: throttlebase_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The migration check compares against the branch being merged into.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Architecture boundaries
+        run: npm run lint:boundaries
+      - name: Migrations already run are unchanged, and new ones come last
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-migration-changes.mjs origin/${{ github.base_ref }}
+      - name: Unit tests
+        # No database here: the unit glob also matches the integration tests,
+        # which skip without TEST_DATABASE_URL instead of running in parallel.
+        run: npm run test:unit
+      - name: Integration tests (PostGIS)
+        env:
+          # A throwaway database for this run only.
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/throttlebase_test
+        run: npm run test:integration
+
+  client:
+    name: Client
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Lint
+        run: npm run lint
+      - name: Architecture boundaries
+        run: npm run lint:boundaries
+      - name: Unit tests
+        run: npm test
+      - name: Legal drafts match the app's text
+        run: npm run legal:drafts -- --check
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.28.0
+      GITLEAKS_SHA256: a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The whole history: a secret committed and then deleted is still leaked.
+          fetch-depth: 0
+      - name: Install gitleaks (pinned, checksum verified)
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum --check
+          tar -xzf gitleaks.tar.gz gitleaks
+      - name: Scan every commit
+        # Known, already-handled findings are listed in .gitleaksignore.
+        run: ./gitleaks git --redact --no-banner --verbose .
