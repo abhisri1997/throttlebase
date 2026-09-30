@@ -9,6 +9,10 @@ import type { ConfirmPrompt } from "../../rides/core/rideLeadershipPrompts";
 export const PUBLIC_ROUTE_NOTICE =
   "Public routes stay for the community, without your name, if you delete your account.";
 
+/** Others see a public route without its personal ends; the owner sees it whole. */
+export const PUBLIC_ROUTE_ENDS_NOTICE =
+  "Other riders don't see its first and last 500 m, unless it starts or ends at a public place like a hotel or fuel station.";
+
 export type RouteVisibility = "public" | "private" | "specific_riders";
 
 /** A community route has no owner: nobody can edit, share or delete it. */
@@ -35,7 +39,7 @@ export const visibilityTarget = (current: RouteVisibility): "public" | "private"
   current === "public" ? "private" : "public";
 
 export const visibilityLabel = (current: RouteVisibility): string => {
-  if (current === "public") return "Public · anyone can find it and ride it";
+  if (current === "public") return "Public · others see it without its first and last 500 m";
   if (current === "specific_riders") return "Shared with specific riders";
   return "Only you can see it";
 };
@@ -44,7 +48,7 @@ export const visibilityPrompt = (target: "public" | "private", title: string): C
   target === "public"
     ? {
         title: `Make ${title} public?`,
-        message: `Anyone can find it in Routes and ride it. ${PUBLIC_ROUTE_NOTICE}`,
+        message: `Anyone can find it in Routes and ride it. ${PUBLIC_ROUTE_ENDS_NOTICE} ${PUBLIC_ROUTE_NOTICE}`,
         confirmLabel: "Make public",
       }
     : {

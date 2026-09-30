@@ -7,7 +7,7 @@ import {
   HOME_LIKE_PLACE_TYPES,
   keptStops,
   MIN_KEPT_METERS,
-  planCommunityRoute,
+  planPublicRoute,
   PUBLIC_PLACE_TYPES,
   trimLineEnds,
   type LngLat,
@@ -59,7 +59,7 @@ test("stops in the trimmed ends go; the rest are renumbered along what's left", 
 test("an end at a public place is kept there, named after it; the other end is trimmed", () => {
   const line = eastward(9);
   const hotel = { name: "Taj West End", lat: 0.0002, lng: -0.0003 };
-  const plan = planCommunityRoute({ line, stops: [{ lat: 0, lng: 0.002 }], startPlace: hotel, endPlace: null })!;
+  const plan = planPublicRoute({ line, stops: [{ lat: 0, lng: 0.002 }], startPlace: hotel, endPlace: null })!;
 
   assert.deepEqual(plan.start, { lat: hotel.lat, lng: hotel.lng });
   assert.equal(plan.startName, "Taj West End");
@@ -77,13 +77,13 @@ test("a short route between two public places is kept whole", () => {
   const cafe = { name: "Cafe Noir", lat: 0, lng: 0 };
   const viewpoint = { name: "Sunset Point", lat: 0, lng: 0.02 };
 
-  const plan = planCommunityRoute({ line, stops: [], startPlace: cafe, endPlace: viewpoint })!;
+  const plan = planPublicRoute({ line, stops: [], startPlace: cafe, endPlace: viewpoint })!;
   assert.equal(plan.startName, "Cafe Noir");
   assert.equal(plan.endName, "Sunset Point");
   assert.equal(plan.coordinates.length, line.length);
 
   // With one end trimmed, the 5 km minimum applies again.
-  assert.equal(planCommunityRoute({ line, stops: [], startPlace: cafe, endPlace: null }), null);
+  assert.equal(planPublicRoute({ line, stops: [], startPlace: cafe, endPlace: null }), null);
 });
 
 test("home-like places are never on the public list", () => {

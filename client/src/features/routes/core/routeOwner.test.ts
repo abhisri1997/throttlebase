@@ -5,6 +5,7 @@ import {
   deleteRoutePrompt,
   routeAuthor,
   isRouteOwner,
+  PUBLIC_ROUTE_ENDS_NOTICE,
   PUBLIC_ROUTE_NOTICE,
   visibilityLabel,
   visibilityPrompt,
@@ -43,6 +44,7 @@ test("a public route can be made private; anything else can be made public", () 
 
 test("the owner sees who can see their route now", () => {
   assert.match(visibilityLabel("public"), /Public/);
+  assert.match(visibilityLabel("public"), /without its first and last 500 m/);
   assert.match(visibilityLabel("private"), /Only you/);
   assert.match(visibilityLabel("specific_riders"), /specific riders/);
 });
@@ -51,6 +53,7 @@ test("making a route public carries the community notice", () => {
   const prompt = visibilityPrompt("public", "Coffee loop");
   assert.equal(prompt.title, "Make Coffee loop public?");
   assert.ok(prompt.message.includes(PUBLIC_ROUTE_NOTICE));
+  assert.ok(prompt.message.includes(PUBLIC_ROUTE_ENDS_NOTICE));
   assert.equal(prompt.confirmLabel, "Make public");
 });
 

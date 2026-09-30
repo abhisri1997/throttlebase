@@ -17,7 +17,7 @@ import {
   type StopEdit,
 } from "../core/stopChoices";
 import { splitPlaceName } from "../../routes/core/routeSummary";
-import { PUBLIC_ROUTE_NOTICE } from "../../routes/core/routeOwner";
+import { PUBLIC_ROUTE_ENDS_NOTICE, PUBLIC_ROUTE_NOTICE } from "../../routes/core/routeOwner";
 import {
   MAX_ROUTE_TITLE_LENGTH,
   MAX_STOP_NOTE_LENGTH,
@@ -229,7 +229,9 @@ function SaveRouteForm({ rideId, preview, initialTitle, onClose, onSaved }: Save
       })}
 
       {visibility === "public" ? (
-        <Text style={[styles.hint, { color: colors.textMuted }]}>{PUBLIC_ROUTE_NOTICE}</Text>
+        <Text style={[styles.hint, { color: colors.textMuted }]}>
+          {PUBLIC_ROUTE_ENDS_NOTICE} {PUBLIC_ROUTE_NOTICE}
+        </Text>
       ) : null}
 
       {save.isError ? (
