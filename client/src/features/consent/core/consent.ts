@@ -79,16 +79,23 @@ export const permits = (overview: ConsentOverview, purpose: ConsentPurpose): boo
   }
 };
 
-export interface RideSharing {
-  /** Start tracking and share the rider's position with the group. */
+export interface RideTracking {
+  /** Follow the rider's position at all: to share it, record it, or both. */
+  track: boolean;
+  /** Share the rider's position with the others on the ride. */
   share: boolean;
   /** Read the motion sensors during the ride. */
   motion: boolean;
 }
 
-export const rideSharing = (overview: ConsentOverview): RideSharing => {
+/**
+ * Mirrors the server's split (docs/ride-now-ux.md §7.3): recording and sharing
+ * are separate, and a position is refused only when both are off.
+ */
+export const rideTracking = (overview: ConsentOverview): RideTracking => {
   const share = permits(overview, "live_location_sharing");
-  return { share, motion: share && permits(overview, "motion_activity") };
+  const track = share || permits(overview, "ride_recording");
+  return { track, share, motion: track && permits(overview, "motion_activity") };
 };
 
 export type AgeGate =

@@ -3,6 +3,7 @@
  * and ending the group ride, which asks first when riders are still out.
  */
 import { apiClient } from "../../../api/client";
+import { parseRidingRides, type RidingRide } from "../../rideNow/core/ridingRide";
 
 export interface UnfinishedRiderPayload {
   rider_id: string;
@@ -51,7 +52,7 @@ export const getUnfinishedRiders = (error: unknown): UnfinishedRiderPayload[] | 
 };
 
 /** Rides this device should be tracking: under way for this rider and not finished. */
-export const fetchRidesImRiding = async (): Promise<Array<{ id: string; status: string; captain_id: string }>> => {
+export const fetchRidesImRiding = async (): Promise<RidingRide[]> => {
   const { data } = await apiClient.get("/api/rides/riding");
-  return Array.isArray(data?.rides) ? data.rides : [];
+  return parseRidingRides(data);
 };

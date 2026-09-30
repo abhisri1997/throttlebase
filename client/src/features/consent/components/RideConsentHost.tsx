@@ -2,8 +2,8 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../../../theme/ThemeContext";
 import { getApiErrorMessage, getApiErrorStatus } from "../../../utils/apiError";
-import type { ConsentPurpose } from "../core/consent";
-import { useAnswerConsent } from "../hooks/useConsents";
+import { permits, type ConsentPurpose } from "../core/consent";
+import { useAnswerConsent, useConsents } from "../hooks/useConsents";
 import { useRideConsentPrompt } from "../hooks/rideConsentPrompt";
 import { ConsentNoticeCard } from "./ConsentNoticeCard";
 
@@ -18,11 +18,24 @@ const STARTS_ON: Readonly<Partial<Record<ConsentPurpose, boolean>>> = {
   ride_recording: true,
 };
 
+/**
+ * What turning live location off means, now that recording is separate from
+ * sharing (docs/ride-now-ux.md §7.3); null while sharing is on.
+ */
+const sharingOffWarning = (isSharing: boolean, isRecording: boolean): string | null => {
+  if (isSharing) return null;
+  if (!isRecording) {
+    return "With live location and ride recording both off, this ride isn't saved and nobody on it sees where you are.";
+  }
+  return "With live location off, the others on this ride won't see where you are, and Alert my group can't show them where to find you. Your ride is still recorded for you.";
+};
+
 /** Mounted once at the root: shows the question the tracker asks before a ride. */
 export function RideConsentHost() {
   const { colors } = useTheme();
   const request = useRideConsentPrompt((state) => state.request);
   const answer = useAnswerConsent();
+  const overview = useConsents().data;
   const [choices, setChoices] = useState<Partial<Record<ConsentPurpose, boolean>>>({});
   const [sending, setSending] = useState(false);
 
@@ -32,6 +45,11 @@ export function RideConsentHost() {
   }, [request]);
 
   if (!request) return null;
+
+  // A purpose not asked about here keeps the answer the rider already gave.
+  const isChosen = (purpose: ConsentPurpose): boolean =>
+    choices[purpose] ?? (overview ? permits(overview, purpose) : true);
+  const warning = sharingOffWarning(isChosen("live_location_sharing"), isChosen("ride_recording"));
 
   const submit = async (): Promise<void> => {
     setSending(true);
@@ -75,12 +93,7 @@ export function RideConsentHost() {
               disabled={sending}
             />
           ))}
-          {choices.live_location_sharing === false ? (
-            <Text style={[styles.warning, { color: colors.danger }]}>
-              With live location off, the others on this ride won't see where you are, and Alert my group can't show
-              them where to find you.
-            </Text>
-          ) : null}
+          {warning ? <Text style={[styles.warning, { color: colors.danger }]}>{warning}</Text> : null}
         </ScrollView>
         <TouchableOpacity
           accessibilityRole='button'

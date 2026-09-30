@@ -9,10 +9,14 @@ export const lightColors = {
   tabBarInactive: '#64748b',
   primary: '#22c55e',
   danger: '#ef4444',
+  warning: '#f59e0b',
   cardBg: '#f8fafc',
   inputBg: '#f1f5f9',
   skeleton: '#e2e8f0',
   overlay: 'rgba(0,0,0,0.3)',
+  /** The ride bar above the tabs: deep enough for white text (WCAG AA). */
+  ridingBar: '#137333',
+  ridingBarDot: '#4ade80',
 };
 
 export const darkColors = {
@@ -26,10 +30,13 @@ export const darkColors = {
   tabBarInactive: '#94a3b8',
   primary: '#22c55e',
   danger: '#ef4444',
+  warning: '#f59e0b',
   cardBg: '#1e293b',
   inputBg: '#334155',
   skeleton: '#334155',
   overlay: 'rgba(0,0,0,0.6)',
+  ridingBar: '#137333',
+  ridingBarDot: '#4ade80',
 };
 
 export type ThemeColors = typeof lightColors;

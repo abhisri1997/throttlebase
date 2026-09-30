@@ -53,6 +53,14 @@ const fetchRide = async (rideId: string): Promise<NavigationRide> => {
   return data.ride as NavigationRide;
 };
 
+/** The ride navigation is for; the same cache entry as the ride detail screen. */
+export const useNavigationRide = (rideId: string | undefined) =>
+  useQuery({
+    queryKey: ["ride", rideId],
+    queryFn: () => fetchRide(rideId!),
+    enabled: Boolean(rideId),
+  });
+
 const fetchLiveSession = async (rideId: string): Promise<LiveSessionStateEvent | null> => {
   try {
     const { data } = await apiClient.get(`/api/rides/${rideId}/live/session`);
@@ -137,11 +145,7 @@ export const useRideLiveSession = ({
     session: socketSession,
   } = store;
 
-  const rideQuery = useQuery({
-    queryKey: ["ride", rideId],
-    queryFn: () => fetchRide(rideId!),
-    enabled: Boolean(rideId),
-  });
+  const rideQuery = useNavigationRide(rideId);
 
   const liveSessionQuery = useQuery({
     queryKey: ["live-session", rideId],

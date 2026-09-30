@@ -14,7 +14,7 @@
 
 import * as ExpoLocation from "expo-location";
 import * as TaskManager from "expo-task-manager";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 import { liveSessionSocket } from "./liveSessionSocket";
 import { activityAt, startMotionWatch, stopMotionWatch } from "./motionActivityService";
 
@@ -22,8 +22,14 @@ const BACKGROUND_LOCATION_TASK = "THROTTLEBASE_BG_LOCATION";
 
 // ── Module-level state ──────────────────────────────────────────────────────
 let _activeRideId: string | null = null;
+/** The ride a start is under way for, so a second call doesn't start it again. */
+let _startingRideId: string | null = null;
 let _foregroundSubscription: ExpoLocation.LocationSubscription | null = null;
 let _heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+/** What the ride tracks with: sharing decides the notification's words. */
+let _options: Required<TrackingOptions> = { motion: true, share: true };
+/** What the running notification says; null when none is running. */
+let _notificationShare: boolean | null = null;
 
 const KMH_PER_MPS = 3.6;
 
@@ -117,6 +123,15 @@ const stopForegroundTracking = (): void => {
 
 // ── Background tracking (keeps running when the app is minimised) ───────────
 /**
+ * The notification's words (launch readiness D7): it says what is happening
+ * to the rider's position, so it changes when sharing does.
+ */
+const notificationBody = (share: boolean): string =>
+  share
+    ? "Sharing your location with your ride group until you finish."
+    : "Recording your ride until you finish. Your location isn't shared.";
+
+/**
  * Starts the location task as a foreground service: a persistent "Ride in
  * progress" notification on Android, the blue location indicator on iOS.
  *
@@ -145,6 +160,7 @@ const startBackgroundTracking = async (): Promise<void> => {
     return;
   }
 
+  const share = _options.share;
   try {
     await ExpoLocation.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
       accuracy: ExpoLocation.Accuracy.Balanced,
@@ -154,10 +170,11 @@ const startBackgroundTracking = async (): Promise<void> => {
       showsBackgroundLocationIndicator: true,
       foregroundService: {
         notificationTitle: "Ride in progress",
-        notificationBody: "Sharing your location with your ride group until you finish.",
+        notificationBody: notificationBody(share),
         notificationColor: "#22c55e",
       },
     });
+    _notificationShare = share;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     console.warn("[BgLocation] could not start the ride tracker, will retry in the foreground:", message);
@@ -173,6 +190,7 @@ const stopBackgroundTracking = async (): Promise<void> => {
     BACKGROUND_LOCATION_TASK,
   ).catch(() => false);
 
+  _notificationShare = null;
   if (!isRunning) {
     return;
   }
@@ -188,6 +206,20 @@ const stopBackgroundTracking = async (): Promise<void> => {
       console.warn("[BgLocation] could not stop background updates:", message);
     }
   }
+};
+
+/**
+ * Restarts the location task when its notification no longer says what
+ * happens to the rider's position. Only in the foreground: Android refuses to
+ * start the task from the background, so there it waits for
+ * resumeTrackingInForeground rather than stop tracking in the meantime.
+ */
+const refreshNotification = async (): Promise<void> => {
+  if (_notificationShare === null || _notificationShare === _options.share) return;
+  if (AppState.currentState !== "active") return;
+
+  await stopBackgroundTracking();
+  await startBackgroundTracking();
 };
 
 // ── Heartbeat (keeps presence alive while tracking) ─────────────────────────
@@ -219,8 +251,9 @@ const withdrawnListeners = new Set<() => void>();
 
 /**
  * Called when the rider withdraws consent to share their live location from
- * any of their devices. Tracking has already stopped; the listener refreshes
- * whatever decides whether to start it again.
+ * any of their devices. The server has already stopped sharing it; the
+ * listener refreshes the answers, which decide whether the ride goes on being
+ * recorded (docs/ride-now-ux.md §7.3) or tracking stops.
  */
 export const onLiveLocationWithdrawn = (listener: () => void): (() => void) => {
   withdrawnListeners.add(listener);
@@ -232,42 +265,67 @@ export const onLiveLocationWithdrawn = (listener: () => void): (() => void) => {
 export interface TrackingOptions {
   /** Read the motion sensors: only with the rider's consent (E6). */
   motion?: boolean;
+  /** The rider's position is shared with the ride, not only recorded. */
+  share?: boolean;
 }
+
+const withDefaults = (options: TrackingOptions): Required<TrackingOptions> => ({
+  motion: options.motion !== false,
+  share: options.share !== false,
+});
+
+/** The ride goes on; only what it tracks with has changed. */
+const applyOptions = async (next: Required<TrackingOptions>): Promise<void> => {
+  const previous = _options;
+  _options = next;
+
+  if (next.motion && !previous.motion) void startMotionWatch();
+  if (!next.motion && previous.motion) stopMotionWatch();
+  await refreshNotification();
+};
 
 /**
  * Start tracking for an active ride. Connects socket, starts foreground +
- * background location updates, and begins heartbeat.
+ * background location updates, and begins heartbeat. Called again for the
+ * same ride, it only applies options that changed.
  */
 export const startTracking = async (rideId: string, options: TrackingOptions = {}): Promise<void> => {
-  // Already tracking this ride
+  const next = withDefaults(options);
+
   if (_activeRideId === rideId) {
+    await applyOptions(next);
     return;
   }
+  if (_startingRideId === rideId) return;
 
-  // Stop any previous tracking
-  await stopTracking();
+  _startingRideId = rideId;
+  try {
+    // Stop any previous tracking
+    await stopTracking();
 
-  _activeRideId = rideId;
+    _activeRideId = rideId;
+    _options = next;
 
-  // Connect socket and join room
-  liveSessionSocket.connect();
-  liveSessionSocket.off("consent:withdrawn");
-  liveSessionSocket.on("consent:withdrawn", () => {
-    void stopTracking().finally(() => {
+    // Connect socket and join room
+    liveSessionSocket.connect();
+    liveSessionSocket.off("consent:withdrawn");
+    liveSessionSocket.on("consent:withdrawn", () => {
       for (const listener of withdrawnListeners) listener();
     });
-  });
-  liveSessionSocket.emit("session:join", { rideId });
+    liveSessionSocket.emit("session:join", { rideId });
 
-  // Start location tracking
-  await startForegroundTracking();
-  await startBackgroundTracking();
-  startHeartbeat();
-  // After the location prompts, so the dialogs don't stack; never awaited, so
-  // a rider who says no (or never answers) rides on regardless.
-  if (options.motion !== false) void startMotionWatch();
+    // Start location tracking
+    await startForegroundTracking();
+    await startBackgroundTracking();
+    startHeartbeat();
+    // After the location prompts, so the dialogs don't stack; never awaited, so
+    // a rider who says no (or never answers) rides on regardless.
+    if (next.motion) void startMotionWatch();
 
-  console.log("[BgLocation] tracking started for ride:", rideId);
+    console.log("[BgLocation] tracking started for ride:", rideId);
+  } finally {
+    _startingRideId = null;
+  }
 };
 
 /**
@@ -305,6 +363,8 @@ export const resumeTrackingInForeground = async (): Promise<void> => {
 
   await startForegroundTracking();
   await startBackgroundTracking();
+  // Sharing changed while the app was away, when the task couldn't restart.
+  await refreshNotification();
 };
 
 /**

@@ -4,7 +4,7 @@ import {
   ageGate,
   permits,
   ridePurposesToAsk,
-  rideSharing,
+  rideTracking,
   statusLine,
   type ConsentOverview,
   type ConsentPurpose,
@@ -50,10 +50,20 @@ test("the app's gate matches the server's: never asked keeps features, marketing
   assert.equal(permits(overview({ live_location_sharing: "reconsent_required" }), "live_location_sharing"), false);
 });
 
-test("no sharing means no tracking and no motion sensors", () => {
-  assert.deepEqual(rideSharing(overview()), { share: true, motion: true });
-  assert.deepEqual(rideSharing(overview({ motion_activity: "withdrawn" })), { share: true, motion: false });
-  assert.deepEqual(rideSharing(overview({ live_location_sharing: "withdrawn" })), { share: false, motion: false });
+test("a ride is tracked while sharing or recording is on, and only both off stops it", () => {
+  assert.deepEqual(rideTracking(overview()), { track: true, share: true, motion: true });
+  assert.deepEqual(rideTracking(overview({ motion_activity: "withdrawn" })), { track: true, share: true, motion: false });
+  assert.deepEqual(rideTracking(overview({ live_location_sharing: "withdrawn" })), {
+    track: true,
+    share: false,
+    motion: true,
+  });
+  assert.deepEqual(rideTracking(overview({ ride_recording: "withdrawn" })), { track: true, share: true, motion: true });
+  assert.deepEqual(rideTracking(overview({ live_location_sharing: "withdrawn", ride_recording: "withdrawn" })), {
+    track: false,
+    share: false,
+    motion: false,
+  });
 });
 
 test("the 18+ gate asks once, closes after a no, and never locks out a rider offline", () => {

@@ -22,7 +22,12 @@ import {
   formatDuration,
 } from "../../../src/features/navigation/core/format";
 import { waypointLabel } from "../../../src/features/navigation/core/guidance";
-import { buildTripPlan, rideRoadVia, type TripWaypoint } from "../../../src/features/navigation/core/tripPlan";
+import {
+  buildTripPlan,
+  rideRoadVia,
+  toLatLng,
+  type TripWaypoint,
+} from "../../../src/features/navigation/core/tripPlan";
 import {
   groupTargetIndex,
   shouldOfferCatchUp,
@@ -50,7 +55,11 @@ import { useNavigationMapTheme } from "../../../src/features/navigation/hooks/us
 import { useNavigationSession } from "../../../src/features/navigation/hooks/useNavigationSession";
 import { usePlannedRoute } from "../../../src/features/navigation/hooks/usePlannedRoute";
 import { useSimulatedNavigationFix } from "../../../src/features/navigation/hooks/useSimulatedNavigationFix";
-import { useRideLiveSession } from "../../../src/features/navigation/hooks/useRideLiveSession";
+import {
+  useNavigationRide,
+  useRideLiveSession,
+} from "../../../src/features/navigation/hooks/useRideLiveSession";
+import { JustRidingView } from "../../../src/features/rideNow/components/JustRidingView";
 import { useGroupAlert } from "../../../src/features/rides/hooks/useGroupAlert";
 import { GroupAlertSheet } from "../../../src/features/rides/components/GroupAlertSheet";
 import { GroupAlertBanner } from "../../../src/features/rides/components/GroupAlertBanner";
@@ -98,7 +107,32 @@ const GROUP_POSITION_GRACE_MS = 5_000;
 /** Alternatives offered to a leader who would rather regroup somewhere else. */
 const MAX_REGROUP_ALTERNATIVES = 3;
 
+/**
+ * A ride with no destination is just riding and recording (Ride now,
+ * docs/ride-now-ux.md §4.3); anything with one is navigated.
+ */
 export default function RideNavigationScreen() {
+  const { colors } = useTheme();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const rideQuery = useNavigationRide(id);
+
+  if (rideQuery.isLoading) {
+    return (
+      <SafeAreaView className='flex-1 items-center justify-center' style={{ backgroundColor: colors.bg }}>
+        <ActivityIndicator size='large' color={colors.primary} />
+      </SafeAreaView>
+    );
+  }
+
+  const ride = rideQuery.data;
+  if (id && ride && !toLatLng(ride.end_point_geojson?.coordinates)) {
+    return <JustRidingView rideId={id} />;
+  }
+
+  return <PlannedRideNavigation />;
+}
+
+function PlannedRideNavigation() {
   const { colors } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();

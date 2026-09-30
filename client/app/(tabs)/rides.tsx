@@ -7,6 +7,7 @@ import {
   RefreshControl,
   TouchableOpacity,
   Alert,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
@@ -17,6 +18,7 @@ import { useRouter } from "expo-router";
 import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { NotificationBell } from "../../src/components/NotificationBell";
+import { StartRideSheet } from "../../src/features/rideNow/components/StartRideSheet";
 
 type RideStatusFilter = "all" | "draft" | "scheduled" | "active";
 
@@ -38,6 +40,14 @@ export default function DiscoverRidesScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<RideStatusFilter>("all");
+  const [isStartSheetOpen, setIsStartSheetOpen] = useState(false);
+
+  const planRide = () => router.push("/(modals)/create-ride");
+  // The website can't track a ride, so there "+" only plans one.
+  const openStartRide = () => {
+    if (Platform.OS === "web") planRide();
+    else setIsStartSheetOpen(true);
+  };
 
   const {
     data: rides,
@@ -123,7 +133,9 @@ export default function DiscoverRidesScreen() {
           }
         />
         <TouchableOpacity
-          onPress={() => router.push("/(modals)/create-ride")}
+          onPress={openStartRide}
+          accessibilityRole='button'
+          accessibilityLabel='Start a ride'
           className='absolute bottom-6 right-5 w-14 h-14 rounded-full items-center justify-center shadow-lg z-50 elevation-5'
           style={{ backgroundColor: colors.primary }}
           activeOpacity={0.8}
@@ -173,6 +185,12 @@ export default function DiscoverRidesScreen() {
         <NotificationBell />
       </View>
       {renderContent()}
+      <StartRideSheet
+        visible={isStartSheetOpen}
+        onClose={() => setIsStartSheetOpen(false)}
+        onRideNow={() => router.push("/(modals)/ride-now")}
+        onPlanRide={planRide}
+      />
     </SafeAreaView>
   );
 }

@@ -96,6 +96,13 @@ test("Ride now", { skip: !CONNECTION }, async (t) => {
     });
   });
 
+  await t.test("it isn't in the rider's own Discover either: the ride bar shows it", async () => {
+    const [riding] = await rideProgress!.listRidesBeingRidden(SOLO);
+
+    const discovered = await rides!.listDiscoverableRides(SOLO);
+    assert.equal(discovered.some((r) => r.id === riding!.id), false);
+  });
+
   await t.test("its visibility can't be changed to make it public", async () => {
     const [riding] = await rideProgress!.listRidesBeingRidden(SOLO);
     await assert.rejects(rides!.updateRideInfo(riding!.id, SOLO, { visibility: "public" }), rides!.UnplannedVisibilityError);
