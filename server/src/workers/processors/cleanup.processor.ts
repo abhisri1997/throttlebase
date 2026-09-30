@@ -14,6 +14,10 @@
  *   4. Purges security logs past their retention: sign-in history and the
  *      audit trail after SECURITY_LOG_RETENTION_DAYS, email codes after
  *      EMAIL_CODE_RETENTION_DAYS (launch readiness E11).
+ *   5. Purges in-app notifications after NOTIFICATION_RETENTION_DAYS and
+ *      ride incidents after INCIDENT_RETENTION_DAYS. Incident escalation
+ *      checks for an earlier notification, so it only looks at live sessions
+ *      (live-ops.processor.ts) and a purged notification can't re-alert.
  *
  * Every period comes from core/retention/retentionPolicy.ts.
  *
@@ -30,7 +34,9 @@ import { query } from "../../config/db.js";
 import {
   EMAIL_CODE_RETENTION_DAYS,
   FAILED_JOB_RETENTION_DAYS,
+  INCIDENT_RETENTION_DAYS,
   JOB_RETENTION_DAYS,
+  NOTIFICATION_RETENTION_DAYS,
   REMOVED_CONTENT_RETENTION_DAYS,
   SECURITY_LOG_RETENTION_DAYS,
 } from "../../core/retention/retentionPolicy.js";
@@ -104,16 +110,27 @@ const purgeRemovedContent = async (): Promise<Record<string, number>> => {
   return purged;
 };
 
-/** Each security log, the column that dates a row, and how long rows are kept. */
-const SECURITY_LOGS = [
+/** A table purged by age: the column that dates a row, and how long rows are kept. */
+interface AgedTable {
+  table: string;
+  column: string;
+  days: number;
+}
+
+const SECURITY_LOGS: readonly AgedTable[] = [
   { table: "login_activity", column: "logged_in_at", days: SECURITY_LOG_RETENTION_DAYS },
   { table: "security_events", column: "occurred_at", days: SECURITY_LOG_RETENTION_DAYS },
   { table: "email_otps", column: "created_at", days: EMAIL_CODE_RETENTION_DAYS },
-] as const;
+];
 
-const purgeSecurityLogs = async (): Promise<Record<string, number>> => {
+const RETAINED_RECORDS: readonly AgedTable[] = [
+  { table: "notifications", column: "created_at", days: NOTIFICATION_RETENTION_DAYS },
+  { table: "ride_live_incidents", column: "created_at", days: INCIDENT_RETENTION_DAYS },
+];
+
+const purgeByAge = async (tables: readonly AgedTable[]): Promise<Record<string, number>> => {
   const purged: Record<string, number> = {};
-  for (const { table, column, days } of SECURITY_LOGS) {
+  for (const { table, column, days } of tables) {
     purged[table] = await deleteInBatches(
       table,
       `${column} < now() - ($1 || ' days')::interval`,
@@ -129,7 +146,8 @@ export const processCleanupExpiredSessions = async (
   const sessionsDeleted = await purgeExpiredSessions();
   const jobsDeleted = await purgeFinishedJobs();
   const removedContentPurged = await purgeRemovedContent();
-  const securityLogsPurged = await purgeSecurityLogs();
+  const securityLogsPurged = await purgeByAge(SECURITY_LOGS);
+  const retainedDataPurged = await purgeByAge(RETAINED_RECORDS);
 
   return {
     processor: "cleanup-expired-sessions",
@@ -137,6 +155,7 @@ export const processCleanupExpiredSessions = async (
     jobsDeleted,
     removedContentPurged,
     securityLogsPurged,
+    retainedDataPurged,
     handledAt: new Date().toISOString(),
   };
 };

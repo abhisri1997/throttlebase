@@ -208,7 +208,10 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 >
 > **Update (2026-09-30):** every retention period is now in `server/src/core/retention/retentionPolicy.ts`. The hourly cleanup purges
 > `login_activity` and `security_events` after 1 year and `email_otps` after 30 days (migration 046 adds the indexes). ⚖️ Counsel to
-> confirm 1 year. Still open: live-session data and `notifications`.
+> confirm 1 year.
+>
+> **Update (2026-10-01):** notifications are purged after 90 days and ride incidents after 180 (migration 047 adds the indexes).
+> Incident escalation now considers only live sessions. Still open: thinning location samples older than 90 days (D2, plans/live-positions.md step 3).
 
 ---
 
