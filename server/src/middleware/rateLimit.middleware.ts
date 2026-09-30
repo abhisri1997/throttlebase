@@ -88,3 +88,20 @@ export const reportLimiter = rateLimit({
     code: "report_limit",
   },
 });
+
+/**
+ * Consent answers and declarations. Each one is kept for years as evidence
+ * (plans/consent.md), so a client stuck toggling in a loop must not be able
+ * to fill the ledger. Far more than anyone changes their mind in an hour.
+ */
+export const consentLimiter = rateLimit({
+  windowMs: HOUR_MS,
+  limit: 60,
+  keyGenerator: riderKey,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "You've changed these settings a lot in a short time. Try again later.",
+    code: "consent_limit",
+  },
+});

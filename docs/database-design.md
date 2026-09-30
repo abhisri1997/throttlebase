@@ -431,7 +431,19 @@ Behind `FEATURE_SUPPORT`.
 
 ### `security_events`
 
-Append-only audit log (migration 043). `actor_id` (moderator or admin), `subject_id` (the rider it was about), `event` (`moderation.remove`, `moderation.dismiss`, `moderation.suspend`, `moderation.lift_suspension`; auth events to follow), `target_type`, `target_id`, `reason`, `metadata` jsonb with no personal data. Indexed on `occurred_at` and `(subject_id, occurred_at)`.
+Append-only audit log (migration 043). `actor_id` (moderator or admin), `subject_id` (the rider it was about), `event` (`moderation.remove`, `moderation.dismiss`, `moderation.suspend`, `moderation.lift_suspension`, `consent.withdrawn` with the purpose as `reason`; auth events to follow), `target_type`, `target_id`, `reason`, `metadata` jsonb with no personal data. Indexed on `occurred_at` and `(subject_id, occurred_at)`.
+
+### Consent ledger (migration 045)
+
+Purpose-based consent and the 18+ declaration (launch readiness E6, `docs/launch-readiness/plans/consent.md`). `rider_consents` (023) stays the record of Terms and Privacy acceptance.
+
+| Table | Notes |
+| --- | --- |
+| `consent_purposes` | `code` (`ride_recording`, `live_location_sharing`, `motion_activity`, `public_profile`, `marketing_notifications`), `description`, `required_for` |
+| `consent_notices` | Every notice version shown: `purpose_code`, `version`, `locale`, `body` and `body_sha256` of the exact text. Published by the server on first use from `server/src/core/consent/notices.ts`; the same version with different text is refused |
+| `consent_events` | Append-only: `rider_id`, `purpose_code`, `notice_id`, `action` (`granted`/`withdrawn`), `source`, `app_version`, `platform`, `occurred_at`. A trigger refuses UPDATE, and DELETE unless the transaction sets `throttlebase.purging_consent_events = 'on'` (the retention purge). No cascade from `riders` |
+| `consent_state` | Latest answer per `(rider_id, purpose_code)`: `granted`, `notice_id`, `updated_at`. Written in the same transaction as the event. A grant counts only against the current notice version |
+| `rider_declarations` | `rider_id`, `kind` (`age_18_plus`), `answer`, `source` (`onboarding`/`settings`/`support`), `app_version`, `declared_at`. Every answer kept; the latest (highest `id`) is the one in force |
 
 ### `jobs`
 
