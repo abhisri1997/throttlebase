@@ -498,6 +498,7 @@ export default function RideNavigationScreen() {
   const mapTheme = useNavigationMapTheme();
   const camera = useNavigationCamera({
     mapRef,
+    isMapReady,
     fix,
     headingDegrees,
     topInset: bannerBottom,
