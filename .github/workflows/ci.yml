@@ -30,7 +30,10 @@ jobs:
       postgres:
         image: postgis/postgis:17-3.5
         env:
-          POSTGRES_PASSWORD: postgres
+          # No password: the database is reachable only from this job's
+          # runner and is thrown away with it, and a literal password here
+          # trips secret scanners.
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: throttlebase_test
         ports:
           - 5432:5432
@@ -66,7 +69,7 @@ jobs:
       - name: Integration tests (PostGIS)
         env:
           # A throwaway database for this run only.
-          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/throttlebase_test
+          TEST_DATABASE_URL: postgres://postgres@localhost:5432/throttlebase_test
         run: npm run test:integration
 
   client:
