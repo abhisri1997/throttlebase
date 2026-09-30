@@ -167,6 +167,11 @@ The only path to Google. The client never calls `googleapis.com`. Rate-limited t
 
 "Admin" means the access token's `roles` include `admin`. Roles come from `rider_roles` and are refreshed on every token refresh. Enforced by `requireAdmin` (`server/src/middleware/admin.middleware.ts`).
 
+- `GET /api/admin/moderation/queue` — open reports, one row per reported thing (preview, maker, count, reasons, recent notes), longest waiting first
+- `GET /api/admin/moderation/suspended` — riders under suspension
+- `POST /api/admin/moderation/actions` — `{ target_type, target_id, action: remove | dismiss | suspend | lift_suspension, reason }`. One transaction: the change, closing the open reports, an in-app notice to the maker (not for dismissals), and a `security_events` entry. Only posts, comments and routes can be removed
+- Sign-in by a suspended rider fails with `403 ACCOUNT_SUSPENDED`
+
 ## Feature flags
 
 | Feature | Server flag | Client flag | Routes |

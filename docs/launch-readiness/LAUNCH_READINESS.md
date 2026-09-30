@@ -83,7 +83,7 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 > **Current state (Phase 0):** `blocked_riders` exists, but a block only filters notifications. There are no reports, filter,
 > moderation queue or grievance screen. Posts accept external image URLs (`media_urls`) that bypass moderation. Inventory §6, §9 E3.
 >
-> **Update (2026-09-29):** plan in [plans/ugc-safety.md](plans/ugc-safety.md). Blocking now works both ways and hides the other rider everywhere (PR 1 of 4). Reports and the word filter are in (PR 2). Still open: the moderation queue with 180-day retention, and grievances.
+> **Update (2026-09-29):** plan in [plans/ugc-safety.md](plans/ugc-safety.md). Blocking now works both ways and hides the other rider everywhere (PR 1 of 4). Reports and the word filter are in (PR 2). The admin moderation queue, removals, suspensions and the 180-day purge of removed content are in (PR 3). Still open: grievances (PR 4).
 
 ### E4. Location & ride recording
 
@@ -180,6 +180,8 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 > - **Secret in git history:** a Google Maps API key in commits `b5cfb62`, `c563109`, `891fcab`; rotate it or confirm it is restricted.
 > - **Gaps:** no audit log and no CI.
 >
+> **Update (2026-09-30):** `security_events` exists (migration 043) and records every moderation action with the moderator, the rider, the target and the reason. Auth events follow with the logging work (D10). No CI yet.
+>
 > See **D5**; inventory §7, §9 E10.
 
 ### E11. Retention jobs (worker)
@@ -190,6 +192,8 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 
 > **Current state (Phase 0):** the only purges are expired or revoked sessions (hourly) and riders 30 days after deletion.
 > Live samples, events, incidents, notifications, `login_activity`, `email_otps` and `jobs` are kept forever. Inventory §8.
+>
+> **Update (2026-09-30):** the hourly cleanup also purges finished jobs (#51) and posts, comments and routes a moderator removed more than 180 days ago (`REMOVED_CONTENT_RETENTION_DAYS`, `server/src/core/moderation/actions.ts`).
 
 ---
 

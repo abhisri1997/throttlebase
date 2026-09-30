@@ -43,6 +43,8 @@ const options: swaggerJsdoc.Options = {
       { name: 'Rewards', description: 'Badges, achievements, and leaderboard' },
       { name: 'Notifications', description: 'In-app notifications and preferences' },
       { name: 'Settings', description: 'App settings, privacy, and blocked riders' },
+      { name: 'Reports', description: 'Reporting posts, comments, riders, rides, routes and groups' },
+      { name: 'Moderation', description: 'Admin: the report queue, removals and suspensions' },
       { name: 'Security', description: 'Login activity and session management' },
       { name: 'Support', description: 'Support ticket submission, rider replies, and admin management' },
       { name: 'Live Sessions', description: 'Live session health monitoring' },

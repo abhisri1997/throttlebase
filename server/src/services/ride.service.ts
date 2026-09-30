@@ -13,7 +13,7 @@ import { getRouteById } from "./route.service.js";
 import { describeMyRequest, type ParticipantStatus } from "../core/rides/joinRequest.js";
 import { toRidePreview, type RidePreview } from "../core/rides/ridePreview.js";
 import { previewNextCaptain } from "./ride-roster.service.js";
-import { blockedBetweenSql } from "./blocks.js";
+import { visibleToViewerSql } from "./blocks.js";
 
 /** Rides that are over; nothing about who is on them changes any more. */
 const FINISHED_RIDE_STATUSES: ReadonlySet<string> = new Set(["completed", "cancelled"]);
@@ -334,7 +334,7 @@ export const getRideById = async (
             -- So does one whose captain the viewer blocked, or was blocked by.
             (
               r.visibility = 'public' AND c.deleted_at IS NULL
-              AND NOT ${blockedBetweenSql("$2::uuid", "r.captain_id")}
+              AND ${visibleToViewerSql("$2::uuid", "r.captain_id")}
             )
             OR r.captain_id = $2
             OR EXISTS (
@@ -449,7 +449,7 @@ export const listDiscoverableRides = async (
         -- at once; its own riders still see it.
         (
           r.status = 'scheduled' AND c.deleted_at IS NULL
-          AND NOT ${blockedBetweenSql("$1::uuid", "r.captain_id")}
+          AND ${visibleToViewerSql("$1::uuid", "r.captain_id")}
         )
         OR r.captain_id = $1
         OR me.status = 'confirmed'

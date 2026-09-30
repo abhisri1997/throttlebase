@@ -15,6 +15,7 @@ import liveSessionRoutes from "./routes/live-session.routes.js";
 import stopSuggestionRoutes from "./routes/placeSuggestion.routes.js";
 import mapsRoutes from "./routes/maps.routes.js";
 import reportRoutes from "./routes/report.routes.js";
+import moderationRoutes from "./routes/moderation.routes.js";
 import { createLiveGateway } from "./realtime/gateway.js";
 import { buildAuthContainer } from "./composition/container.js";
 import { verifyEmailSender } from "./composition/createEmailSender.js";
@@ -215,6 +216,7 @@ app.use("/api/live", liveSessionRoutes);
 app.use("/api/stop-suggestions", stopSuggestionRoutes);
 app.use("/api/maps", mapsRoutes);
 app.use("/api/reports", reportRoutes);
+app.use("/api/admin/moderation", moderationRoutes);
 
 // Database health check route
 app.get("/db-test", async (req, res) => {

@@ -192,6 +192,7 @@ Written on each successful sign-in: `rider_id`, `device_fingerprint`, `ip_addres
 | `total_rides`, `total_distance_km`, `total_ride_time_sec` | int / numeric / bigint | Denormalized; recomputed from `ride_history_stats` |
 | `created_at`, `updated_at` | timestamptz | `updated_at` via trigger |
 | `deleted_at` | timestamptz | Soft delete; hard-deleted after 30 days by the cleanup job |
+| `suspended_at`, `suspended_by`, `suspension_reason` | timestamptz / uuid / text | Set by a moderator (migration 043). A suspended rider can't sign in and their content is hidden until it's lifted |
 
 `needsOnboarding` in the auth response means `username IS NULL`.
 
@@ -383,6 +384,7 @@ Bookmarks: unique `(route_id, rider_id)`. Shares: `route_id`, `shared_with_rider
 | `groups` | `name`, `description`, `visibility` (`public`/`private`), `created_by` | Behind `FEATURE_GROUPS` |
 | `group_members` | PK `(group_id, rider_id)`, `role` (`admin`/`member`) | |
 | `blocked_riders` | PK `(blocker_id, blocked_id)` | Works both ways; what it hides is in `server/src/services/blocks.ts` |
+| `posts`, `comments`, `routes`: `removed_at`, `removed_by`, `removal_reason` | | Set by a moderator (migration 043). Hidden from everyone; purged 180 days after `removed_at` |
 | `reports` | `reporter_id`, `target_type` (`post`/`comment`/`rider`/`ride`/`route`/`group`), `target_id`, `target_rider_id`, `reason`, `note` (≤1000), `status` (`open`/`actioned`/`dismissed`), `resolved_at`, `resolved_by` | Migration 042. One open report per reporter per target (partial unique index). `target_rider_id` is who made the reported thing, resolved at report time |
 
 ---
@@ -425,6 +427,10 @@ Behind `FEATURE_SUPPORT`.
 ---
 
 ## Platform tables
+
+### `security_events`
+
+Append-only audit log (migration 043). `actor_id` (moderator or admin), `subject_id` (the rider it was about), `event` (`moderation.remove`, `moderation.dismiss`, `moderation.suspend`, `moderation.lift_suspension`; auth events to follow), `target_type`, `target_id`, `reason`, `metadata` jsonb with no personal data. Indexed on `occurred_at` and `(subject_id, occurred_at)`.
 
 ### `jobs`
 

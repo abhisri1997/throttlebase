@@ -21,6 +21,7 @@ interface RiderRow {
   username: string | null;
   profile_picture_url: string | null;
   created_at: Date;
+  suspended: boolean;
 }
 
 const toRecord = (row: RiderRow): RiderRecord => ({
@@ -30,10 +31,11 @@ const toRecord = (row: RiderRow): RiderRecord => ({
   username: row.username,
   avatarUrl: row.profile_picture_url,
   createdAt: row.created_at,
+  suspended: row.suspended,
 });
 
 const RIDER_COLUMNS =
-  "id, email, display_name, username, profile_picture_url, created_at";
+  "id, email, display_name, username, profile_picture_url, created_at, suspended_at IS NOT NULL AS suspended";
 
 /**
  * Transaction-scoped rider operations.

@@ -32,7 +32,10 @@ As below. The word filter's starting list (`server/src/core/moderation/blockedTe
 - `POST /api/reports`, rate-limited. Report from the post and comment menu, the rider profile, ride detail and route detail. Reporting offers to block the rider too.
 - Word filter on post and comment create and edit: a pluggable list (`core/moderation/wordFilter.ts`), starting small. A hit is refused with a clear message rather than silently hidden. ⚖️ list contents.
 
-### 3. Moderation queue and takedown
+### 3. Moderation queue and takedown — ✅ built
+
+As below, with two choices made while building it: rides, riders and groups aren't removed on their own (their maker is suspended instead), and a removed route is hidden from its creator too. Admin screen: Settings → Admin → Moderation. A suspended rider's devices are signed out within an access token's 15 minutes.
+
 
 - Admin screen (roles from #68): open reports, oldest first, grouped by target, with the content and the reporter's reason.
 - Actions, each recorded with the moderator and a reason: **remove content** (soft delete: `removed_at`, `removed_by`, `removal_reason`, hidden everywhere like a deleted rider's content), **dismiss**, **suspend rider** (sign-out everywhere, sign-in refused, content hidden) and **lift suspension**.

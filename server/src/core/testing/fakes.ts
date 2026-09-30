@@ -351,6 +351,7 @@ export class FakeRiderRepository implements RiderRepository {
       experienceLevel: input.experienceLevel ?? null,
       locationCity: input.locationCity ?? null,
       deletedAt: input.deletedAt ?? null,
+      suspended: input.suspended ?? false,
     };
     this.state.riders.push(row);
     return row;

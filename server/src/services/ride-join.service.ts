@@ -26,7 +26,7 @@ import { JOB_TYPES } from "../queue/job-types.js";
 import { inTransaction, syncRiderCounts } from "./ride-roster.service.js";
 import { getRideById, recalculateStartPoint, type Ride } from "./ride.service.js";
 import type { SqlClient } from "./ride-progress.repository.js";
-import { blockedBetweenSql } from "./blocks.js";
+import { visibleToViewerSql } from "./blocks.js";
 
 /** Rides a rider can join or ask to join. */
 const JOINABLE_RIDE_STATUSES: ReadonlySet<string> = new Set(["scheduled", "active"]);
@@ -79,12 +79,10 @@ const lockRide = async (client: SqlClient, rideId: string): Promise<LockedRide> 
   return ride;
 };
 
-const isBlockedWith = async (client: SqlClient, riderId: string, otherId: string): Promise<boolean> => {
-  const result = await client.query(`SELECT ${blockedBetweenSql("$1::uuid", "$2::uuid")} AS blocked`, [
-    riderId,
-    otherId,
-  ]);
-  return Boolean(result.rows[0]?.blocked);
+const isHiddenWith = async (client: SqlClient, riderId: string, otherId: string): Promise<boolean> => {
+  // Blocked either way, or the captain is suspended.
+  const result = await client.query(`SELECT NOT ${visibleToViewerSql("$1", "$2::uuid")} AS hidden`, [riderId, otherId]);
+  return Boolean(result.rows[0]?.hidden);
 };
 
 const toSeat = (status: unknown, declineCount: unknown): ExistingSeat | null =>
@@ -160,7 +158,7 @@ export const joinOrRequestRide = async (
     const ride = await lockRide(client, rideId);
     // A ride led by someone the rider blocked, or who blocked them, reads as
     // not found (services/blocks.ts).
-    if (await isBlockedWith(client, riderId, ride.captain_id)) throw new RideJoinError("not_found");
+    if (await isHiddenWith(client, riderId, ride.captain_id)) throw new RideJoinError("not_found");
     // A finished ride can't be joined: that would also let anyone review it.
     if (!JOINABLE_RIDE_STATUSES.has(ride.status)) throw new RideJoinError("not_joinable");
 
