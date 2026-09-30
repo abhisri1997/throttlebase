@@ -55,6 +55,10 @@ const getEscalatableIncidents = async (): Promise<EscalatableIncident[]> => {
      JOIN rides r ON r.id = s.ride_id
      WHERE i.status = 'open'
        AND i.severity IN ('high', 'critical')
+       -- Only while the ride is live: escalating afterwards helps nobody,
+       -- and the NOT EXISTS below can't stop a repeat once the cleanup has
+       -- purged the earlier notification (cleanup.processor.ts).
+       AND s.status <> 'ended'
        AND i.created_at <= now() - ($1 || ' seconds')::interval
        AND NOT EXISTS (
          SELECT 1
