@@ -57,6 +57,8 @@ interface FollowFrame {
   at: number;
   center: LatLng;
   heading: number;
+  /** The map padding it was framed with. */
+  paddingKey: string;
 }
 
 export const useNavigationCamera = ({
@@ -82,14 +84,23 @@ export const useNavigationCamera = ({
   }, [bottomInset, mode, topInset, windowHeight]);
 
   // Follow the rider. Also runs right after re-centring, once the follow padding is in place.
+  //
+  // On Android a padding change stops a running camera animation. Entering
+  // follow mode changes the padding (the look-ahead), so the long glide back
+  // to the rider after re-centring, or on opening navigation, stopped part-way
+  // and stayed there while the rider stood still. So on Android, entering
+  // follow mode or a padding change moves the camera in one step; the small
+  // moves while riding still animate. iOS animates throughout.
   useEffect(() => {
     const map = mapRef.current;
     if (mode !== "follow" || !fix || !map) return;
 
     const last = lastFollowRef.current;
     const heading = headingDegrees ?? last?.heading ?? 0;
+    const paddingKey = `${mapPadding.top}:${mapPadding.right}:${mapPadding.bottom}:${mapPadding.left}`;
+    const isPaddingChanged = last !== null && last.paddingKey !== paddingKey;
 
-    if (last) {
+    if (last && !isPaddingChanged) {
       const isTooSoon = Date.now() - last.at < MIN_FOLLOW_INTERVAL_MS;
       const hasMoved = haversineMeters(last.center, fix.coordinate) >= MIN_FOLLOW_MOVE_METERS;
       const hasTurned = angleDeltaDegrees(last.heading, heading) >= MIN_FOLLOW_TURN_DEGREES;
@@ -99,11 +110,13 @@ export const useNavigationCamera = ({
     const zoom = followZoomForSpeed(fix.speedMps, zoomRef.current);
     zoomRef.current = zoom;
 
-    map.animateCamera(
-      { center: fix.coordinate, heading, pitch: FOLLOW_PITCH_DEGREES, zoom },
-      { duration: FOLLOW_ANIMATION_MS },
-    );
-    lastFollowRef.current = { at: Date.now(), center: fix.coordinate, heading };
+    const target = { center: fix.coordinate, heading, pitch: FOLLOW_PITCH_DEGREES, zoom };
+    if (Platform.OS === "android" && (last === null || isPaddingChanged)) {
+      map.setCamera(target);
+    } else {
+      map.animateCamera(target, { duration: FOLLOW_ANIMATION_MS });
+    }
+    lastFollowRef.current = { at: Date.now(), center: fix.coordinate, heading, paddingKey };
   }, [fix, headingDegrees, mapRef, mode, mapPadding]);
 
   // Frame the overview: north-up, flat, the whole remaining route in the
