@@ -10,7 +10,7 @@ import { haversineMeters } from "../utils/polyline.js";
 import { snapToNearestPlace } from "./meetingPoint.service.js";
 import { enqueueRideStatsRecompute } from "./jobs.service.js";
 import { getRouteById } from "./route.service.js";
-import { describeMyRequest, type ParticipantStatus } from "../core/rides/joinRequest.js";
+import { describeMyRequest, type ParticipantStatus, type RideVisibility } from "../core/rides/joinRequest.js";
 import { toRidePreview, type RidePreview } from "../core/rides/ridePreview.js";
 import { previewNextCaptain } from "./ride-roster.service.js";
 import { visibleToViewerSql } from "./blocks.js";
@@ -25,6 +25,8 @@ export interface Ride {
   description: string | null;
   status: string;
   visibility: string;
+  /** 'planned' (the ride form) or 'unplanned' (Ride now, docs/ride-now-ux.md). */
+  kind: RideKind;
   scheduled_at: string;
   /** When it was actually ridden (the rider's own start, else the live session's); null if never live. */
   actual_started_at?: string | null;
@@ -88,6 +90,25 @@ export class RoadNotFollowableError extends Error {
     super("A route ridden the other way round cannot follow its road");
     this.name = "RoadNotFollowableError";
   }
+}
+
+/**
+ * An unplanned ride stays hidden: made alone it is 'solo', and riders join
+ * only by invitation. Making it public would list a ride under way in Discover.
+ */
+export class UnplannedVisibilityError extends Error {
+  constructor() {
+    super("A ride started with Ride now stays hidden");
+    this.name = "UnplannedVisibilityError";
+  }
+}
+
+export type RideKind = "planned" | "unplanned";
+
+/** What only the server decides when it makes a ride; the ride form can't set these. */
+export interface CreateRideOptions {
+  kind?: RideKind;
+  visibility?: RideVisibility;
 }
 
 type LngLat = [number, number];
@@ -160,7 +181,7 @@ const insertPlannedStops = async (
 };
 
 const RIDE_COLUMNS = `
-  id, captain_id, title, description, status, visibility,
+  id, captain_id, title, description, status, visibility, kind,
   scheduled_at, estimated_duration_min, max_capacity,
   current_rider_count, requirements, created_at, updated_at
 `;
@@ -181,6 +202,7 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
 export const createRide = async (
   captainId: string,
   data: CreateRideInput,
+  options: CreateRideOptions = {},
 ): Promise<Ride | null> => {
   // Checked before anything is written, so a route the captain cannot use
   // leaves no half-made ride behind.
@@ -203,18 +225,20 @@ export const createRide = async (
       "max_capacity",
       "requirements",
       "current_rider_count",
+      "kind",
     ];
     const values: any[] = [
       captainId,
       data.title,
       data.description || null,
       data.status || "draft",
-      data.visibility,
+      options.visibility ?? data.visibility,
       data.scheduled_at,
       data.estimated_duration_min || null,
       data.max_capacity || null,
       data.requirements ? JSON.stringify(data.requirements) : null,
       1, // current_rider_count starts at 1 (the captain)
+      options.kind ?? "planned",
     ];
 
     let paramIndex = values.length;
@@ -464,6 +488,8 @@ export const listDiscoverableRides = async (
         -- at once; its own riders still see it.
         (
           r.status = 'scheduled' AND c.deleted_at IS NULL
+          -- Hidden rides (invite only, solo) are never listed to others.
+          AND r.visibility IN ('public', 'private')
           AND ${visibleToViewerSql("$1::uuid", "r.captain_id")}
         )
         OR r.captain_id = $1
@@ -526,7 +552,7 @@ export const updateRideInfo = async (
 ): Promise<Ride | null> => {
   // Verify the caller is captain or co-captain
   const authCheck = await query(
-    `SELECT r.status, r.route_id, r.route_reversed FROM rides r WHERE r.id = $1 AND (
+    `SELECT r.status, r.kind, r.route_id, r.route_reversed FROM rides r WHERE r.id = $1 AND (
       r.captain_id = $2 OR EXISTS (
         SELECT 1 FROM ride_participants WHERE ride_id = $1 AND rider_id = $2 AND role = 'co_captain'
       )
@@ -540,6 +566,10 @@ export const updateRideInfo = async (
   const currentStatus = authCheck.rows[0].status;
   if (["completed", "cancelled"].includes(currentStatus)) {
     throw new Error(`Cannot edit a ride that is already ${currentStatus}`);
+  }
+
+  if (fields.visibility !== undefined && authCheck.rows[0].kind === "unplanned") {
+    throw new UnplannedVisibilityError();
   }
 
   // If status change requested, validate transition

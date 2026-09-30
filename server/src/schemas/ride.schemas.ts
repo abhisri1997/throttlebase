@@ -59,6 +59,21 @@ export const CreateRideSchema = z.object({
 });
 
 /**
+ * Ride now (docs/ride-now-ux.md §7.2): everything is optional but the name,
+ * which the app makes from the destination or the time of day. The server
+ * decides the rest: unplanned, hidden, starting now.
+ */
+export const RideNowSchema = CreateRideSchema.pick({
+  title: true,
+  start_point_coords: true,
+  start_point_name: true,
+  end_point_coords: true,
+  end_point_name: true,
+  stops: true,
+  route: true,
+});
+
+/**
  * The route a ride was planned on is fixed once it exists; the captain can
  * only choose whether to keep following its road.
  */
@@ -103,6 +118,7 @@ export const HandleStopSchema = z.object({
 
 export type CreateRideInput = z.infer<typeof CreateRideSchema>;
 export type UpdateRideInput = z.infer<typeof UpdateRideSchema>;
+export type RideNowInput = z.infer<typeof RideNowSchema>;
 export type PromoteCoCaptainInput = z.infer<typeof PromoteCoCaptainSchema>;
 export type RequestStopInput = z.infer<typeof RequestStopSchema>;
 export type RequestRegroupInput = z.infer<typeof RequestRegroupSchema>;

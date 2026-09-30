@@ -65,3 +65,14 @@ test("the rider's own request reads as none, waiting or declined", () => {
     can_request: true,
   });
 });
+
+test("nobody joins or asks for a solo ride", () => {
+  assert.deepEqual(decideJoin("solo", null), { kind: "refuse", reason: "closed" });
+  assert.deepEqual(decideJoin("solo", { status: "invited", declineCount: 0 }), { kind: "refuse", reason: "closed" });
+});
+
+test("an invite-only ride is joined only by an invited rider", () => {
+  assert.deepEqual(decideJoin("invite_only", null), { kind: "refuse", reason: "closed" });
+  assert.deepEqual(decideJoin("invite_only", { status: "dropped_out", declineCount: 0 }), { kind: "refuse", reason: "closed" });
+  assert.deepEqual(decideJoin("invite_only", { status: "invited", declineCount: 0 }), { kind: "join" });
+});

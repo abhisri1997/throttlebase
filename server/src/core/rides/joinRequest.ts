@@ -5,12 +5,15 @@
  * (visibility 'private') is asked for, and its captain or a co-captain
  * accepts each rider. A declined rider may ask once more, in case the
  * leader declined by mistake; after the second decline they can't ask again.
+ *
+ * Two kinds of ride are hidden (docs/ride-now-ux.md): an 'invite_only' ride
+ * is joined only by a rider its captain invited, and a 'solo' ride by nobody.
  */
 
 /** Declines after which a rider can't ask for the ride again. */
 export const MAX_DECLINES = 2;
 
-export type RideVisibility = "public" | "private";
+export type RideVisibility = "public" | "private" | "invite_only" | "solo";
 
 export type ParticipantStatus = "invited" | "requested" | "confirmed" | "dropped_out" | "rejected";
 
@@ -20,7 +23,7 @@ export interface ExistingSeat {
   declineCount: number;
 }
 
-export type JoinRefusal = "already_on_ride" | "already_requested" | "declined";
+export type JoinRefusal = "already_on_ride" | "already_requested" | "declined" | "closed";
 
 export type JoinDecision = { kind: "join" } | { kind: "request" } | { kind: "refuse"; reason: JoinRefusal };
 
@@ -28,6 +31,8 @@ const refuse = (reason: JoinRefusal): JoinDecision => ({ kind: "refuse", reason 
 
 export const decideJoin = (visibility: RideVisibility, existing: ExistingSeat | null): JoinDecision => {
   if (existing?.status === "confirmed") return refuse("already_on_ride");
+  if (visibility === "solo") return refuse("closed");
+  if (visibility === "invite_only") return existing?.status === "invited" ? { kind: "join" } : refuse("closed");
   if (visibility === "public") return { kind: "join" };
   if (existing?.status === "requested") return refuse("already_requested");
   if (existing && existing.declineCount >= MAX_DECLINES) return refuse("declined");

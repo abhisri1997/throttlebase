@@ -28,6 +28,7 @@ const REFUSAL_STATUS: Readonly<Record<RideJoinRefusal, number>> = {
   declined: 403,
   not_leader: 403,
   no_request: 404,
+  closed: 403,
 };
 
 const JOIN_MESSAGES: Readonly<Record<JoinOutcome, string>> = {
