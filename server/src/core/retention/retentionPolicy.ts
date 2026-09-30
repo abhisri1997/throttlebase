@@ -34,6 +34,16 @@ export const SECURITY_LOG_RETENTION_DAYS = 365;
  */
 export const EMAIL_CODE_RETENTION_DAYS = 30;
 
+/** Days an in-app notification is kept. The app lists only the latest 50. */
+export const NOTIFICATION_RETENTION_DAYS = 90;
+
+/**
+ * Days a ride incident (a group alert, with where it was raised) is kept,
+ * like other records kept for complaints and legal requests. After that the
+ * ride's timeline no longer shows it.
+ */
+export const INCIDENT_RETENTION_DAYS = 180;
+
 /** Days a completed or cancelled job is kept. */
 export const JOB_RETENTION_DAYS = 7;
 

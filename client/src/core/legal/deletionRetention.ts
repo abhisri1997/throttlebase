@@ -20,5 +20,9 @@ export const SHARED_RIDES_KEPT =
 export const SECURITY_RECORDS_KEPT =
   "Sign-in records (when you signed in, from which IP address and on which device) are kept for 1 year, or until your data is deleted if you delete your account sooner. Email codes you ask for, with the IP address they were requested from, are kept for 30 days. Other security records, such as moderation decisions, are kept for 1 year.";
 
+/** The period is INCIDENT_RETENTION_DAYS in server/src/core/retention/retentionPolicy.ts. */
+export const RIDE_ALERTS_KEPT =
+  "Alerts raised during a ride, with where they were raised, stay with the ride for 180 days and are then deleted.";
+
 export const LEGALLY_PRESERVED =
   "Content or records we are legally required to preserve, for example under a court order or after a complaint, are kept for 180 days or longer if the law requires.";
