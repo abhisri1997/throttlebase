@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { useWindowDimensions } from "react-native";
+import { Platform, useWindowDimensions } from "react-native";
 import type MapView from "react-native-maps";
 import type { Details, EdgePadding, Region } from "react-native-maps";
 import { FOLLOW_PITCH_DEGREES, followZoomForSpeed } from "../core/cameraPolicy";
@@ -107,12 +107,18 @@ export const useNavigationCamera = ({
   }, [fix, headingDegrees, mapRef, mode, mapPadding]);
 
   // Frame the overview: north-up, flat, the whole remaining route in the
-  // visible area. One camera move with a worked-out centre and zoom
-  // (core/overviewCamera.ts): the map's own fit, with a tilt reset and a
-  // padding change in the same moment, left Android where it was.
+  // visible area, with a worked-out centre and zoom (core/overviewCamera.ts).
+  //
+  // Opening the overview also collapses the trip sheet, so the map's bottom
+  // padding changes for several frames afterwards. On Android every padding
+  // change stops a running camera animation, and the map was left part-way
+  // out. So Android moves in one step, and the framing is redone whenever the
+  // padding changes while in overview, fitting the area that is finally clear.
+  // iOS keeps its single animated move, which padding changes don't stop.
+  const framedRequestRef = useRef(0);
   useEffect(() => {
     const map = mapRef.current;
-    if (overviewRequest === 0 || !map) return;
+    if (overviewRequest === 0 || mode !== "overview" || !map) return;
 
     const camera = overviewCamera(overviewCoordinatesRef.current, {
       width: windowWidth,
@@ -123,12 +129,17 @@ export const useNavigationCamera = ({
     });
     if (!camera) return;
 
-    map.animateCamera(
-      { center: camera.center, zoom: camera.zoom, heading: 0, pitch: 0 },
-      { duration: FOCUS_ANIMATION_MS },
-    );
-    // Padding is read, not a trigger: only a new request reframes.
-  }, [mapRef, overviewRequest]);
+    const target = { center: camera.center, zoom: camera.zoom, heading: 0, pitch: 0 };
+    const isNewRequest = framedRequestRef.current !== overviewRequest;
+    framedRequestRef.current = overviewRequest;
+
+    if (Platform.OS === "ios") {
+      // Unaffected by padding changes, so one animated move per request.
+      if (isNewRequest) map.animateCamera(target, { duration: FOCUS_ANIMATION_MS });
+      return;
+    }
+    map.setCamera(target);
+  }, [mapRef, overviewRequest, mode, mapPadding.top, mapPadding.bottom, windowWidth, windowHeight]);
 
   const follow = useCallback(() => {
     lastFollowRef.current = null;
