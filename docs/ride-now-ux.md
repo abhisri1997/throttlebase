@@ -312,7 +312,7 @@ Existing rides become `planned` and keep their visibility. Discover (`listDiscov
 - records a point with `ride_recording`;
 - broadcasts it to the room with `live_location_sharing`.
 
-Riders never asked keep today's behaviour. Update `plans/consent.md` and the consent sheet copy to match.
+Riders never asked keep today's behaviour. Without sharing, the position is also not kept as the rider's last one, so nobody sees their distance to the destination; and the replay returns only the caller's own samples (D2). **Built 2026-10-01.** The app's consent sheet copy and its reaction to a withdrawal (today it stops tracking) change with the client steps.
 
 ### 7.4 Mid-ride destination
 

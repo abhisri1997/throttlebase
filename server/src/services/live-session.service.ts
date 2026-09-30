@@ -1129,7 +1129,13 @@ export const updateLivePresenceLocation = async (
   rideId: string,
   riderId: string,
   input: LiveLocationUpdateInput,
-  options?: { persistSample?: boolean },
+  /**
+   * persistSample: keep the point in the rider's track (ride_recording).
+   * share: keep it as their last known position, which the ride's session
+   * state reads (live_location_sharing; on unless said otherwise). Without
+   * it the position is used for their own arrival and nothing else.
+   */
+  options?: { persistSample?: boolean; share?: boolean },
 ): Promise<{
   sessionId: string;
   riderId: string;
@@ -1235,7 +1241,7 @@ export const updateLivePresenceLocation = async (
          $3,
          true,
          $4::timestamptz,
-         ST_SetSRID(ST_MakePoint($5, $6), 4326)::geography,
+         CASE WHEN $7 THEN ST_SetSRID(ST_MakePoint($5, $6), 4326)::geography END,
          now()
        )
        ON CONFLICT (session_id, rider_id)
@@ -1245,7 +1251,7 @@ export const updateLivePresenceLocation = async (
          last_heartbeat_at = EXCLUDED.last_heartbeat_at,
          last_location = EXCLUDED.last_location,
          updated_at = now()`,
-      [session.id, riderId, role, capturedAt, input.lon, input.lat],
+      [session.id, riderId, role, capturedAt, input.lon, input.lat, options?.share !== false],
     );
 
     // A rider's ride runs from their own start — early, or the group rolling
@@ -1485,8 +1491,10 @@ export const getLiveSessionReplay = async (
 
   const limit = Math.min(opts.limit ?? 200, 500);
   const params: unknown[] = [session.id, limit + 1]; // +1 to detect next page
-  const conditions: string[] = ["s.session_id = $1"];
-  let pidx = 3;
+  // Only the caller's own line: another rider's exact track is theirs (D2).
+  params.push(callerId);
+  const conditions: string[] = ["s.session_id = $1", "s.rider_id = $3"];
+  let pidx = 4;
 
   if (opts.cursor) {
     const [cursorCapturedAt, cursorId] = opts.cursor.split("|");

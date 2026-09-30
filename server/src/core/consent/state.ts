@@ -112,8 +112,10 @@ export const permissionsFrom = (stored: readonly StoredConsent[]): ConsentPermis
 };
 
 export interface LocationUpdateUse<Activity> {
-  /** Refuse the update: the rider is not sharing their live location. */
+  /** Refuse the update: the rider neither shares nor records their position. */
   refuse: boolean;
+  /** Show the position to the ride: broadcast it and keep it as their last known one. */
+  share: boolean;
   /** Keep the point in the rider's recorded track. */
   record: boolean;
   /** The motion activity to use, or undefined to drop it. */
@@ -122,15 +124,22 @@ export interface LocationUpdateUse<Activity> {
 
 /**
  * What a live location update may be used for (plans/consent.md,
- * "Enforcement"): shared only with live_location_sharing, recorded only with
- * ride_recording as well, and its motion activity used only with
- * motion_activity.
+ * "Enforcement"): shared with the ride only with live_location_sharing,
+ * recorded only with ride_recording, and its motion activity used only with
+ * motion_activity. Recording doesn't need sharing (docs/ride-now-ux.md §7.3),
+ * so a rider alone, or one who keeps their position to themselves, still
+ * gets their ride. An update used for neither is refused.
  */
 export const locationUpdateUse = <Activity>(
   permissions: ConsentPermissions,
   activity: Activity | undefined,
-): LocationUpdateUse<Activity> => ({
-  refuse: !permissions.live_location_sharing,
-  record: permissions.live_location_sharing && permissions.ride_recording,
-  activity: permissions.live_location_sharing && permissions.motion_activity ? activity : undefined,
-});
+): LocationUpdateUse<Activity> => {
+  const share = permissions.live_location_sharing;
+  const record = permissions.ride_recording;
+  return {
+    refuse: !share && !record,
+    share,
+    record,
+    activity: (share || record) && permissions.motion_activity ? activity : undefined,
+  };
+};

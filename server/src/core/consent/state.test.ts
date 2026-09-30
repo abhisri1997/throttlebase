@@ -97,21 +97,37 @@ test("a no, a withdrawal or an outdated grant switches the feature off", () => {
 
 test("a location update is shared, recorded and classified only as far as the rider agreed", () => {
   const all = permissionsFrom([]);
-  assert.deepEqual(locationUpdateUse(all, "riding"), { refuse: false, record: true, activity: "riding" });
+  assert.deepEqual(locationUpdateUse(all, "riding"), { refuse: false, share: true, record: true, activity: "riding" });
 
   assert.deepEqual(locationUpdateUse({ ...all, ride_recording: false }, "riding"), {
     refuse: false,
+    share: true,
     record: false,
     activity: "riding",
   });
   assert.deepEqual(locationUpdateUse({ ...all, motion_activity: false }, "riding"), {
     refuse: false,
+    share: true,
     record: true,
     activity: undefined,
   });
-  // Not sharing: refused outright, and nothing else is used.
+});
+
+test("a rider who isn't sharing can still record their own ride (docs/ride-now-ux.md §7.3)", () => {
+  const all = permissionsFrom([]);
   assert.deepEqual(locationUpdateUse({ ...all, live_location_sharing: false }, "riding"), {
+    refuse: false,
+    share: false,
+    record: true,
+    activity: "riding",
+  });
+});
+
+test("an update neither shared nor recorded is refused, and nothing is used", () => {
+  const all = permissionsFrom([]);
+  assert.deepEqual(locationUpdateUse({ ...all, live_location_sharing: false, ride_recording: false }, "riding"), {
     refuse: true,
+    share: false,
     record: false,
     activity: undefined,
   });
