@@ -42,7 +42,7 @@ const isNotFound = (error: unknown): boolean =>
   error !== null &&
   (error as { response?: { status?: number } }).response?.status === 404;
 
-const fetchRideTrack = async (rideId: string): Promise<RideTrack | null> => {
+export const fetchRideTrack = async (rideId: string): Promise<RideTrack | null> => {
   try {
     const { data } = await apiClient.get(`/api/rides/${rideId}/track`);
     const parsed = RideTrackResponseSchema.parse(data);

@@ -347,7 +347,13 @@ One PR each, reviewed before the next.
 
 1. **This doc.**
 2. **Server core:** migration 048, `POST /ride-now`, Discover exclusion, mid-ride destination, the consent split and the `riding` fields. Integration tests.
-3. **Client, Ride now solo:** the "+" chooser, the Ride now screen, the navigation "just riding" mode and the ride bar (riding stage).
+3. **Client, Ride now solo:** the "+" chooser, the Ride now screen, the navigation "just riding" mode and the ride bar (riding stage). **Built 2026-10-01.** Moved to later steps:
+   - the Battery chip, which needs a native module (expo-battery), goes with the next native change;
+   - Ride a Saved Route goes to step 8, and Invite Riders to step 7;
+   - the route summary under a destination and the stops come later too;
+   - Add destination mid-ride goes to step 4, with the motion lock.
+
+   Until step 4, Finish Ride asks first.
 4. **Client, finish and after:** motion lock, stopped sheet, hold to finish, the stopped prompt, summary additions, `CompletedRideView` and history labels.
 5. **Solo safety:** the Safety sheet, emergency contact settings and the notification copy with its Finish action.
 6. **Upcoming bar and chooser states:** the three bar stages, the chooser's "Back to" and "Start" rows, and Finish and join.

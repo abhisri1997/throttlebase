@@ -8,8 +8,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus, Platform } from "react-native";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchRidesImRiding } from "../features/rides/api/rideProgress";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRidingNow } from "../features/rideNow/hooks/useRidingNow";
 import { useAccessToken, useAuthState } from "../services/useAuthState";
 import { useCurrentRider } from "../services/useCurrentRider";
 import {
@@ -19,26 +19,9 @@ import {
   onLiveLocationWithdrawn,
   resumeTrackingInForeground,
 } from "../services/backgroundLocationService";
-import { noticeFor, ridePurposesToAsk, rideSharing, type ConsentNotice } from "../features/consent/core/consent";
+import { noticeFor, ridePurposesToAsk, rideTracking, type ConsentNotice } from "../features/consent/core/consent";
 import { CONSENTS_QUERY_KEY, useConsents } from "../features/consent/hooks/useConsents";
 import { askRideConsent } from "../features/consent/hooks/rideConsentPrompt";
-
-type RideSummary = {
-  id: string;
-  status: string;
-  captain_id: string;
-};
-
-/**
- * The rides this rider is riding right now: their own ride is under way —
- * started early, or the group rolled out — and they have not finished. A ride
- * still "scheduled" counts once they start early; one they have finished does
- * not, even while the rest of the group rides on.
- */
-// A failed poll must not read as "no ride": that stopped tracking on every
-// server hiccup and restarted it on the next good poll. Letting the error
-// through keeps the last known rides until a poll succeeds.
-const fetchMyActiveRides = (): Promise<RideSummary[]> => fetchRidesImRiding();
 
 const logTrackingError = (action: string) => (error: unknown) =>
   console.warn(
@@ -66,15 +49,10 @@ export function useBackgroundLocationTracker() {
   // (a "Not now"), and the decision below must run again either way.
   const [consentRound, setConsentRound] = useState(0);
 
-  // Poll for active rides every 30s (lightweight query)
-  const { data: activeRides } = useQuery({
-    queryKey: ["my-active-rides-bg"],
-    queryFn: fetchMyActiveRides,
-    enabled: isAuthenticated && Platform.OS !== "web",
-    refetchInterval: 30000,
-    refetchIntervalInBackground: false,
-    staleTime: 15000,
-  });
+  // The rides this rider is riding right now: their own ride is under way —
+  // started early, or the group rolled out — and they have not finished. One
+  // they have finished does not count, even while the group rides on.
+  const { rides: activeRides } = useRidingNow();
 
   useEffect(() => {
     if (Platform.OS === "web" || !isAuthenticated || !token || !rider?.id) {
@@ -133,21 +111,24 @@ export function useBackgroundLocationTracker() {
       }
     }
 
-    // Riders never asked share as before (option B); a no stops it.
-    const sharing = consentOverview ? rideSharing(consentOverview) : { share: true, motion: true };
-    if (!sharing.share) {
+    // Riders never asked share and record as before (option B). Recording
+    // and sharing are separate: only both off stops tracking.
+    const tracking = consentOverview
+      ? rideTracking(consentOverview)
+      : { track: true, share: true, motion: true };
+    if (!tracking.track) {
       if (currentlyTracking) stopTrackingSafely();
       return;
     }
 
-    if (activeRide.id !== currentlyTracking) {
-      // New active ride found — start tracking
-      startTracking(activeRide.id, { motion: sharing.motion }).catch(logTrackingError("start"));
-    }
+    // Starts a new ride, or brings the running one in line with the answers.
+    startTracking(activeRide.id, { motion: tracking.motion, share: tracking.share }).catch(
+      logTrackingError("start"),
+    );
   }, [activeRides, isAuthenticated, token, rider?.id, consentOverview, consentFailed, consentRound, queryClient]);
 
-  // Withdrawn on this or another device: tracking has stopped; refresh the
-  // answers so it isn't started again.
+  // Sharing withdrawn on this or another device: refresh the answers, which
+  // decide whether the ride goes on being recorded or tracking stops.
   useEffect(
     () =>
       onLiveLocationWithdrawn(() => {
