@@ -22,10 +22,13 @@ if (CONNECTION) {
 const db = CONNECTION ? await import("../../config/db.js") : null;
 const consent = CONNECTION ? await import("../../services/consent.service.js") : null;
 const notices = CONNECTION ? await import("../../core/consent/notices.js") : null;
+const live = CONNECTION ? await import("../../services/live-session.service.js") : null;
 
 const ASHA = "a1a1a1a1-0000-0000-0000-0000000000e1";
 const BALA = "b2b2b2b2-0000-0000-0000-0000000000e2";
-const RIDERS = [ASHA, BALA];
+const CHITRA = "c3c3c3c3-0000-0000-0000-0000000000e3";
+const DEV = "d4d4d4d4-0000-0000-0000-0000000000e4";
+const RIDERS = [ASHA, BALA, CHITRA, DEV];
 
 test("the consent ledger", { skip: !CONNECTION }, async (t) => {
   const admin = new pg.Pool({ connectionString: CONNECTION, max: 2 });
@@ -39,7 +42,9 @@ test("the consent ledger", { skip: !CONNECTION }, async (t) => {
   await admin.query(
     `INSERT INTO riders (id, email, display_name, username) VALUES
        ($1, 'cns-asha@example.test', 'Asha', 'cnsasha'),
-       ($2, 'cns-bala@example.test', 'Bala', 'cnsbala')
+       ($2, 'cns-bala@example.test', 'Bala', 'cnsbala'),
+       ($3, 'cns-chitra@example.test', 'Chitra', 'cnschitra'),
+       ($4, 'cns-dev@example.test', 'Dev', 'cnsdev')
      ON CONFLICT (id) DO NOTHING`,
     RIDERS,
   );
@@ -54,10 +59,12 @@ test("the consent ledger", { skip: !CONNECTION }, async (t) => {
     await client.query(`DELETE FROM consent_events WHERE rider_id = ANY($1)`, [RIDERS]);
     await client.query(`DELETE FROM rider_declarations WHERE rider_id = ANY($1)`, [RIDERS]);
     await client.query(`DELETE FROM security_events WHERE subject_id = ANY($1) AND event LIKE 'consent.%'`, [RIDERS]);
+    await client.query(`DELETE FROM rides WHERE captain_id = ANY($1)`, [RIDERS]);
     await client.query("COMMIT");
   } finally {
     client.release();
   }
+  consent!.forgetConsentPermissions();
 
   const version = notices!.CURRENT_NOTICES.live_location_sharing.version;
   const events = async (riderId: string): Promise<{ action: string; source: string }[]> =>
@@ -266,5 +273,84 @@ test("the consent ledger", { skip: !CONNECTION }, async (t) => {
       all.rows.map((row) => row.answer),
       [true, false],
     );
+  });
+
+  await t.test("a rider never asked keeps sharing and recording, but gets no marketing", async () => {
+    const permissions = await consent!.consentPermissions(DEV);
+    assert.equal(permissions.live_location_sharing, true);
+    assert.equal(permissions.ride_recording, true);
+    assert.equal(permissions.marketing_notifications, false);
+  });
+
+  await t.test("a withdrawal closes the gate at once, despite the cache", async () => {
+    const version = notices!.CURRENT_NOTICES.live_location_sharing.version;
+    // Warm the cache with the open gate first.
+    assert.equal((await consent!.consentPermissions(CHITRA)).live_location_sharing, true);
+
+    await consent!.recordConsent(CHITRA, {
+      purpose: "live_location_sharing",
+      granted: false,
+      noticeVersion: version,
+      source: "settings",
+    });
+    assert.equal((await consent!.consentPermissions(CHITRA)).live_location_sharing, false);
+
+    await consent!.recordConsent(CHITRA, {
+      purpose: "live_location_sharing",
+      granted: true,
+      noticeVersion: version,
+      source: "settings",
+    });
+    assert.equal((await consent!.consentPermissions(CHITRA)).live_location_sharing, true);
+  });
+
+  await t.test("stopping live sharing clears the rider's position in live rides only", async () => {
+    const ride = async (status: string): Promise<string> =>
+      (
+        await admin.query(
+          `INSERT INTO rides (captain_id, title, status, visibility, scheduled_at)
+           VALUES ($1, $2, $3, 'public', now()) RETURNING id`,
+          [DEV, `Consent ${status}`, status],
+        )
+      ).rows[0].id as string;
+    const session = async (rideId: string, status: string): Promise<string> =>
+      (
+        await admin.query(
+          `INSERT INTO ride_live_sessions (ride_id, status, started_by, started_at) VALUES ($1, $2, $3, now()) RETURNING id`,
+          [rideId, status, DEV],
+        )
+      ).rows[0].id as string;
+    const present = async (sessionId: string, riderId: string, role: string): Promise<void> => {
+      await admin.query(
+        `INSERT INTO ride_live_presence (session_id, rider_id, role, is_online, last_location)
+         VALUES ($1, $2, $3, true, ST_SetSRID(ST_MakePoint(77.6, 12.9), 4326)::geography)`,
+        [sessionId, riderId, role],
+      );
+    };
+
+    const liveRide = await ride("active");
+    const liveSession = await session(liveRide, "active");
+    await present(liveSession, DEV, "captain");
+    await present(liveSession, CHITRA, "member");
+
+    const endedRide = await ride("completed");
+    const endedSession = await session(endedRide, "ended");
+    await present(endedSession, CHITRA, "member");
+
+    const stopped = await live!.stopSharingLiveLocation(CHITRA);
+    assert.deepEqual(stopped, [{ rideId: liveRide, sessionId: liveSession }]);
+
+    const presence = async (sessionId: string, riderId: string) =>
+      (
+        await admin.query(
+          `SELECT is_online, last_location IS NOT NULL AS has_location
+             FROM ride_live_presence WHERE session_id = $1 AND rider_id = $2`,
+          [sessionId, riderId],
+        )
+      ).rows[0];
+    assert.deepEqual(await presence(liveSession, CHITRA), { is_online: false, has_location: false });
+    // The others in the ride, and rides already over, are untouched.
+    assert.deepEqual(await presence(liveSession, DEV), { is_online: true, has_location: true });
+    assert.deepEqual(await presence(endedSession, CHITRA), { is_online: true, has_location: true });
   });
 });

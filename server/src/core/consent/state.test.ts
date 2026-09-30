@@ -1,7 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CONSENT_PURPOSES, CURRENT_NOTICES, currentNotices } from "./notices.js";
-import { consentStatus, hasCurrentConsent, refuseAnswer, summarizeConsents, type StoredConsent } from "./state.js";
+import {
+  consentStatus,
+  hasCurrentConsent,
+  locationUpdateUse,
+  permissionsFrom,
+  permitsUse,
+  refuseAnswer,
+  summarizeConsents,
+  type StoredConsent,
+} from "./state.js";
 
 const current = CURRENT_NOTICES.live_location_sharing.version;
 const at = new Date("2026-10-02T10:00:00Z");
@@ -60,4 +69,50 @@ test("every purpose has a notice that says how to withdraw", () => {
     assert.match(notice.body, /Settings → Privacy/, notice.purpose);
     assert.match(notice.body, /Data Protection Board/, notice.purpose);
   }
+});
+
+test("a rider never asked keeps today's features until asked, but gets no marketing", () => {
+  const permissions = permissionsFrom([]);
+  assert.equal(permissions.live_location_sharing, true);
+  assert.equal(permissions.ride_recording, true);
+  assert.equal(permissions.motion_activity, true);
+  assert.equal(permissions.public_profile, true);
+  assert.equal(permissions.marketing_notifications, false);
+});
+
+test("a no, a withdrawal or an outdated grant switches the feature off", () => {
+  assert.equal(permitsUse("live_location_sharing", stored({ granted: false })), false);
+  assert.equal(permitsUse("live_location_sharing", stored({ noticeVersion: "2026-01-01" })), false);
+  assert.equal(permitsUse("live_location_sharing", stored()), true);
+  assert.equal(
+    permitsUse("marketing_notifications", {
+      purpose: "marketing_notifications",
+      granted: true,
+      noticeVersion: CURRENT_NOTICES.marketing_notifications.version,
+      updatedAt: at,
+    }),
+    true,
+  );
+});
+
+test("a location update is shared, recorded and classified only as far as the rider agreed", () => {
+  const all = permissionsFrom([]);
+  assert.deepEqual(locationUpdateUse(all, "riding"), { refuse: false, record: true, activity: "riding" });
+
+  assert.deepEqual(locationUpdateUse({ ...all, ride_recording: false }, "riding"), {
+    refuse: false,
+    record: false,
+    activity: "riding",
+  });
+  assert.deepEqual(locationUpdateUse({ ...all, motion_activity: false }, "riding"), {
+    refuse: false,
+    record: true,
+    activity: undefined,
+  });
+  // Not sharing: refused outright, and nothing else is used.
+  assert.deepEqual(locationUpdateUse({ ...all, live_location_sharing: false }, "riding"), {
+    refuse: true,
+    record: false,
+    activity: undefined,
+  });
 });

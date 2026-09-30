@@ -70,3 +70,67 @@ export type ConsentRefusal = "stale_notice";
  */
 export const refuseAnswer = (purpose: ConsentPurpose, shownVersion: string): ConsentRefusal | null =>
   CURRENT_NOTICES[purpose].version === shownVersion ? null : "stale_notice";
+
+/**
+ * Whether a purpose may be used when the rider was never asked.
+ *
+ * Decided 2026-09-30 (option B): riders who signed up before consent was
+ * asked for keep today's behaviour until the app asks them on next use. An
+ * explicit no, a withdrawal, or a grant of an older notice switches the
+ * feature off at once. Marketing was never sent before, so it is opt-in
+ * only: nothing to carry over.
+ */
+export const ALLOWED_WHEN_NOT_ASKED: Readonly<Record<ConsentPurpose, boolean>> = {
+  ride_recording: true,
+  live_location_sharing: true,
+  motion_activity: true,
+  public_profile: true,
+  marketing_notifications: false,
+};
+
+/** The gate a feature checks before using a purpose. */
+export const permitsUse = (purpose: ConsentPurpose, stored: StoredConsent | undefined): boolean => {
+  switch (consentStatus(stored)) {
+    case "granted":
+      return true;
+    case "not_asked":
+      return ALLOWED_WHEN_NOT_ASKED[purpose];
+    case "withdrawn":
+    case "reconsent_required":
+      return false;
+  }
+};
+
+export type ConsentPermissions = Readonly<Record<ConsentPurpose, boolean>>;
+
+/** Every purpose's gate from the rider's stored answers. */
+export const permissionsFrom = (stored: readonly StoredConsent[]): ConsentPermissions => {
+  const byPurpose = new Map(stored.map((row) => [row.purpose, row]));
+  return Object.fromEntries(
+    CONSENT_PURPOSES.map((purpose) => [purpose, permitsUse(purpose, byPurpose.get(purpose))]),
+  ) as Record<ConsentPurpose, boolean>;
+};
+
+export interface LocationUpdateUse<Activity> {
+  /** Refuse the update: the rider is not sharing their live location. */
+  refuse: boolean;
+  /** Keep the point in the rider's recorded track. */
+  record: boolean;
+  /** The motion activity to use, or undefined to drop it. */
+  activity: Activity | undefined;
+}
+
+/**
+ * What a live location update may be used for (plans/consent.md,
+ * "Enforcement"): shared only with live_location_sharing, recorded only with
+ * ride_recording as well, and its motion activity used only with
+ * motion_activity.
+ */
+export const locationUpdateUse = <Activity>(
+  permissions: ConsentPermissions,
+  activity: Activity | undefined,
+): LocationUpdateUse<Activity> => ({
+  refuse: !permissions.live_location_sharing,
+  record: permissions.live_location_sharing && permissions.ride_recording,
+  activity: permissions.live_location_sharing && permissions.motion_activity ? activity : undefined,
+});

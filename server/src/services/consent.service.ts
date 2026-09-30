@@ -21,7 +21,9 @@ import {
 } from "../core/consent/notices.js";
 import {
   hasCurrentConsent,
+  permissionsFrom,
   refuseAnswer,
+  type ConsentPermissions,
   summarizeConsents,
   type ConsentRefusal,
   type ConsentSummary,
@@ -126,6 +128,32 @@ export const hasConsent = async (riderId: string, purpose: ConsentPurpose): Prom
   );
 };
 
+/**
+ * Every purpose's gate for a rider, cached briefly.
+ *
+ * Location updates arrive every few seconds per rider, and each one checks
+ * this, so the answer is kept for a short while rather than read each time.
+ * A change made through this process clears the rider's entry at once; the
+ * TTL bounds how long another API instance can lag behind.
+ */
+const PERMISSIONS_TTL_MS = 30_000;
+const permissionsCache = new Map<string, { permissions: ConsentPermissions; expiresAtMs: number }>();
+
+export const consentPermissions = async (riderId: string): Promise<ConsentPermissions> => {
+  const cached = permissionsCache.get(riderId);
+  if (cached && cached.expiresAtMs > Date.now()) return cached.permissions;
+
+  const permissions = permissionsFrom(await storedConsents(riderId));
+  permissionsCache.set(riderId, { permissions, expiresAtMs: Date.now() + PERMISSIONS_TTL_MS });
+  return permissions;
+};
+
+/** Drops cached gates: one rider's after their answer changes, or all (tests). */
+export const forgetConsentPermissions = (riderId?: string): void => {
+  if (riderId) permissionsCache.delete(riderId);
+  else permissionsCache.clear();
+};
+
 export interface ConsentAnswer {
   purpose: ConsentPurpose;
   granted: boolean;
@@ -199,6 +227,7 @@ export const recordConsent = async (riderId: string, answer: ConsentAnswer): Pro
     return true;
   });
 
+  if (changed) forgetConsentPermissions(riderId);
   return { changed, consents: summarizeConsents(await storedConsents(riderId)) };
 };
 
