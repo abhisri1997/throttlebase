@@ -66,7 +66,7 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 > Deletion needs a code emailed to the account's address, in the app or at `throttlebase.in/delete-account` without the app.
 > It signs out everywhere, hides the rider at once and hands their rides and groups to the next leader; 30 days later `account.purge`
 > removes only their own data and leaves an empty tombstone. Public routes stay as anonymised Community routes, and registration
-> details are sealed for 180 days (IT Rules 3(1)(h)). Still open: a security-log retention period and purge (E11), Apple token
+> details are sealed for 180 days (IT Rules 3(1)(h)). Still open: Apple token
 > revocation (with Apple sign-in, D6), the Play Console Delete account URL, and legal review of the texts. Inventory §8.1, §9 E1.
 
 ### E2. Sign in with Apple in production (Apple 4.8)
@@ -204,7 +204,11 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 > **Current state (Phase 0):** the only purges are expired or revoked sessions (hourly) and riders 30 days after deletion.
 > Live samples, events, incidents, notifications, `login_activity`, `email_otps` and `jobs` are kept forever. Inventory §8.
 >
-> **Update (2026-09-30):** the hourly cleanup also purges finished jobs (#51) and posts, comments and routes a moderator removed more than 180 days ago (`REMOVED_CONTENT_RETENTION_DAYS`, `server/src/core/moderation/actions.ts`).
+> **Update (2026-09-30):** the hourly cleanup also purges finished jobs (#51) and posts, comments and routes a moderator removed more than 180 days ago.
+>
+> **Update (2026-09-30):** every retention period is now in `server/src/core/retention/retentionPolicy.ts`. The hourly cleanup purges
+> `login_activity` and `security_events` after 1 year and `email_otps` after 30 days (migration 046 adds the indexes). ⚖️ Counsel to
+> confirm 1 year. Still open: live-session data and `notifications`.
 
 ---
 

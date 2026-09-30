@@ -37,6 +37,7 @@
 
 import type { PoolClient } from "pg";
 import pool, { query } from "../../config/db.js";
+import { ACCOUNT_PURGE_GRACE_DAYS } from "../../core/retention/retentionPolicy.js";
 import { handOverGroupsOfDeletedRiders } from "../../services/group-roster.service.js";
 import { handOffRidesOfDeletedRiders } from "../../services/ride-roster.service.js";
 import {
@@ -45,9 +46,6 @@ import {
   planCommunityRoutesOf,
   type CommunityRouteLookups,
 } from "../../services/community-route.service.js";
-
-/** Days between deleting an account and purging its data. */
-export const ACCOUNT_PURGE_GRACE_DAYS = 30;
 
 /** Riders purged per job run; the next run picks up the rest. */
 const PURGE_BATCH_SIZE = 50;

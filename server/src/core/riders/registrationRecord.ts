@@ -10,8 +10,7 @@
  * for counsel to confirm.
  */
 
-/** Days a sealed record is kept after the account is cancelled. */
-export const REGISTRATION_RETENTION_DAYS = 180;
+import { REGISTRATION_RETENTION_DAYS } from "../retention/retentionPolicy.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

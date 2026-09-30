@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import {
   buildRegistrationRecord,
   purgeAfter,
-  REGISTRATION_RETENTION_DAYS,
 } from "./registrationRecord.js";
+import { REGISTRATION_RETENTION_DAYS } from "../retention/retentionPolicy.js";
 
 const cancelledAt = new Date("2026-10-01T10:00:00.000Z");
 
