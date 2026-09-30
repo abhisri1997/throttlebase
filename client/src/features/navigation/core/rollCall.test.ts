@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { LatLng } from "../types/navigation";
-import { buildRollCall, summarizeRollCall, type RollCallRider } from "./rollCall";
+import { buildRollCall, summarizeRollCall, withOwnPosition, type RollCallRider } from "./rollCall";
 
 /** Points on the equator, where 0.0001° of longitude is about 11 m. */
 const at = (longitude: number, latitude = 0): LatLng => ({ latitude, longitude });
@@ -86,4 +86,14 @@ test("a wider radius forgives a rider parked down the road", () => {
   });
 
   assert.equal(entries[2]!.state, "at_start");
+});
+
+test("the rider's own fix fills their row until the server's echo arrives", () => {
+  const fix = { latitude: 12.9, longitude: 77.6 };
+  assert.deepEqual(withOwnPosition({}, "me", fix), { me: { lat: 12.9, lon: 77.6 } });
+  // The echoed position wins; nobody else's row is filled from this phone.
+  const echoed = { me: { lat: 1, lon: 2 } };
+  assert.equal(withOwnPosition(echoed, "me", fix), echoed);
+  assert.deepEqual(withOwnPosition({}, "me", null), {});
+  assert.deepEqual(withOwnPosition({}, undefined, fix), {});
 });

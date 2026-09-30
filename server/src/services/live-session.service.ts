@@ -1087,6 +1087,7 @@ interface AdvanceArrivalInput {
   lon: number;
   lat: number;
   accuracyM: number | null;
+  speedKmh: number | null;
   capturedAtMs: number;
 }
 
@@ -1112,6 +1113,7 @@ const advanceArrival = async (
     {
       distanceToDestinationM: Number(rawDistance),
       accuracyM: input.accuracyM,
+      speedKmh: input.speedKmh,
       capturedAtMs: input.capturedAtMs,
     },
     RIDE_PROGRESS_CONFIG.arrival,
@@ -1262,6 +1264,7 @@ export const updateLivePresenceLocation = async (
           lon: input.lon,
           lat: input.lat,
           accuracyM: input.accuracy_m ?? null,
+          speedKmh: input.speed_kmh ?? null,
           capturedAtMs: Number.isFinite(capturedAtMs) ? capturedAtMs : nowMs,
         })
       : "none";

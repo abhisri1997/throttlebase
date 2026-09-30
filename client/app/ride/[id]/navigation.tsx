@@ -529,6 +529,7 @@ export default function RideNavigationScreen() {
     me: live.me,
     liveDistanceToDestinationMeters:
       fix && destination ? haversineMeters(fix.coordinate, destination.coordinate) : null,
+    announceCompletion: false,
   });
   const [dismissedArrivalAtMs, setDismissedArrivalAtMs] = useState<number | null>(null);
   // The socket says so the moment they arrive; the session says so if the app
@@ -651,6 +652,24 @@ export default function RideNavigationScreen() {
     regroupRequest !== null &&
     regroupRequest.stop?.id !== dismissedRegroupStopId;
   const isFinished = live.rideState === "COMPLETED" || session?.phase === "FINISHED";
+
+  // When this rider's ride ends (they finish, it finishes itself at the
+  // destination, or the whole ride completes), navigation gives way to the
+  // ride's summary. Replaced, not pushed, so Back doesn't return here. Only on
+  // the change: someone who reopens navigation to follow the group after
+  // finishing stays.
+  // Watched only once this rider's progress has loaded, or loading it would
+  // look like the ride ending.
+  const rideEnded = myRide.isFinished || live.rideState === "COMPLETED";
+  const isProgressKnown = live.me !== null;
+  const lastRideEndedRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!isProgressKnown) return;
+    if (rideEnded && lastRideEndedRef.current === false && id) {
+      router.replace(`/ride/${id}/summary` as any);
+    }
+    lastRideEndedRef.current = rideEnded;
+  }, [rideEnded, isProgressKnown, id, router]);
 
   const tripAction = ((): TripBarAction | null => {
     if (isHost && live.rideState === "NOT_STARTED") {

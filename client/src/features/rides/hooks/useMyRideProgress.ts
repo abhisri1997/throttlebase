@@ -21,6 +21,8 @@ interface UseMyRideProgressInput {
   /** A fresher distance than the session's, e.g. from the navigation fix. */
   liveDistanceToDestinationMeters?: number | null;
   onStarted?: () => void;
+  /** False where the screen shows the outcome itself (navigation opens the summary). */
+  announceCompletion?: boolean;
 }
 
 export interface MyRideProgress {
@@ -43,6 +45,7 @@ export const useMyRideProgress = ({
   me,
   liveDistanceToDestinationMeters,
   onStarted,
+  announceCompletion = true,
 }: UseMyRideProgressInput): MyRideProgress => {
   const queryClient = useQueryClient();
   const progress: RiderProgress = me?.progress ?? "not_started";
@@ -75,7 +78,7 @@ export const useMyRideProgress = ({
       }
       await refresh();
 
-      if (result.ride_completed) {
+      if (result.ride_completed && announceCompletion) {
         Alert.alert("Ride complete", "Everyone has finished — the ride is complete.");
       }
     },

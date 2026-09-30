@@ -30,9 +30,12 @@ export interface RideProgressConfig {
 
 export const RIDE_PROGRESS_CONFIG: RideProgressConfig = {
   arrival: {
+    // Also how near a finish must be to count as finishing at the destination.
     arriveRadiusM: readPositiveNumber("RIDE_ARRIVAL_RADIUS_M", 150),
+    arriveMinRadiusM: readPositiveNumber("RIDE_ARRIVAL_MIN_RADIUS_M", 50),
     leaveRadiusM: readPositiveNumber("RIDE_ARRIVAL_EXIT_RADIUS_M", 300),
     maxAccuracyM: readPositiveNumber("RIDE_ARRIVAL_MAX_ACCURACY_M", 100),
+    maxArriveSpeedKmh: readPositiveNumber("RIDE_ARRIVAL_MAX_SPEED_KMH", 20),
   },
   earlyStartWindowMs: readPositiveNumber("RIDE_EARLY_START_WINDOW_MIN", 60) * MINUTE_MS,
   autoFinishDwellMs: readPositiveNumber("RIDE_AUTO_FINISH_DWELL_MIN", 10) * MINUTE_MS,
