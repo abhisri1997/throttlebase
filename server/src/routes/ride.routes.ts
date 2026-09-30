@@ -138,6 +138,25 @@ router.post("/", authenticate, rideController.createRide);
 
 /**
  * @swagger
+ * /api/rides/ride-now:
+ *   post:
+ *     summary: Ride now — make an unplanned, hidden ride and set off on it at once
+ *     description: >
+ *       Only the title is required; a destination, stops or a saved route are
+ *       optional. Refused with 409 ALREADY_RIDING while the rider has a ride
+ *       under way. See docs/ride-now-ux.md.
+ *     tags: [Rides]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201:
+ *         description: The ride (kind unplanned, visibility solo, status active) and its live session
+ *       409:
+ *         description: Already on a ride
+ */
+router.post("/ride-now", authenticate, rideController.createRideNow);
+
+/**
+ * @swagger
  * /api/rides/{id}:
  *   get:
  *     summary: Get ride details with captain info, participants, and stops

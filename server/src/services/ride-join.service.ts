@@ -47,6 +47,7 @@ const REFUSAL_MESSAGES: Readonly<Record<RideJoinRefusal, string>> = {
   declined: "The ride's leaders declined your request to join",
   not_leader: "Only the captain or a co-captain can answer requests to join",
   no_request: "There's no request to join waiting",
+  closed: "This ride isn't open to other riders",
 };
 
 export class RideJoinError extends Error {

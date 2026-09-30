@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import {
   CreateRideSchema,
+  RideNowSchema,
   UpdateRideSchema,
   PromoteCoCaptainSchema,
   RequestStopSchema,
@@ -8,6 +9,7 @@ import {
   HandleStopSchema,
 } from "../schemas/ride.schemas.js";
 import * as RideService from "../services/ride.service.js";
+import { AlreadyRidingError, startRideNow } from "../services/ride-now.service.js";
 import {
   leaveRide as leaveRideAndHandOver,
   passCaptaincy as passRideCaptaincy,
@@ -23,6 +25,29 @@ import { getLiveSession } from "../services/live-session.service.js";
 interface RiderPayload {
   riderId: string;
 }
+
+/** Ride now: make an unplanned ride and set off on it (docs/ride-now-ux.md §7.2). */
+export const createRideNow = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const input = RideNowSchema.parse(req.body);
+    const riderId = (req.rider as unknown as RiderPayload).riderId;
+    const result = await startRideNow(riderId, input);
+    res.status(201).json(result);
+  } catch (error: any) {
+    if (error.name === "ZodError") {
+      res.status(400).json({ error: "Validation failed", details: error.errors });
+    } else if (error instanceof AlreadyRidingError) {
+      res.status(409).json({ error: error.message, code: "ALREADY_RIDING", ride_id: error.rideId });
+    } else if (error instanceof RideService.RideRouteUnavailableError) {
+      res.status(404).json({ error: "That route is no longer available" });
+    } else if (error instanceof RideService.RoadNotFollowableError) {
+      res.status(400).json({ error: error.message });
+    } else {
+      console.error("Error starting Ride now:", error);
+      res.status(500).json({ error: "Internal server error while starting your ride" });
+    }
+  }
+};
 
 export const createRide = async (
   req: Request,
@@ -143,6 +168,8 @@ export const updateRide = async (
         .status(400)
         .json({ error: "Validation failed", details: error.errors });
     } else if (error.message?.startsWith("Invalid status transition")) {
+      res.status(400).json({ error: error.message });
+    } else if (error instanceof RideService.UnplannedVisibilityError) {
       res.status(400).json({ error: error.message });
     } else if (error instanceof RideService.RideRouteUnavailableError) {
       res.status(400).json({ error: "This ride's route is no longer available" });

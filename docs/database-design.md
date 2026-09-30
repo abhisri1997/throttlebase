@@ -217,7 +217,8 @@ Written on each successful sign-in: `rider_id`, `device_fingerprint`, `ip_addres
 | `captain_id` | uuid | FK → `riders` |
 | `title`, `description` | varchar(255) / text | |
 | `status` | varchar(20) | `draft`, `scheduled`, `active`, `completed`, `cancelled` |
-| `visibility` | varchar(20) | `public`, `private` |
+| `visibility` | varchar(20) | `public`, `private` (approval needed), `invite_only`, `solo` (mig 048). The last two are hidden: never listed, previewed or joinable by others |
+| `kind` | text | `planned` (default) or `unplanned` (Ride now, mig 048). An unplanned ride's visibility can't be changed |
 | `start_point`, `end_point` | geography | GiST indexes |
 | `start_point_name`, `end_point_name` | varchar(255) | Display names |
 | `start_point_auto` | boolean | Start point computed from participants' start overrides |

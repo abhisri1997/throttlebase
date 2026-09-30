@@ -253,6 +253,15 @@ export interface RidingRide {
   id: string;
   status: string;
   captain_id: string;
+  title: string;
+  /** 'planned' or 'unplanned' (Ride now). */
+  kind: string;
+  /** Whether another confirmed rider is on it: the notification says "your ride group" only then. */
+  others_on_ride: boolean;
+  /** Seconds since this rider's ride started. */
+  elapsed_s: number;
+  /** Kilometres this rider has recorded on it so far. */
+  distance_km: number;
 }
 
 /**
@@ -263,7 +272,17 @@ export interface RidingRide {
  */
 export const listRidesBeingRidden = async (riderId: string): Promise<RidingRide[]> => {
   const result = await query(
-    `SELECT r.id, r.status, r.captain_id
+    `SELECT r.id, r.status, r.captain_id, r.title, r.kind,
+            EXISTS (
+              SELECT 1 FROM ride_participants rp
+              WHERE rp.ride_id = r.id AND rp.status = 'confirmed' AND rp.rider_id <> $1
+            ) AS others_on_ride,
+            GREATEST(0, EXTRACT(EPOCH FROM now() - COALESCE(p.ride_started_at, s.started_at)))::int AS elapsed_s,
+            COALESCE((
+              SELECT ST_Length(ST_MakeLine(smp.location::geometry ORDER BY smp.captured_at)::geography) / 1000
+              FROM ride_live_location_samples smp
+              WHERE smp.session_id = s.id AND smp.rider_id = $1
+            ), 0)::float8 AS distance_km
      FROM ride_live_presence p
      JOIN ride_live_sessions s ON s.id = p.session_id
      JOIN rides r ON r.id = s.ride_id
