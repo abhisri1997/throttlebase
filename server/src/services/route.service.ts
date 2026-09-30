@@ -9,7 +9,7 @@ import {
 import { roadViaPoints, routeLine } from "../core/routes/roadVia.js";
 import { enqueueRideStatsRecompute } from "./jobs.service.js";
 import { getRouteRoadFeedback, type RouteRoadFeedback } from "./road-feedback.service.js";
-import { blockedBetweenSql } from "./blocks.js";
+import { visibleToViewerSql } from "./blocks.js";
 import { NO_LOOKUPS, type RoutePlaceLookups } from "./route-place-lookups.js";
 import { findPublicEnds, viewRoute, type PublicEnds } from "./route-public-view.js";
 import type {
@@ -78,7 +78,11 @@ export type RouteWithStops = Route & {
  * until the purge, which deletes them or keeps public ones anonymised.
  * For queries that LEFT JOIN riders as `rd` on the creator.
  */
-const LIVE_OR_COMMUNITY = "(r.creator_id IS NULL OR rd.deleted_at IS NULL)";
+/**
+ * A route anyone may still see: its creator's account is live, or it was
+ * kept for the community; and a moderator hasn't removed it.
+ */
+const LIVE_OR_COMMUNITY = "((r.creator_id IS NULL OR rd.deleted_at IS NULL) AND r.removed_at IS NULL)";
 
 /**
  * What reads need to work out a route's public view (route-public-view.ts):
@@ -179,7 +183,7 @@ export const getRouteById = async (
        AND ${LIVE_OR_COMMUNITY}
        -- Hidden from, and never shown by, a rider blocked either way. A
        -- community route has no rider, so no block hides it.
-       AND (r.creator_id = $2 OR NOT ${blockedBetweenSql("$2::uuid", "r.creator_id")})
+       AND (r.creator_id = $2 OR ${visibleToViewerSql("$2::uuid", "r.creator_id")})
        AND (
          r.visibility = 'public'
          OR r.creator_id = $2
@@ -224,7 +228,7 @@ export const listVisibleRoutes = async (viewerId: string): Promise<Route[]> => {
      FROM routes r
      LEFT JOIN riders rd ON r.creator_id = rd.id
      WHERE (r.visibility = 'public' OR r.creator_id = $1) AND ${LIVE_OR_COMMUNITY}
-       AND (r.creator_id = $1 OR NOT ${blockedBetweenSql("$1::uuid", "r.creator_id")})
+       AND (r.creator_id = $1 OR ${visibleToViewerSql("$1::uuid", "r.creator_id")})
      ORDER BY r.created_at DESC
      LIMIT 50`,
     [viewerId],
@@ -484,7 +488,7 @@ export const searchRoutes = async (viewerId: string, search: RouteSearchQuery): 
      LEFT JOIN riders rd ON r.creator_id = rd.id
      WHERE (r.visibility = 'public' OR r.creator_id = $1)
        AND ${LIVE_OR_COMMUNITY}
-       AND (r.creator_id = $1 OR NOT ${blockedBetweenSql("$1::uuid", "r.creator_id")})
+       AND (r.creator_id = $1 OR ${visibleToViewerSql("$1::uuid", "r.creator_id")})
        ${placeConditions.length > 0 ? `AND (${placeConditions.join(" OR ")})` : ""}
      ORDER BY r.created_at DESC
      LIMIT ${MAX_SEARCH_CANDIDATES}`,

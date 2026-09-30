@@ -476,6 +476,40 @@ export default function SettingsModal() {
           </View>
         )}
 
+        {isAdmin(rider?.roles) ? (
+          <View className='pb-6'>
+            <SectionHeader
+              icon={<Shield color={colors.primary} size={18} />}
+              label='Admin'
+              color={colors.primary}
+            />
+            <View
+              style={{
+                backgroundColor: colors.surface,
+                borderTopWidth: 1,
+                borderBottomWidth: 1,
+                borderColor: colors.border,
+              }}
+            >
+              <TouchableOpacity
+                accessibilityRole='button'
+                onPress={() => router.push("/(modals)/moderation")}
+                className='px-4 py-4 flex-row items-center justify-between'
+              >
+                <View>
+                  <Text className='text-base font-medium' style={{ color: colors.text }}>
+                    Moderation
+                  </Text>
+                  <Text className='text-sm mt-1' style={{ color: colors.textMuted }}>
+                    Review reports, remove content, suspend riders.
+                  </Text>
+                </View>
+                <Text style={{ color: colors.textMuted }}>➔</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
+
         <View className='pb-12'>
           <SectionHeader
             icon={<User color={colors.textMuted} size={18} />}

@@ -22,6 +22,7 @@ const STATUS_BY_CODE: Record<AuthErrorCode, number> = {
   USERNAME_INVALID: 400,
   USERNAME_TAKEN: 409,
   RIDER_NOT_FOUND: 404,
+  ACCOUNT_SUSPENDED: 403,
 };
 
 export const sendAuthError = (res: Response, error: unknown): void => {

@@ -6,7 +6,7 @@ import type {
   CreateReviewInput,
 } from "../schemas/community.schemas.js";
 import { attachMentionedRiders } from "./mention.service.js";
-import { isBlockedBetween, visibleToViewerSql } from "./blocks.js";
+import { isHiddenFrom, visibleToViewerSql } from "./blocks.js";
 import { assertContentAllowed } from "./contentFilter.js";
 import { pickGroupSuccessor } from "../core/groups/groupSuccessor.js";
 import { leaveGroup as leaveGroupAndHandOver, type LeaveGroupOutcome } from "./group-roster.service.js";
@@ -49,7 +49,7 @@ const VISIBLE_POST_COLUMNS = `
     WHERE l.post_id = p.id AND lr.deleted_at IS NULL) AS like_count,
   (SELECT count(*)::int
      FROM comments c JOIN riders cr ON cr.id = c.rider_id
-    WHERE c.post_id = p.id AND cr.deleted_at IS NULL) AS comment_count`;
+    WHERE c.post_id = p.id AND cr.deleted_at IS NULL AND c.removed_at IS NULL) AS comment_count`;
 
 /**
  * Refuses to act on a post the rider can't see: missing, its author deleted,
@@ -59,7 +59,7 @@ const assertPostVisible = async (postId: string, riderId: string): Promise<void>
   const result = await query(
     `SELECT 1
      FROM posts p JOIN riders r ON r.id = p.rider_id
-     WHERE p.id = $1 AND r.deleted_at IS NULL
+     WHERE p.id = $1 AND r.deleted_at IS NULL AND p.removed_at IS NULL
        AND ${visibleToViewerSql("$2", "p.rider_id")}`,
     [postId, riderId],
   );
@@ -73,7 +73,7 @@ export const getFeed = async (limit = 50, offset = 0, viewerId: string | null = 
     `SELECT ${VISIBLE_POST_COLUMNS}
      FROM posts p
      JOIN riders r ON p.rider_id = r.id
-     WHERE r.deleted_at IS NULL
+     WHERE r.deleted_at IS NULL AND p.removed_at IS NULL
        AND ${visibleToViewerSql("$3", "p.rider_id")}
      ORDER BY p.created_at DESC
      LIMIT $1 OFFSET $2`,
@@ -86,7 +86,7 @@ export const getPostById = async (postId: string, viewerId: string | null = null
   const result = await query(
     `SELECT ${VISIBLE_POST_COLUMNS}
      FROM posts p JOIN riders r ON p.rider_id = r.id
-     WHERE p.id = $1 AND r.deleted_at IS NULL
+     WHERE p.id = $1 AND r.deleted_at IS NULL AND p.removed_at IS NULL
        AND ${visibleToViewerSql("$2", "p.rider_id")}`,
     [postId, viewerId],
   );
@@ -105,7 +105,7 @@ export const updatePost = async (
 ) => {
   assertContentAllowed(content);
   const result = await query(
-    `UPDATE posts SET content = $1 WHERE id = $2 AND rider_id = $3 RETURNING *`,
+    `UPDATE posts SET content = $1 WHERE id = $2 AND rider_id = $3 AND removed_at IS NULL RETURNING *`,
     [content, postId, riderId],
   );
   return result.rows[0] || null;
@@ -113,7 +113,8 @@ export const updatePost = async (
 
 export const deletePost = async (postId: string, riderId: string) => {
   const result = await query(
-    `DELETE FROM posts WHERE id = $1 AND rider_id = $2 RETURNING id`,
+    // Removed content is kept 180 days, so its author can't delete it meanwhile.
+    `DELETE FROM posts WHERE id = $1 AND rider_id = $2 AND removed_at IS NULL RETURNING id`,
     [postId, riderId],
   );
   return result.rows.length > 0;
@@ -154,6 +155,7 @@ export const getComments = async (postId: string, viewerId: string | null = null
      WHERE c.post_id = $1
        AND r.deleted_at IS NULL
        AND post_author.deleted_at IS NULL
+       AND c.removed_at IS NULL AND p.removed_at IS NULL
        AND ${visibleToViewerSql("$2", "c.rider_id")}
        AND ${visibleToViewerSql("$2", "p.rider_id")}
      ORDER BY c.created_at ASC`,
@@ -169,6 +171,7 @@ export const getCommentById = async (commentId: string, viewerId: string | null 
      JOIN riders r ON c.rider_id = r.id
      JOIN posts p ON p.id = c.post_id
      WHERE c.id = $1 AND r.deleted_at IS NULL
+       AND c.removed_at IS NULL AND p.removed_at IS NULL
        AND ${visibleToViewerSql("$2", "c.rider_id")}
        AND ${visibleToViewerSql("$2", "p.rider_id")}`,
     [commentId, viewerId],
@@ -189,7 +192,7 @@ export const updateComment = async (
 ) => {
   assertContentAllowed(content);
   const result = await query(
-    `UPDATE comments SET content = $1 WHERE id = $2 AND rider_id = $3 RETURNING *`,
+    `UPDATE comments SET content = $1 WHERE id = $2 AND rider_id = $3 AND removed_at IS NULL RETURNING *`,
     [content, commentId, riderId],
   );
   return result.rows[0] || null;
@@ -197,7 +200,7 @@ export const updateComment = async (
 
 export const deleteComment = async (commentId: string, riderId: string) => {
   const result = await query(
-    `DELETE FROM comments WHERE id = $1 AND rider_id = $2 RETURNING post_id`,
+    `DELETE FROM comments WHERE id = $1 AND rider_id = $2 AND removed_at IS NULL RETURNING post_id`,
     [commentId, riderId],
   );
   if (result.rows.length > 0) {
@@ -257,8 +260,8 @@ export const followRider = async (followerId: string, followingId: string) => {
     [followingId],
   );
   if (target.rows.length === 0) throw new Error("Rider not found");
-  // Blocked either way reads as not found, so the block isn't revealed.
-  if (await isBlockedBetween(followerId, followingId)) throw new Error("Rider not found");
+  // Blocked either way, or suspended, reads as not found.
+  if (await isHiddenFrom(followerId, followingId)) throw new Error("Rider not found");
   const result = await query(
     `INSERT INTO follows (follower_id, following_id) VALUES ($1, $2)
      ON CONFLICT DO NOTHING RETURNING follower_id`,

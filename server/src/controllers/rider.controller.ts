@@ -3,7 +3,7 @@ import { UpdateRiderSchema } from "../schemas/rider.schemas.js";
 import * as RiderService from "../services/rider.service.js";
 import { toPublicRider } from "../services/publicRider.js";
 import { query } from "../config/db.js";
-import { isBlockedBetween } from "../services/blocks.js";
+import { isHiddenFrom } from "../services/blocks.js";
 
 /**
  * RiderController — Handles HTTP request/response for rider profile endpoints.
@@ -57,9 +57,9 @@ export const getPublicProfile = async (
     }
 
     const viewerId = req.rider!.riderId;
-    // Blocked either way reads as not found, so the block isn't revealed.
+    // Blocked either way, or suspended, reads as not found.
     const rider =
-      viewerId !== id && (await isBlockedBetween(viewerId, id)) ? null : await RiderService.getById(id);
+      viewerId !== id && (await isHiddenFrom(viewerId, id)) ? null : await RiderService.getById(id);
 
     if (!rider) {
       res.status(404).json({ error: "Rider not found" });

@@ -7,6 +7,8 @@ export interface RiderRecord {
   username: string | null;
   avatarUrl: string | null;
   createdAt: Date;
+  /** A moderator suspended the account; it can't sign in until lifted. */
+  suspended?: boolean;
 }
 
 export interface CreateRiderInput {

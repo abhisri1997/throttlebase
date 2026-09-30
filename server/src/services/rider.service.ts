@@ -1,6 +1,6 @@
 import { query } from "../config/db.js";
 import type { UpdateRiderInput } from "../schemas/rider.schemas.js";
-import { blockedBetweenSql } from "./blocks.js";
+import { visibleToViewerSql } from "./blocks.js";
 
 /**
  * RiderService — Profile management business logic.
@@ -196,7 +196,7 @@ export const searchMentionSuggestions = async (
        AND r.id != $1
        AND r.username IS NOT NULL
        AND LOWER(r.username) LIKE $2
-       AND NOT ${blockedBetweenSql("$1::uuid", "r.id")}
+       AND ${visibleToViewerSql("$1::uuid", "r.id")}
      ORDER BY is_following DESC,
               CASE WHEN LOWER(r.username) = $3 THEN 0 ELSE 1 END,
               LOWER(r.username) ASC
