@@ -4,6 +4,12 @@
 - Build a **new** purpose-based consent ledger.
 - Keep `rider_consents` (mig 023) as the record of **Terms and Privacy Policy acceptance**. Do not extend it.
 
+**Status (2026-09-30):** the server ledger is built (migration 045). Differences from the model below:
+- `emergency_contact_sharing` is left out until emergency contacts exist.
+- `ip` is not stored on `consent_events` until counsel asks for it.
+- `consent_notices` keeps the full `body` rather than a `body_url`.
+- `rider_declarations` records an `answer` (yes or no), not only a declaration.
+
 ## Why two records, not one
 
 - **Terms acceptance is a contract.** DPDP consent must be "free, specific, informed, unconditional and unambiguous", for a specified purpose (DPDP Act s.6(1)). It cannot be bundled into accepting the Terms: a single "I agree" to the Terms is not valid consent for, say, live location sharing.

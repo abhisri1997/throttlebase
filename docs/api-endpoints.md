@@ -124,6 +124,12 @@ The only path to Google. The client never calls `googleapis.com`. Rate-limited t
 - `POST /api/reports` — report a `post`, `comment`, `rider`, `ride`, `route` or `group` with a `reason`, optional `note`, optional `also_block`. `201`, or `200` with `already_reported` when the reporter's earlier report is still open. `400` for the rider's own content, `404` when it doesn't exist. 20 an hour per rider. Acknowledged on receipt: the response carries `report.reference` (`R-XXXXXXXX`) and `resolve_due_at`, and the rider gets an in-app notice
 - `GET /api/reports/mine` — the rider's own reports, newest first: reference, what and why, `status`, `outcome` text, `resolve_due_at`, `resolved_at`, `overdue`
 
+### Consents (launch readiness E6)
+
+- `GET /api/consents` — `notices` (the current notice per purpose: `purpose`, `version`, `title`, `body`, shown to the rider exactly as sent), `consents` (per purpose: `status` `granted` / `withdrawn` / `not_asked` / `reconsent_required`, `answeredVersion`, `updatedAt`), and `declarations.age_18_plus` (`true`, `false` or `null`)
+- `PUT /api/consents/:purpose` — `{ granted, notice_version, source: onboarding | contextual | settings, app_version?, platform? }`. Purposes: `ride_recording`, `live_location_sharing`, `motion_activity`, `public_profile`, `marketing_notifications`. `409 stale_notice` unless `notice_version` is the current one; `404` for an unknown purpose. Repeating the answer on record returns `changed: false` and records nothing. 60 changes an hour per rider
+- `POST /api/consents/declarations` — `{ kind: age_18_plus, answer, source: onboarding | settings, app_version? }`. `201`. After a `false`, the app cannot send `true` (`403 age_declared_under_18`); support can
+
 ### Groups (flagged: `FEATURE_GROUPS`)
 
 - `GET /api/community/groups`, `POST /api/community/groups`
