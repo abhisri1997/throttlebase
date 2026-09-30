@@ -7,6 +7,7 @@ import type {
 } from "../schemas/community.schemas.js";
 import { attachMentionedRiders } from "./mention.service.js";
 import { isBlockedBetween, visibleToViewerSql } from "./blocks.js";
+import { assertContentAllowed } from "./contentFilter.js";
 import { pickGroupSuccessor } from "../core/groups/groupSuccessor.js";
 import { leaveGroup as leaveGroupAndHandOver, type LeaveGroupOutcome } from "./group-roster.service.js";
 
@@ -15,6 +16,7 @@ import { leaveGroup as leaveGroupAndHandOver, type LeaveGroupOutcome } from "./g
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const createPost = async (riderId: string, data: CreatePostInput) => {
+  assertContentAllowed(data.content);
   const result = await query(
     `INSERT INTO posts (rider_id, content, media_urls, shared_route_id)
      VALUES ($1, $2, $3, $4)
@@ -101,6 +103,7 @@ export const updatePost = async (
   riderId: string,
   content: string,
 ) => {
+  assertContentAllowed(content);
   const result = await query(
     `UPDATE posts SET content = $1 WHERE id = $2 AND rider_id = $3 RETURNING *`,
     [content, postId, riderId],
@@ -125,6 +128,7 @@ export const addComment = async (
   riderId: string,
   data: CreateCommentInput,
 ) => {
+  assertContentAllowed(data.content);
   await assertPostVisible(postId, riderId);
   const result = await query(
     `INSERT INTO comments (post_id, rider_id, content, mentions)
@@ -183,6 +187,7 @@ export const updateComment = async (
   riderId: string,
   content: string,
 ) => {
+  assertContentAllowed(content);
   const result = await query(
     `UPDATE comments SET content = $1 WHERE id = $2 AND rider_id = $3 RETURNING *`,
     [content, commentId, riderId],

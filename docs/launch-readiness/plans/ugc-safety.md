@@ -23,7 +23,10 @@ A block works **both ways**. Once either rider blocks the other:
 
 Code: `server/src/services/blocks.ts` (one SQL helper used by every query), Block on the rider profile, Unblock in Settings. Test: `blocking.integration.test.ts`.
 
-### 2. Reports and a word filter
+### 2. Reports and a word filter — ✅ built
+
+As below. The word filter's starting list (`server/src/core/moderation/blockedTerms.ts`) is short and English only; add the Indian-language terms riders use. ⚖️ Reports can be sent from posts, comments, rider profiles, ride detail and route detail; groups are flagged off, so no group entry point yet.
+
 
 - `reports` table: reporter, target type (`post`, `comment`, `rider`, `ride`, `route`, `group`), target id, reason (`spam`, `harassment`, `hate`, `sexual`, `violence`, `dangerous_riding`, `impersonation`, `other`), optional note, status (`open`, `actioned`, `dismissed`), timestamps. One open report per reporter per target.
 - `POST /api/reports`, rate-limited. Report from the post and comment menu, the rider profile, ride detail and route detail. Reporting offers to block the rider too.

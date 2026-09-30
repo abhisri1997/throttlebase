@@ -342,6 +342,7 @@ Legend:
 ### E3. UGC safety
 
 - ✅ Blocking works both ways and hides posts, comments, reviews, routes, discoverable rides, profiles, search and mentions, and ends follows (`server/src/services/blocks.ts`, 2026-09-29). A ride both are already on is deliberately left alone; groups are not covered yet ([plans/ugc-safety.md](plans/ugc-safety.md)).
+- ✅ Reports (`reports`, migration 042; `POST /api/reports`) from posts, comments, profiles, rides and routes, and a word filter on posts and comments (2026-09-30). Reports hold the reporter, the reported thing and who made it, a reason and an optional note of up to 1000 characters. No moderation queue yet.
 - ❌ No `reports` table or endpoint.
 - ❌ No word filter.
 - ❌ No admin moderation queue. Admin UI covers support tickets only.
