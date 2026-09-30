@@ -79,9 +79,11 @@ export const canSubmitReport = (reason: ReportReason | null, note: string): bool
   reason !== null && (reason !== "other" || note.trim().length > 0);
 
 /** What the rider is told afterwards: what happens next, and when. */
-export const reportConfirmation = (alreadyReported: boolean, blocked: boolean): string => {
+export const reportConfirmation = (alreadyReported: boolean, blocked: boolean, reference?: string): string => {
   const next = alreadyReported
     ? "You've already reported this. We're looking into it."
     : "Thanks for telling us. We review reports within 24 hours and act within 7 days.";
-  return blocked ? `${next} You've also blocked them, so you won't see each other's posts or rides.` : next;
+  const ref = reference ? ` Your reference is ${reference}; follow it in Settings → Your reports.` : "";
+  const block = blocked ? " You've also blocked them, so you won't see each other's posts or rides." : "";
+  return `${next}${ref}${block}`;
 };

@@ -42,7 +42,10 @@ As below, with two choices made while building it: rides, riders and groups aren
 - Removed content is kept for **180 days**, then purged by the worker (E11). The rider whose content was removed is told why, in the app.
 - Every action goes to the admin audit log (E10, D10), which this PR starts as `security_events` if it doesn't exist yet.
 
-### 4. Grievances (IT Rules 2021, Rule 3(2))
+### 4. Grievances (IT Rules 2021, Rule 3(2)) — ✅ built
+
+As below, with acknowledgement on receipt: a report is acknowledged the moment it is sent, with a reference (`R-1A2B3C4D`) and an in-app notice, so `acknowledged_at = created_at`. `resolve_due_at` is 7 days, or 72 hours for `sexual` (`server/src/core/moderation/grievance.ts`). The queue is worked soonest-due first and flags what is overdue. Each reporter is told the outcome when their report is closed, never what was done to whom. The Grievance Officer page is public at `/grievance` (and throttlebase.in/grievance); "Your reports" is in Settings. ⚖️ Placeholders and deadlines need your details and a lawyer.
+
 
 - Every report is also a grievance record: `acknowledged_at` (target 24 h) and `resolved_at` (target 7 days, 72 h for intimate imagery ⚖️).
 - In-app "Grievance Officer" screen: name, email and address placeholders, how to complain, the deadlines, and the rider's own reports with their status.

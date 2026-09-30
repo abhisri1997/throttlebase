@@ -112,7 +112,7 @@ export const TERMS: LegalDocument = {
       heading: "Reporting, moderation and ending your access",
       blocks: [
         list(
-          "To report content or a rider, contact our Grievance Officer (below).",
+          "To report content or a rider, tap Report on it in the app, or contact our Grievance Officer (below). Every report is a complaint to the Grievance Officer.",
           "We may remove content or restrict, suspend or close an account that breaks these terms or the law, and we act on valid orders from courts and the government within the time the law sets.",
           "Where the law requires, we keep removed content and related records for 180 days, or longer if the law requires, for investigations.",
           "We will tell you when we act against your account, unless the law or someone's safety prevents it.",
@@ -168,7 +168,7 @@ export const TERMS: LegalDocument = {
       blocks: [
         paragraph("For complaints about content, another rider, or these terms, contact our Grievance Officer:"),
         list("[GRIEVANCE OFFICER NAME]", "Email: [GRIEVANCE OFFICER EMAIL]", "Address: [CONTACT ADDRESS]"),
-        paragraph("We acknowledge complaints within 24 hours and aim to resolve them within 7 days."),
+        paragraph("We acknowledge complaints within 24 hours and resolve them within 7 days, or within 72 hours for sexual content. See throttlebase.in/grievance."),
       ],
     },
   ],

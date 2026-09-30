@@ -48,4 +48,15 @@ router.use(authenticate);
  */
 router.post("/", reportLimiter, ReportController.create);
 
+/**
+ * @swagger
+ * /api/reports/mine:
+ *   get:
+ *     summary: The rider's own reports, with a reference, status and outcome
+ *     tags: [Reports]
+ *     responses:
+ *       200: { description: Newest first, up to 100 }
+ */
+router.get("/mine", ReportController.mine);
+
 export default router;

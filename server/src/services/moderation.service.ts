@@ -16,6 +16,7 @@ import {
   type ModerationAction,
   type ModerationTargetType,
 } from "../core/moderation/actions.js";
+import { outcomeFor, reportReference, type ReportStatus } from "../core/moderation/grievance.js";
 import { inTransaction } from "./ride-roster.service.js";
 import type { SqlClient } from "./ride-progress.repository.js";
 
@@ -65,9 +66,12 @@ export interface QueueItem {
   notes: string[];
   first_reported_at: string;
   last_reported_at: string;
+  /** The earliest deadline among its open reports (IT Rules 2021, Rule 3(2)). */
+  resolve_due_at: string | null;
+  overdue: boolean;
 }
 
-/** Open reports, one row per reported thing, the longest waiting first. */
+/** Open reports, one row per reported thing, the soonest due first. */
 export const listQueue = async (limit = 100): Promise<QueueItem[]> => {
   const grouped = await query(
     `SELECT rp.target_type, rp.target_id, rp.target_rider_id AS owner_id,
@@ -79,12 +83,14 @@ export const listQueue = async (limit = 100): Promise<QueueItem[]> => {
               '{}'
             ) AS notes,
             min(rp.created_at) AS first_reported_at,
-            max(rp.created_at) AS last_reported_at
+            max(rp.created_at) AS last_reported_at,
+            min(rp.resolve_due_at) AS resolve_due_at,
+            COALESCE(min(rp.resolve_due_at) < now(), false) AS overdue
        FROM reports rp
        LEFT JOIN riders o ON o.id = rp.target_rider_id
       WHERE rp.status = 'open'
       GROUP BY rp.target_type, rp.target_id, rp.target_rider_id, o.display_name, o.suspended_at
-      ORDER BY min(rp.created_at) ASC
+      ORDER BY min(rp.resolve_due_at) ASC NULLS LAST, min(rp.created_at) ASC
       LIMIT $1`,
     [limit],
   );
@@ -179,10 +185,26 @@ export const takeAction = async (moderatorId: string, input: ActionInput): Promi
     const closed = status
       ? await client.query(
           `UPDATE reports SET status = $3, resolved_at = now(), resolved_by = $4
-            WHERE target_type = $1 AND target_id = $2 AND status = 'open'`,
+            WHERE target_type = $1 AND target_id = $2 AND status = 'open'
+            RETURNING id, reporter_id`,
           [input.target_type, input.target_id, status, moderatorId],
         )
-      : { rowCount: 0 };
+      : { rowCount: 0, rows: [] as Array<{ id: string; reporter_id: string }> };
+
+    // Each reporter hears how their report was resolved, never what was done
+    // to whom or who else reported it.
+    for (const report of closed.rows) {
+      const reference = reportReference(report.id as string);
+      await client.query(
+        `INSERT INTO notifications (rider_id, type, title, body, data) VALUES ($1, 'report_resolved', $2, $3, $4::jsonb)`,
+        [
+          report.reporter_id,
+          `Update on your report ${reference}`,
+          outcomeFor(status as ReportStatus),
+          JSON.stringify({ report_id: report.id, reference, status }),
+        ],
+      );
+    }
 
     const notice = changed ? noticeFor(input.action, input.target_type, reason) : null;
     if (notice && ownerId) {

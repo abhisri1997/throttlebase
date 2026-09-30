@@ -121,7 +121,8 @@ The only path to Google. The client never calls `googleapis.com`. Rate-limited t
 - `GET /api/community/riders/:id/followers`, `GET /api/community/riders/:id/following`
 - `GET /api/community/rides/:rideId/reviews`, `POST /api/community/rides/:rideId/reviews` — 1–5 stars
 - Creating or editing a post or comment runs the word filter (`server/src/core/moderation/`): a blocked term is refused with `422 { code: "CONTENT_NOT_ALLOWED" }`
-- `POST /api/reports` — report a `post`, `comment`, `rider`, `ride`, `route` or `group` with a `reason`, optional `note`, optional `also_block`. `201`, or `200` with `already_reported` when the reporter's earlier report is still open. `400` for the rider's own content, `404` when it doesn't exist. 20 an hour per rider
+- `POST /api/reports` — report a `post`, `comment`, `rider`, `ride`, `route` or `group` with a `reason`, optional `note`, optional `also_block`. `201`, or `200` with `already_reported` when the reporter's earlier report is still open. `400` for the rider's own content, `404` when it doesn't exist. 20 an hour per rider. Acknowledged on receipt: the response carries `report.reference` (`R-XXXXXXXX`) and `resolve_due_at`, and the rider gets an in-app notice
+- `GET /api/reports/mine` — the rider's own reports, newest first: reference, what and why, `status`, `outcome` text, `resolve_due_at`, `resolved_at`, `overdue`
 
 ### Groups (flagged: `FEATURE_GROUPS`)
 
@@ -167,7 +168,7 @@ The only path to Google. The client never calls `googleapis.com`. Rate-limited t
 
 "Admin" means the access token's `roles` include `admin`. Roles come from `rider_roles` and are refreshed on every token refresh. Enforced by `requireAdmin` (`server/src/middleware/admin.middleware.ts`).
 
-- `GET /api/admin/moderation/queue` — open reports, one row per reported thing (preview, maker, count, reasons, recent notes), longest waiting first
+- `GET /api/admin/moderation/queue` — open reports, one row per reported thing (preview, maker, count, reasons, recent notes, earliest `resolve_due_at`, `overdue`), soonest due first
 - `GET /api/admin/moderation/suspended` — riders under suspension
 - `POST /api/admin/moderation/actions` — `{ target_type, target_id, action: remove | dismiss | suspend | lift_suspension, reason }`. One transaction: the change, closing the open reports, an in-app notice to the maker (not for dismissals), and a `security_events` entry. Only posts, comments and routes can be removed
 - Sign-in by a suspended rider fails with `403 ACCOUNT_SUSPENDED`

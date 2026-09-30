@@ -55,4 +55,5 @@ test("the confirmation says what happens next", () => {
   assert.match(reportConfirmation(false, false), /within 24 hours/);
   assert.match(reportConfirmation(true, false), /already reported/);
   assert.match(reportConfirmation(false, true), /also blocked/);
+  assert.match(reportConfirmation(false, false, "R-1A2B3C4D"), /reference is R-1A2B3C4D/);
 });

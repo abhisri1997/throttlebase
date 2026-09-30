@@ -2,6 +2,7 @@ import { apiClient } from "../../../api/client";
 import type { ReportRequest } from "../core/report";
 
 export interface ReportResponse {
+  report: { id: string; reference: string };
   already_reported: boolean;
   blocked: boolean;
 }

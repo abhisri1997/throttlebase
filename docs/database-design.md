@@ -385,7 +385,7 @@ Bookmarks: unique `(route_id, rider_id)`. Shares: `route_id`, `shared_with_rider
 | `group_members` | PK `(group_id, rider_id)`, `role` (`admin`/`member`) | |
 | `blocked_riders` | PK `(blocker_id, blocked_id)` | Works both ways; what it hides is in `server/src/services/blocks.ts` |
 | `posts`, `comments`, `routes`: `removed_at`, `removed_by`, `removal_reason` | | Set by a moderator (migration 043). Hidden from everyone; purged 180 days after `removed_at` |
-| `reports` | `reporter_id`, `target_type` (`post`/`comment`/`rider`/`ride`/`route`/`group`), `target_id`, `target_rider_id`, `reason`, `note` (≤1000), `status` (`open`/`actioned`/`dismissed`), `resolved_at`, `resolved_by` | Migration 042. One open report per reporter per target (partial unique index). `target_rider_id` is who made the reported thing, resolved at report time |
+| `reports` | `acknowledged_at`, `resolve_due_at` (migration 044, the grievance deadlines), `reporter_id`, `target_type` (`post`/`comment`/`rider`/`ride`/`route`/`group`), `target_id`, `target_rider_id`, `reason`, `note` (≤1000), `status` (`open`/`actioned`/`dismissed`), `resolved_at`, `resolved_by` | Migration 042. One open report per reporter per target (partial unique index). `target_rider_id` is who made the reported thing, resolved at report time |
 
 ---
 

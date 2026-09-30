@@ -1,4 +1,5 @@
 import type { LegalDocument } from "./legalDocument";
+import { GRIEVANCE } from "./grievance";
 import { PRIVACY_POLICY } from "./privacyPolicy";
 import { TERMS } from "./terms";
 
@@ -9,6 +10,7 @@ import { TERMS } from "./terms";
 export const LEGAL_PAGES: ReadonlyMap<string, LegalDocument> = new Map([
   ["/privacy", PRIVACY_POLICY],
   ["/terms", TERMS],
+  ["/grievance", GRIEVANCE],
 ]);
 
 /** Whether a pathname (as from usePathname) is a legal page, trailing slash or not. */
