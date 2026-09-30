@@ -28,8 +28,8 @@
  * accounts deleted before hand-over existed — so a purge never meets one.
  * A group they own with nobody else left is deleted with their data.
  *
- * Not yet handled here (a later E1 slice): the sealed 180-day registration
- * record.
+ * The sealed 180-day registration record is purged by its own daily job
+ * (registration-records-purge.processor.ts).
  *
  * One transaction per rider; safe to run repeatedly. The job result carries
  * counts only, never identifiers of what was removed.
