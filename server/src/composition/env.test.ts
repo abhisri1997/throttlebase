@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { ConfigError, readAuthConfig, type Env } from "./env.js";
 
 const baseEnv = (overrides: Env = {}): Env => ({
-  AUTH_JWT_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
+  AUTH_JWT_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----", // gitleaks:allow (fake)
   AUTH_JWT_KID: "tb-test",
   GOOGLE_CLIENT_IDS: "web.apps.googleusercontent.com,ios.apps.googleusercontent.com",
   TERMS_VERSION: "2026-01-01",
