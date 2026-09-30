@@ -466,8 +466,9 @@ const asDiscovered = (row: Record<string, unknown>, riderId: string): Ride | Rid
 };
 
 /**
- * Lists upcoming rides anyone can find, and the rider's own open rides.
- * Rides that need approval are listed as previews to riders not on them.
+ * Lists upcoming rides anyone can find, and the rider's own open rides
+ * (except a Ride now, which the ride bar shows instead). Rides that need
+ * approval are listed as previews to riders not on them.
  */
 export const listDiscoverableRides = async (
   riderId: string,
@@ -483,6 +484,9 @@ export const listDiscoverableRides = async (
     JOIN riders c ON r.captain_id = c.id
     LEFT JOIN ride_participants me ON me.ride_id = r.id AND me.rider_id = $1
     WHERE r.status NOT IN ('completed', 'cancelled')
+      -- A Ride now is never listed, not even to its own riders: the ride bar
+      -- shows it to them (docs/ride-now-ux.md §6).
+      AND r.kind <> 'unplanned'
       AND (
         -- A ride led by a rider who deleted their account leaves discovery
         -- at once; its own riders still see it.
