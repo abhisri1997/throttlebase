@@ -332,6 +332,26 @@ export const createAuthService = (deps: AuthServiceDeps): AuthService => {
       }
     },
 
+    requestDeletionCodeFor: async (email: string): Promise<void> => {
+      await api.request({
+        path: "/api/account-deletion/code",
+        method: "POST",
+        anonymous: true,
+        body: { email: email.trim() },
+      });
+    },
+
+    deleteAccountByEmail: async (
+      email: string,
+      code: string,
+    ): Promise<{ deleted: boolean }> =>
+      await api.request<{ deleted: boolean }>({
+        path: "/api/account-deletion/confirm",
+        method: "POST",
+        anonymous: true,
+        body: { email: email.trim(), code: code.trim() },
+      }),
+
     signOut: async (): Promise<void> => {
       const current = await load();
 

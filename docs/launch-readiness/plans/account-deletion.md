@@ -93,7 +93,7 @@ Like a WhatsApp group whose admin leaves: the ride or group carries on under som
    - hide the profile and content from every query (`deleted_at IS NULL` filters);
    - remove the rider from live sessions and stop their tracking;
    - record `account.deleted` in `security_events`.
-6. **Grace period.** Thirty days, during which the account is inaccessible and its content hidden. State the period in the in-app confirmation and on the deletion page.
+6. **Grace period.** Thirty days, during which the account is inaccessible and its content hidden. State the period in the in-app confirmation and on the deletion page. ✅ Stated on `/delete-account` (slice 6).
    - Recovery during the grace period is optional. Identities are already unlinked, so recovery would need a support request. Decide before building it; the default is no self-service recovery.
 7. **Re-authentication.** ✅ Slice 5 (2026-09-30). `DELETE /me` needs a code emailed to the rider's address on file.
    - `POST /api/riders/me/deletion-code` sends it; `DELETE /api/riders/me` with `{ code }` checks it and deletes in the same request. With no code the answer is 403 `REAUTH_REQUIRED`; a rider with no address on file gets 409 `NO_EMAIL_ON_FILE` and is sent to support.
@@ -102,6 +102,10 @@ Like a WhatsApp group whose admin leaves: the ride or group carries on under som
    - A refused code on this signed-in route is a 403, not a 401: the app treats 401 as an expired token, and would refresh and resend the same code, spending a second attempt.
    - The web page (step 8) reuses the same check: `redeemEmailCode` in `core/auth/emailCode.ts`.
 8. **Web deletion request** (`https://throttlebase.in/delete-account`). The rider enters an email, confirms via a one-time code, then the same `deleteAccount` runs. This works without the app installed. Play requires it.
+   - ✅ Slice 6 (2026-09-30). **One page for the app and the web (user's choice):** `/delete-account` is public (`LEGAL_PAGES`) and is also Settings → Account → Delete account. Its text is `client/src/core/legal/accountDeletion.ts` (draft; exported to `docs/legal/drafts/delete-account.md`); what is kept is worded once in `deletionRetention.ts` and shared with the Privacy Policy, and a test checks they match.
+   - Signed in: "Email me a code" (no longer sent automatically when the page opens) → code → a final "can't be undone" confirm → the slice 5 endpoints.
+   - Signed out: `POST /api/account-deletion/code {email}` answers the same whatever the address. An address with a live account gets a deletion code; any other gets an email saying there's no account there (user's choice), with no code issued. `POST /api/account-deletion/confirm {email, code}` redeems it and answers `{ deleted }`. Per-address and per-IP limits are the sign-in ones.
+   - After release: add the URL in Play Console → Data safety → Delete account URL.
 9. **Sign in with Apple token revocation.** Add it when Apple sign-in ships (E2 is deferred to iOS launch).
 10. **Remove the dead legacy handler** and its route. ✅ Slice 5: `deleteMyAccount`, its route and `RiderService.softDelete` are gone.
 

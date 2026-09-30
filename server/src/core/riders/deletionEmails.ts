@@ -39,3 +39,29 @@ export const buildDeletionCodeEmail = (input: {
     html,
   };
 };
+
+/**
+ * Sent instead of a code when someone asks to delete an account at an
+ * address that has none. Whoever asked sees the same answer either way; only
+ * the inbox's owner learns there was nothing to delete.
+ */
+export const buildNoAccountEmail = (input: { to: string }): OutgoingEmail => {
+  const text = [
+    "Someone asked to delete a ThrottleBase account at this address, but there's no ThrottleBase account here, so there's nothing to delete.",
+    "",
+    "If you signed up with a different address, ask again with that one. If you didn't ask, you can ignore this email.",
+  ].join("\n");
+
+  const html = text
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => `<p>${line}</p>`)
+    .join("");
+
+  return {
+    to: input.to,
+    subject: "About deleting a ThrottleBase account",
+    text,
+    html,
+  };
+};

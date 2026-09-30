@@ -83,6 +83,24 @@ export const enforceCodeLimitForIp = async (
   );
 };
 
+/** Per-IP limit on attempts to redeem a code, whatever it was for. */
+export const enforceVerifyLimitForIp = async (
+  deps: RateLimitDeps,
+  ip: string,
+  now: Date,
+): Promise<void> => {
+  await enforceRateLimit(
+    deps,
+    {
+      bucket: "email_otp_verify_ip",
+      subject: ip,
+      rule: deps.policy.otpRateLimits.verifyPerIp,
+      message: "Too many attempts. Try again later.",
+    },
+    now,
+  );
+};
+
 /**
  * Stores a digest of a fresh code and emails the code itself. `address` must
  * already be normalised; `buildEmail` supplies the wording for the flow.

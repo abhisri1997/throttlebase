@@ -11,6 +11,7 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { placeholdersIn, toMarkdown, type LegalDocument } from "../src/core/legal/legalDocument";
+import { ACCOUNT_DELETION } from "../src/core/legal/accountDeletion";
 import { GRIEVANCE } from "../src/core/legal/grievance";
 import { PRIVACY_POLICY } from "../src/core/legal/privacyPolicy";
 import { TERMS } from "../src/core/legal/terms";
@@ -22,6 +23,7 @@ const DRAFTS: ReadonlyArray<{ file: string; document: LegalDocument }> = [
   { file: "privacy-policy.md", document: PRIVACY_POLICY },
   { file: "terms.md", document: TERMS },
   { file: "grievance.md", document: GRIEVANCE },
+  { file: "delete-account.md", document: ACCOUNT_DELETION },
 ];
 
 const readIfExists = async (path: string): Promise<string | null> => {
