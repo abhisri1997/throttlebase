@@ -215,11 +215,30 @@ const stopHeartbeat = (): void => {
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
+const withdrawnListeners = new Set<() => void>();
+
+/**
+ * Called when the rider withdraws consent to share their live location from
+ * any of their devices. Tracking has already stopped; the listener refreshes
+ * whatever decides whether to start it again.
+ */
+export const onLiveLocationWithdrawn = (listener: () => void): (() => void) => {
+  withdrawnListeners.add(listener);
+  return () => {
+    withdrawnListeners.delete(listener);
+  };
+};
+
+export interface TrackingOptions {
+  /** Read the motion sensors: only with the rider's consent (E6). */
+  motion?: boolean;
+}
+
 /**
  * Start tracking for an active ride. Connects socket, starts foreground +
  * background location updates, and begins heartbeat.
  */
-export const startTracking = async (rideId: string): Promise<void> => {
+export const startTracking = async (rideId: string, options: TrackingOptions = {}): Promise<void> => {
   // Already tracking this ride
   if (_activeRideId === rideId) {
     return;
@@ -232,6 +251,12 @@ export const startTracking = async (rideId: string): Promise<void> => {
 
   // Connect socket and join room
   liveSessionSocket.connect();
+  liveSessionSocket.off("consent:withdrawn");
+  liveSessionSocket.on("consent:withdrawn", () => {
+    void stopTracking().finally(() => {
+      for (const listener of withdrawnListeners) listener();
+    });
+  });
   liveSessionSocket.emit("session:join", { rideId });
 
   // Start location tracking
@@ -240,7 +265,7 @@ export const startTracking = async (rideId: string): Promise<void> => {
   startHeartbeat();
   // After the location prompts, so the dialogs don't stack; never awaited, so
   // a rider who says no (or never answers) rides on regardless.
-  void startMotionWatch();
+  if (options.motion !== false) void startMotionWatch();
 
   console.log("[BgLocation] tracking started for ride:", rideId);
 };

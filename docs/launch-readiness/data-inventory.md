@@ -391,11 +391,11 @@ Legend:
 ### E6. Consent and age gate
 
 - 🟡 `rider_consents` (mig 023) records terms and privacy **document versions** plus IP at sign-up. Versions come from `TERMS_VERSION` / `PRIVACY_VERSION` (`server/src/composition/env.ts:140-143`).
-- ✅ Purpose-based consent ledger (migration 045, 2026-09-30): append-only `consent_events` against the exact notice text (hashed), `consent_state` per purpose, re-consent when a notice version changes, withdrawals audited in `security_events`, and `GET`/`PUT /api/consents`. Enforced on live location, ride recording and motion data; riders never asked keep today's behaviour until asked (option B). Not yet in the app.
-- ❌ No contextual consent (first ride, first live session).
-- ❌ No withdrawal UI.
-- 🟡 Re-consent on version bump: the server treats a grant of an older notice as not given (`reconsent_required`); the app does not ask yet.
-- 🟡 18+ declaration recorded (`rider_declarations`, `POST /api/consents/declarations`); after a "no" only support can change it. The app does not ask yet, and nothing blocks the account yet.
+- ✅ Purpose-based consent ledger (migration 045, 2026-09-30): append-only `consent_events` against the exact notice text (hashed), `consent_state` per purpose, re-consent when a notice version changes, withdrawals audited in `security_events`, and `GET`/`PUT /api/consents`. Enforced on live location, ride recording and motion data; riders never asked keep today's behaviour until asked (option B). In the app since PR 3.
+- ✅ Contextual consent: ride purposes are asked just before a ride's tracking starts (never asked, or the notice changed).
+- ✅ Withdrawal: Settings → Security & Privacy → Privacy choices, one tap per purpose; withdrawing live location stops tracking at once.
+- ✅ Re-consent on version bump: a grant of an older notice counts as not given (`reconsent_required`), and the app asks again before the next ride.
+- 🟡 18+ declaration recorded (`rider_declarations`, `POST /api/consents/declarations`); after a "no" only support can change it. The app asks at launch before anything else; after a "no" the rider only sees the under-18 screen (delete the account, contact the Grievance Officer, or sign out) and is never tracked.
 
 ### E7. Rider safety UX
 
