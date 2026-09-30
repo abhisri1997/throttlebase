@@ -123,6 +123,7 @@ Like a WhatsApp group whose admin leaves: the ride or group carries on under som
 
 ## Docs to update
 
-- `data-inventory.md` §8 and §9 E1.
-- Deletion page and Privacy Policy retention section, including the 180-day sealed registration record. ⚖️
-- `data-inventory.md` §1.1: add `sealed_registration_records`.
+- ✅ `data-inventory.md` §8 (now with §8.1, account deletion) and §9 E1 (slice 7, 2026-09-30).
+- ✅ Deletion page and Privacy Policy retention section, including the 180-day sealed registration record: one shared wording (`client/src/core/legal/deletionRetention.ts`, slice 6). ⚖️ Drafts until reviewed.
+- ✅ `data-inventory.md` §1.1: `sealed.registration_records`, `riders.purged_at` and what the purge leaves.
+- ✅ `LAUNCH_READINESS.md` E1: current state.
