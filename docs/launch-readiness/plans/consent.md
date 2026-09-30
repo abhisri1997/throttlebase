@@ -12,6 +12,13 @@
 
 **Riders never asked (decided 2026-09-30, option B):** riders who signed up before consent was asked for keep today's behaviour for each purpose until the app asks them on next use (`ALLOWED_WHEN_NOT_ASKED`, `server/src/core/consent/state.ts`). An explicit no, a withdrawal, or a grant of an older notice switches the feature off at once. `marketing_notifications` is opt-in only.
 
+**In the app (PR 3):**
+- **The 18+ question** is asked at launch before anything else, onboarding included, of new riders and of riders who signed up before it existed. A "no" leads only to the under-18 screen: delete the account, contact the Grievance Officer if it was a mistake, or sign out. If the answer can't be fetched (no signal) the rider is let in and asked on a later launch.
+- **Purpose consents are asked just in time, not as a block at onboarding.** Just before a ride's tracking starts, the rider is asked about `live_location_sharing`, `ride_recording` and `motion_activity` when never asked or when the notice changed. Sharing and recording start switched on, because that is the ride they are starting; motion starts off. ⚖️ A "Not now" records nothing and doesn't ask again for that ride, so no signal mid-ride never blocks the rider. A rider who said no isn't asked again on every ride.
+- **Settings → Security & Privacy → Privacy choices:** every purpose with its notice and a switch. One tap withdraws.
+- **Withdrawal:** tracking stops (`consent:withdrawn`), the motion sensors aren't read without `motion_activity`, and a rider who withdrew disappears from the others' maps (`locationWithdrawn`).
+- `public_profile` and `marketing_notifications` are set only in Settings until they gate something.
+
 **Gates built (PR 2):** `location:update` needs `live_location_sharing`, is recorded only with `ride_recording`, and uses `activity` only with `motion_activity`. Withdrawing `live_location_sharing` clears the rider's position in live rides and takes them out of the live rooms. Samples already recorded are kept: withdrawal stops future processing and is not erasure (account deletion is). The `public_profile` gate waits for profile visibility to be enforced at all (E5, D11): today other riders see the same allowlisted fields whatever the setting.
 
 ## Why two records, not one

@@ -50,6 +50,8 @@ export type PresenceUpdateEvent = {
   riderId: string;
   isOnline: boolean;
   lastHeartbeatAt: string | null;
+  /** The rider stopped sharing their live location: forget where they were. */
+  locationWithdrawn?: boolean;
 };
 
 export type LocationBroadcastEvent = {
@@ -122,6 +124,8 @@ export type LiveSocketServerEvents = {
   "session:ended": (event: SessionEndedEvent) => void;
   "rider:progress": (event: RiderProgressEvent) => void;
   "ride:arrival": (event: RideArrivalEvent) => void;
+  /** To this rider's own devices: they withdrew consent, so tracking stops. */
+  "consent:withdrawn": (event: { purpose: string }) => void;
 };
 
 export type LiveSocketClientEvents = {

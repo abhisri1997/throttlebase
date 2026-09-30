@@ -27,6 +27,11 @@ type LivePresence = {
 type PresenceMap = Record<string, LivePresence>;
 type LocationMap = Record<string, LiveLocation>;
 
+const withoutRider = (locations: LocationMap, riderId: string): LocationMap => {
+  const { [riderId]: _removed, ...rest } = locations;
+  return rest;
+};
+
 let socketListenersAttached = false;
 
 type LiveSessionState = {
@@ -119,6 +124,8 @@ const attachSocketListeners = () => {
   liveSessionSocket.on("presence:update", (event: PresenceUpdateEvent) => {
     useLiveSessionStore.setState((state) => ({
       ...state,
+      // A rider who stopped sharing their location leaves the map at once.
+      locations: event.locationWithdrawn ? withoutRider(state.locations, event.riderId) : state.locations,
       presence: {
         ...state.presence,
         [event.riderId]: {

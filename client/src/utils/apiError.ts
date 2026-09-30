@@ -105,3 +105,9 @@ export const getApiErrorMessage = (
 
   return fallback;
 };
+
+/** The HTTP status of a failed API call, or null when there was no response. */
+export const getApiErrorStatus = (error: unknown): number | null => {
+  const status = toAxiosLikeError(error)?.response?.status;
+  return typeof status === "number" ? status : null;
+};
