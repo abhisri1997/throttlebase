@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import pg from "pg";
 import { runMigrations } from "./migrate.js";
+import { createRegistrationSealer } from "../crypto/registrationSealer.js";
+import { generateSealingKeyPair } from "../crypto/sealedBox.js";
+
+const testSealer = createRegistrationSealer(generateSealingKeyPair().publicKeyPem);
 
 /**
  * A moderator works the report queue: removes posts, comments and routes,
@@ -216,7 +220,7 @@ test("the moderation queue, removals and suspensions", { skip: !CONNECTION }, as
     const sessions = await admin.query(`SELECT revoked_at FROM sessions WHERE rider_id = $1`, [BALA]);
     assert.ok(sessions.rows.every((row) => row.revoked_at !== null));
 
-    const repo = riderRepo!.createRiderRepository(db!.default);
+    const repo = riderRepo!.createRiderRepository(db!.default, testSealer);
     const record = await repo.withTransaction((tx) => tx.findRiderById(BALA));
     assert.equal(record?.suspended, true, "sign-in reads the suspension");
 
