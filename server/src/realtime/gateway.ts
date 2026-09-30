@@ -135,8 +135,8 @@ const canAccessRideRoom = async (
 /** Every /live socket of one rider, so they can be reached across their devices. */
 const liveRiderRoomKey = (riderId: string): string => `live-rider:${riderId}`;
 
-const LIVE_LOCATION_OFF =
-  "Sharing your live location is off. Turn it on in Settings → Privacy to share your position on rides.";
+const LOCATION_USE_OFF =
+  "Sharing your live location and recording your rides are both off. Turn one on in Settings → Privacy.";
 
 /**
  * After a rider withdraws consent to share their live location: their
@@ -339,7 +339,7 @@ export const createLiveGateway = (httpServer: HttpServer) => {
         const use = locationUpdateUse(await consentPermissions(rider.riderId), payload.activity);
         if (use.refuse) {
           reservation?.release();
-          emitSocketError(socket, LIVE_LOCATION_OFF, 403);
+          emitSocketError(socket, LOCATION_USE_OFF, 403);
           return;
         }
         // Not recording: hand the sample slot back, so a track resumed later
@@ -360,7 +360,7 @@ export const createLiveGateway = (httpServer: HttpServer) => {
               captured_at: payload.captured_at,
               activity: use.activity,
             },
-            { persistSample: reservation !== null && use.record },
+            { persistSample: reservation !== null && use.record, share: use.share },
           );
         } catch (error) {
           reservation?.release();
@@ -374,9 +374,12 @@ export const createLiveGateway = (httpServer: HttpServer) => {
         }
 
         const { arrival, ...broadcast } = location;
-        liveNamespace
-          .to(buildLiveRoomKey(payload.rideId, session.id))
-          .emit("location:broadcast", broadcast);
+        // Recording without sharing: the ride doesn't see where they are.
+        if (use.share) {
+          liveNamespace
+            .to(buildLiveRoomKey(payload.rideId, session.id))
+            .emit("location:broadcast", broadcast);
+        }
 
         // Only the arriving rider is prompted; the auto-finish follows unless
         // they finish first or ride away.

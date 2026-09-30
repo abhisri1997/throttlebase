@@ -84,7 +84,7 @@ Account routes (`server/src/adapters/http/riderAccountRoutes.ts`) are mounted be
 - `POST /api/rides/:id/live/incident` — confirmed participants
 - `POST /api/rides/:id/live/incident/:incidentId/ack` — captain / co-captain
 - `GET /api/rides/:id/live/timeline` — ordered session events
-- `GET /api/rides/:id/live/replay` — paginated location samples for playback
+- `GET /api/rides/:id/live/replay` — paginated location samples for playback, the caller's own only (D2)
 - `GET /api/live/health` — live module status
 
 ## Routes
@@ -201,7 +201,7 @@ Client → server:
 
 - `session:join`, `session:leave` — `{ rideId }`
 - `presence:heartbeat`
-- `location:update` — `{ rideId, lat, lon, speed_kmh?, heading_deg?, accuracy_m?, captured_at?, activity?, simulated? }`. `activity` is the phone's motion reading (`automotive`, `cycling`, `walking`, `running`, `stationary`), sent only when recent. Updates older than 2 min, more than 30 s in the future, or out of order are dropped. Consent (E6): refused with `session:error` code `403` when the rider withdrew `live_location_sharing`; not stored in the rider's track without `ride_recording`; `activity` dropped without `motion_activity`. Riders never asked share and record as before
+- `location:update` — `{ rideId, lat, lon, speed_kmh?, heading_deg?, accuracy_m?, captured_at?, activity?, simulated? }`. `activity` is the phone's motion reading (`automotive`, `cycling`, `walking`, `running`, `stationary`), sent only when recent. Updates older than 2 min, more than 30 s in the future, or out of order are dropped. Consent (E6): refused with `session:error` code `403` only when the rider has neither `live_location_sharing` nor `ride_recording`; without `live_location_sharing` it is neither broadcast nor kept as their last position (recorded only); not stored in the rider's track without `ride_recording`; `activity` dropped without `motion_activity`. Riders never asked share and record as before
 - `waypoint:reached`
 - `incident:create`
 
