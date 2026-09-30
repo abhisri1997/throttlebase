@@ -14,10 +14,9 @@
  *
  * It never deletes riders. Deleting an account anonymises the rider row and
  * keeps it (core/riders/deleteAccount.ts), because other riders' records
- * point at it: rides.captain_id is ON DELETE CASCADE, so removing the row
- * would take every ride the rider captained with it, along with the other
- * riders' participation, tracks and stats. Removing a leaving rider's own
- * data is a separate, explicit purge (docs/launch-readiness/plans/account-deletion.md).
+ * point at it (rides.captain_id and groups.created_by are ON DELETE
+ * RESTRICT since migration 037). Removing a leaving rider's own data is a
+ * separate, explicit purge (account-purge.processor.ts).
  *
  * Safe to run as a recurring job (idempotent DELETE).
  */

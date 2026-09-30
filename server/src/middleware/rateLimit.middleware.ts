@@ -1,5 +1,6 @@
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import type { Request } from "express";
+import { clientIpOf } from "../adapters/http/clientIp.js";
 
 /**
  * Rate limits for endpoints that spend money on outbound Google calls.
@@ -20,8 +21,9 @@ const riderKey = (req: Request): string => {
 
   // The IP fallback goes through ipKeyGenerator, which normalises IPv6 to its
   // /56 prefix. Keying on a raw IPv6 address would let one client vary the
-  // low bits and get an unlimited number of fresh buckets.
-  return ipKeyGenerator(req.ip ?? "unknown");
+  // low bits and get an unlimited number of fresh buckets. Not req.ip: behind
+  // Cloudflare that is Cloudflare's address for everyone (see clientIp.ts).
+  return ipKeyGenerator(clientIpOf(req) ?? "unknown");
 };
 
 const HOUR_MS = 60 * 60 * 1000;

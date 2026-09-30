@@ -1,6 +1,6 @@
 # ThrottleBase — Data Inventory (Phase 0 audit)
 
-Audited against the code on `dev` at `2eebfa0` on 2026-09-28.
+Audited against the code on `dev` at `2eebfa0` on 2026-09-28. Account deletion (§0, §1.1, §8, §9 E1) updated for E1 on 2026-09-30.
 This is the source of truth for the privacy policy, the store forms (`store-forms.md`, E9) and the legal drafts (E8).
 Every row points at the code it was read from. When the code changes what is collected, who sees it, or how long it is kept, update this file in the same PR.
 
@@ -15,7 +15,7 @@ Paths are relative to the repo root. `mig NNN` means `server/src/db/migrations/N
 - **Highest-risk data is the per-fix location track.** It sits in `ride_live_location_samples`: coordinates, speed, heading, accuracy and motion activity every few seconds while a rider is riding. The same table serves both live sharing and the rider's permanent ride history, and it is kept forever.
 - **Nobody outside the app receives personal data except Google.** Google receives map, directions, places and geocoding requests carrying coordinates, plus Google sign-in. The app has no analytics, crash, push or media-storage SDK.
 - **Access control is application SQL only.** RLS policies exist (mig 027–028) but are not enforced, because the API connects as Supabase's `postgres` role (`docs/project-status.md`, "Known gaps").
-- **Account deletion anonymises the rider now and hard-deletes 30 days later.** The hard delete cascades into rides the rider led, which removes other riders' participation. See §9, decision D1.
+- **Account deletion hides and anonymises the rider at once, and purges their own data 30 days later.** It needs a code emailed to the account's address, in the app or at `throttlebase.in/delete-account`. Other riders' records are never touched: rides and groups the rider led pass to someone else, and the rider row stays as an empty tombstone. Registration details are kept sealed for 180 days (IT Rules 3(1)(h)). See §8 and §9 E1.
 - **Background location is requested but is not required.** The code already records through a foreground service (§4).
 - **The safety flow is "Alert my group"** (renamed from "SOS" on 2026-09-29). It alerts everyone on the ride in-app, with a Call 112 hand-off (§5).
 - **Unused permissions are requested:** microphone, camera, photo library, external storage, and background `audio` and `fetch` modes (§3).
@@ -27,7 +27,7 @@ Paths are relative to the repo root. `mig NNN` means `server/src/db/migrations/N
 Retention abbreviations:
 
 - **forever**: nothing deletes it.
-- **account**: removed when the rider row is hard-deleted, 30 days after account deletion. See §8 for how that cascade works.
+- **account**: removed by the `account.purge` job 30 days after the account is deleted (`server/src/workers/processors/account-purge.processor.ts`). See §8.
 
 ### 1.1 Account and identity
 
@@ -39,15 +39,16 @@ Retention abbreviations:
 | `riders.location_city`, `location_region`                                                                | Coarse location                        | Profile                                                                                                       | Any signed-in rider                                                                                                                           | Nulled at deletion                                                                                                                |
 | `riders.location_coords` (mig 001)                                                                       | **Precise location** (home-like point) | Writable via `PATCH /me` (`rider.schemas.ts:41`). The client never sets it                                    | **Any signed-in rider.** Returned by the public profile (`server/src/services/rider.service.ts:64`, not stripped at `rider.controller.ts:76`) | Nulled at deletion                                                                                                                |
 | `riders.total_rides`, `total_distance_km`, `total_ride_time_sec`                                         | Activity stats                         | Profile, leaderboard                                                                                          | Any signed-in rider                                                                                                                           | account                                                                                                                           |
-| `riders.deleted_at`                                                                                      | Account state                          | Soft delete                                                                                                   | Server                                                                                                                                        | Row hard-deleted 30 days after it is set (`server/src/workers/processors/cleanup.processor.ts:23-32`)                             |
+| `riders.deleted_at`, `purged_at` (mig 037)                                                               | Account state                          | Soft delete; purge done                                                                                       | Server                                                                                                                                        | Kept: the row is never deleted. After the purge it holds only `id`, `deleted_at` and `purged_at` (a tombstone other riders' records point at) |
+| `sealed.registration_records` (mig 043): `sealed` (encrypted email, name, username, phone, sign-in methods, registered_at, sign-up IP and time), `key_id`, `cancelled_at`, `purge_after`, `legal_hold_until` | Registration information (IT Rules 3(1)(h)) | Written at deletion (`riderRepository.softDeleteAndUnlink`); opened only for a lawful request (`npm run sealed:open`, logged in `sealed.access_log`) | Nobody through the API. The app role can only seal and purge | 180 days after deletion, longer only under a legal hold (`registration-records-purge.processor.ts`, daily) |
 | `rider_identities` (mig 023): `provider` (google / apple / email), `subject`, `email`                    | Identifier                             | Federated sign-in                                                                                             | Server                                                                                                                                        | Deleted immediately at account deletion (`riderRepository.ts:221`)                                                                |
 | `rider_roles` (mig 023): `role` (admin / support)                                                        | Authorisation                          | Admin and support access                                                                                      | Owner and server                                                                                                                              | account                                                                                                                           |
-| `rider_consents` (mig 023): `terms_version`, `privacy_version`, `accepted_at`, `ip`                      | Consent record; IP address             | Proof of acceptance at sign-up (`riderRepository.ts:127`)                                                     | Server                                                                                                                                        | account. Append-only                                                                                                              |
+| `rider_consents` (mig 023): `terms_version`, `privacy_version`, `accepted_at`, `ip`                      | Consent record; IP address             | Proof of acceptance at sign-up (`riderRepository.ts:127`)                                                     | Server                                                                                                                                        | **Kept after the purge**, as proof of consent (Privacy Policy). Append-only. No end date yet                                     |
 | `consent_events`, `consent_state` (mig 045): purpose, `granted`/`withdrawn`, notice version, `source`, `app_version`, `platform` | Consent record | Proof of per-purpose consent (DPDP s.6(10)); the gates features check | Owner (`GET /api/consents`) and server | Append-only. Kept after account deletion against the tombstone for the proof period (proposed 3 years ⚖️), then purged |
 | `rider_declarations` (mig 045): `age_18_plus` answer, `source`, `app_version` | Age attestation | 18+ gate at onboarding | Owner and server | Every answer kept; kept with the consent record after deletion |
 | `sessions` (mig 008, 025): `refresh_token_hash`, `family_id`, `ip_address`, `user_agent`, `last_used_at` | Device / network identifiers           | Rotating refresh tokens                                                                                       | Owner (`/api/security/sessions`, flag `FEATURE_ACCOUNT_SECURITY`, off in beta)                                                                | Revoked or expired rows are deleted hourly (`cleanup.processor.ts:14-21`, scheduled at `server/src/services/jobs.service.ts:202`) |
-| `login_activity` (mig 008): `ip_address`, `device_fingerprint`, `geo_location`, `logged_in_at`           | Network identifiers; security log      | Sign-in history (`server/src/core/auth/resolveOrCreateRider.ts:145`)                                          | Owner (`/api/security/login-activity`, flagged off)                                                                                           | **forever** (account)                                                                                                             |
-| `email_otps` (mig 026): `email`, `code_hash`, `ip`, `attempts`                                           | Contact; IP                            | Email-code sign-in                                                                                            | Server                                                                                                                                        | **forever**. Nothing purges it, not even for accounts that never finish sign-up                                                   |
+| `login_activity` (mig 008): `ip_address`, `device_fingerprint`, `geo_location`, `logged_in_at`           | Network identifiers; security log      | Sign-in history (`server/src/core/auth/resolveOrCreateRider.ts:145`)                                          | Owner (`/api/security/login-activity`, flagged off)                                                                                           | account. **Forever** while the account exists (no security-log purge, §9 E11)                                                     |
+| `email_otps` (mig 026): `email`, `code_hash`, `ip`, `attempts`                                           | Contact; IP                            | Email codes for sign-in and for account deletion (`server/src/core/auth/emailCode.ts`)                        | Server                                                                                                                                        | **forever**. Nothing purges it, not even after the account is deleted or for accounts that never finish sign-up                  |
 | `rate_limit_counters` (mig 026): `subject` (email or IP)                                                 | Identifier                             | Throttling OTP requests                                                                                       | Server                                                                                                                                        | Expired windows pruned (`server/src/adapters/postgres/rateLimiter.ts:58`)                                                         |
 | `rider_settings`, `rider_privacy_settings`, `notification_preferences` (mig 007)                         | Preferences                            | Settings                                                                                                      | Owner                                                                                                                                         | account                                                                                                                           |
 | `vehicles`, `gear` (mig 002)                                                                             | Possessions                            | Garage                                                                                                        | Owner                                                                                                                                         | account                                                                                                                           |
@@ -282,28 +283,45 @@ Renamed from "SOS" on 2026-09-29 (decision D8, [plans/safety-flow.md](plans/safe
 
 ## 8. Retention today
 
-No retention config file exists. Only three purges run:
+No single retention config file exists (§9 E11). These purges run:
 
-| Purge                             | Where                                                          | What                                                                                    |
-| --------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Hourly `cleanup.expired_sessions` | `cleanup.processor.ts`, scheduled at `jobs.service.ts:197-204` | Deletes expired or revoked `sessions`. Hard-deletes `riders` 30 days after `deleted_at` |
-| Rate-limit pruning                | `rateLimiter.ts:58`                                            | Expired `rate_limit_counters` windows                                                   |
-| Places cache                      | `stop_suggestion_cache.expires_at`                             | Not personal                                                                            |
+| Purge                                        | Where                                                                                   | What                                                                                                                  |
+| -------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Hourly `cleanup.expired_sessions`            | `cleanup.processor.ts`                                                                  | Expired or revoked `sessions`; finished `jobs` after 7 days (failed after 30); moderator-removed posts, comments and routes after 180 days |
+| Hourly `account.purge`                       | `account-purge.processor.ts`                                                            | A deleted rider's own data, 30 days after deletion (below)                                                            |
+| Daily `registration_records.purge`           | `registration-records-purge.processor.ts`, via `sealed.purge_expired_registrations()`   | Sealed registration records 180 days after deletion, unless under a legal hold                                        |
+| Rate-limit pruning                           | `rateLimiter.ts:58`                                                                     | Expired `rate_limit_counters` windows                                                                                 |
+| Places cache                                 | `stop_suggestion_cache.expires_at`                                                      | Not personal                                                                                                          |
 
-What the 30-day rider hard delete removes through `ON DELETE CASCADE`:
+### 8.1 Account deletion
 
-- The rider's identities, sessions, login activity, settings, vehicles and gear.
-- Their posts, comments, likes and follows.
-- Their participation rows, location samples and presence.
-- Their routes, bookmarks, badges, reviews and support tickets.
-- **Every ride they captained** (`rides.captain_id … ON DELETE CASCADE`, mig 003 line 6), and with those rides **all other riders'** participation, samples and stats for them.
+At deletion (`server/src/core/riders/deleteAccount.ts`, confirmed by a code emailed to the account's address; `POST /api/riders/me/deletion-code` in the app, `POST /api/account-deletion/code` on the web):
 
-Rows with `ON DELETE SET NULL` (stops approved or requested, incidents, live events, session starters) lose the link but keep the data.
+- The registration record is sealed (§1.1), then the profile's personal fields are cleared and every sign-in identity is removed, in one transaction (`riderRepository.softDeleteAndUnlink`).
+- Every session is revoked, so every device is signed out.
+- The rider's profile and content disappear from every query (`deleted_at IS NULL` filters).
+- Upcoming rides they captain pass to the next leader, and groups they own to the next admin or member; with nobody left the ride is cancelled. The new leader and everyone on it are notified.
 
-Everything else is kept **forever**:
+Thirty days later `account.purge` deletes the rider's own rows, table by table (the list is `OWN_DATA_DELETES` in the processor, never `ON DELETE CASCADE`):
 
-- `ride_live_location_samples`, `ride_live_events`, `ride_live_incidents`, `notifications`.
-- `login_activity`, `email_otps`, `jobs`, `gps_traces`.
+- Riding: location samples, presence, ride stats, participation, GPS traces, reviews.
+- Routes: road feedback, bookmarks, shares with them, and their private and shared routes. Their public routes become anonymised Community routes first (ends trimmed about 500 m unless at a public place; deleted if under 5 km remains; their words replaced).
+- Community: posts (with the comments and likes on them), their comments, likes, follows either way, and blocks either way. A group they still own with nobody left is deleted.
+- Account: notifications and preferences, settings, vehicles, gear, badges, achievements, support tickets, login activity, sessions, identities and roles.
+
+What stays after the purge:
+
+- The `riders` row as a tombstone: `id`, `deleted_at`, `purged_at`, every personal field empty.
+- Rides they captained that are finished, shown with captain "Deleted rider", and other riders' records on shared rides (stops, live-session events, incidents), linked to the tombstone.
+- `rider_consents` rows, as proof of consent.
+- Reports they filed or that concern them, and `security_events` (the moderation audit trail).
+- The sealed registration record, until its 180 days are up.
+- `email_otps` rows for their address (no purge, §9 E11).
+
+Kept **forever** otherwise:
+
+- `ride_live_location_samples`, `ride_live_events`, `ride_live_incidents`, `notifications` of active accounts.
+- `login_activity`, `email_otps`, `gps_traces`.
 - All UGC of active accounts.
 
 ---
@@ -319,17 +337,15 @@ Legend:
 
 ### E1. Account deletion
 
-- 🟡 `DELETE /api/riders/me` exists (`server/src/adapters/http/riderAccountRoutes.ts:93`; `server/src/core/riders/deleteAccount.ts`). It deletes identities, revokes all sessions, and anonymises the profile.
-- ✅ The 30-day hard delete that cascaded into other riders' data is removed (security hotfix; `server/src/adapters/postgres/account-cleanup.integration.test.ts`). Production had 469 cleanup runs and 0 riders deleted, so no past damage.
-- ❌ Until the E1 purge lands, a deleted rider's posts, comments, likes, follows and tracks are kept indefinitely and still shown in the feed as "Deleted rider" (community queries have no `deleted_at` filter). See D1 and [plans/account-deletion.md](plans/account-deletion.md).
-- ⚠️ IT Rules 2021 Rule 3(1)(h) requires keeping registration information for 180 days after an account is cancelled. `deleteAccount` erases the email and identities immediately; the plan adds a sealed 180-day registration record. ⚖️
-- ⚠️ A second, shadowed `DELETE /me` (`server/src/controllers/rider.controller.ts:153-172`) returns "You have 30 days to recover it". It is unreachable because the auth router is mounted first (`server/src/app.ts:196-200`), but the two contradict each other.
-- ❌ No re-auth or recent-token requirement.
-- ❌ No Sign in with Apple token revocation.
-- ❌ No web deletion page (`throttlebase.in/delete-account`).
-- 🟡 In-app: Settings → "Delete account" with a two-step confirm (`client/app/(modals)/settings.tsx:174`). The explanation text describes the anonymise behaviour, not the 30-day purge.
-- ❌ No documented security-log or legal-hold retention.
-- ❌ No tests proving "other users' data intact".
+- ✅ Deletion in the app (Settings → Account → Delete account) and on the web without the app (`throttlebase.in/delete-account`), one public page (`client/app/(legal)/delete-account.tsx`) that explains what is deleted and kept (`client/src/core/legal/accountDeletion.ts`, draft).
+- ✅ Re-authentication: every deletion needs a code emailed to the account's address (`server/src/core/riders/deleteAccount.ts`). Without one `DELETE /api/riders/me` answers 403 `REAUTH_REQUIRED`. The web endpoints (`POST /api/account-deletion/code`, `/confirm`) answer the same whether or not an address has an account.
+- ✅ At deletion: identities removed, sessions revoked, profile cleared, content hidden at once; rides and groups the rider leads handed over (§8.1).
+- ✅ 30-day `account.purge` removes only the rider's own data; the rider row stays as a tombstone, and `rides.captain_id` / `groups.created_by` are `ON DELETE RESTRICT` (mig 037), so other riders' data can't be cascaded away. Tests: `account-purge.integration.test.ts`, `ride-handoff.integration.test.ts`, `group-handoff.integration.test.ts`.
+- ✅ Public routes kept as anonymised Community routes (§8.1).
+- ✅ IT Rules 2021 Rule 3(1)(h): registration details sealed for 180 days, encrypted with an offline-held key, purged daily unless under a legal hold (mig 043). ⚖️ Counsel to confirm the field list.
+- ✅ The shadowed legacy `DELETE /me` handler is removed.
+- 🟡 Retention of security logs is not settled: `login_activity` has no purge while the account exists, and `email_otps` none at all (E11). The Privacy Policy and deletion page say `[SECURITY LOG RETENTION PERIOD]`.
+- ⏸ Sign in with Apple token revocation: with Apple sign-in, at the iOS release (D6).
 - ⚠️ "Push tokens" and "live-session data TTL" in the E1 list don't exist yet (D4).
 
 ### E2. Sign in with Apple in production
@@ -427,9 +443,9 @@ Legend:
 
 ### E11. Retention jobs
 
-- 🟡 Worker and recurring-job machinery exist (`jobs.service.ts` `enqueueRecurringJobIfDue`). Only the session purge and the 30-day rider purge run (§8).
+- 🟡 Worker and recurring-job machinery exist (`jobs.service.ts` `enqueueRecurringJobIfDue`). The session and jobs cleanup, the 30-day account purge and the 180-day sealed-record purge run (§8).
 - ❌ No live-session data purge.
-- ❌ No soft-deleted content purge (content is not soft-deleted at all).
+- ✅ Content a moderator removed is purged after 180 days (`cleanup.processor.ts`). A deleted account's content goes with the account purge (§8.1).
 - ❌ No security-log purge (`login_activity`, `email_otps`, `jobs`, `notifications` grow forever).
 - ❌ No single retention config file.
 
@@ -442,3 +458,4 @@ Legend:
 - Record Railway's region, and whether Railway and Cloudflare logs stay in India (CERT-In 180-day, India jurisdiction).
 - Fill in the placeholders in the Privacy Policy and Terms (operator name — an individual developer until a company is registered, contact address, grievance officer, email provider, security-log retention, liability cap, jurisdiction), get them reviewed, then mark them `final`.
 - Sign or accept DPAs with Supabase, Railway, Cloudflare and Google.
+- Play Console → Data safety: set the Delete account URL to `https://throttlebase.in/delete-account` once that page is deployed (E1).

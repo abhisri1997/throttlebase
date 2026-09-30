@@ -62,6 +62,13 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 > Rides, tracks and UGC are kept, then the hourly cleanup hard-deletes the rider after 30 days and cascades into rides they captained.
 > No re-auth, web flow or Apple revocation. There are no push tokens to delete. See **D1**, **D4**; inventory §8, §9 E1.
 
+> **Current state (2026-09-30): built for the Android launch** (PRs #49–#83; [plans/account-deletion.md](plans/account-deletion.md)).
+> Deletion needs a code emailed to the account's address, in the app or at `throttlebase.in/delete-account` without the app.
+> It signs out everywhere, hides the rider at once and hands their rides and groups to the next leader; 30 days later `account.purge`
+> removes only their own data and leaves an empty tombstone. Public routes stay as anonymised Community routes, and registration
+> details are sealed for 180 days (IT Rules 3(1)(h)). Still open: a security-log retention period and purge (E11), Apple token
+> revocation (with Apple sign-in, D6), the Play Console Delete account URL, and legal review of the texts. Inventory §8.1, §9 E1.
+
 ### E2. Sign in with Apple in production (Apple 4.8)
 
 - The config plugin that strips the Apple sign-in entitlement must apply **only** to dev/free-account EAS profiles.
