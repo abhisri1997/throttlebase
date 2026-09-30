@@ -114,7 +114,6 @@ function AppInner() {
         }}
       >
         <Stack.Screen name='(auth)' options={{ headerShown: false }} />
-        <Stack.Screen name='(consent)' options={{ headerShown: false }} />
         <Stack.Screen name='(tabs)' options={{ headerShown: false }} />
         <Stack.Screen name='ride/[id]' options={{ headerShown: false }} />
         <Stack.Screen
