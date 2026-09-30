@@ -14,6 +14,7 @@ This directory is organized by purpose so contributors and assistants can quickl
 - Product and scope
   - `product-overview.md` — what the product does
   - `project-status.md` — beta scope, environments, known gaps, backlog
+  - `ride-now-ux.md` — Ride now: unplanned rides, solo or invited; every screen, rule and server change (design, not built)
 
 - Architecture and technical operation
   - `architecture.md` — components, hosting, server structure, request/realtime/job flows, scaling limits
