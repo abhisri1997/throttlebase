@@ -182,7 +182,7 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 >
 > **Update (2026-09-30):** `security_events` exists (migration 043) and records every moderation action with the moderator, the rider, the target and the reason. Auth events follow with the logging work (D10).
 >
-> **Update (2026-09-30):** CI runs typecheck, lint, boundaries, unit and PostGIS integration tests for both packages, a migration check, and gitleaks over the full history on every PR and push to `dev`/`main`. The full-history scan found only the three already-known items (the dead Maps key in two commits, and a PEM header string), listed with reasons in `.gitleaksignore`. Still open: branch protection so PRs need a green, up-to-date run (a GitHub setting).
+> **Update (2026-09-30):** CI runs typecheck, lint, boundaries, unit and PostGIS integration tests for both packages, a migration check, and gitleaks over the full history on every PR and push to `dev`/`main`. The full-history scan found only the three already-known items (the dead Maps key in two commits, and a PEM header string), listed with reasons in `.gitleaksignore`. Rulesets on `dev` and `main` now require a PR, a green `Server`, `Client` and `Secret scan` run on a branch that is up to date with its base, and block force-pushes and deletion.
 >
 > See **D5**; inventory §7, §9 E10.
 
