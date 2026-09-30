@@ -22,6 +22,8 @@ const FOCUS_ANIMATION_MS = 650;
 const FOCUS_ZOOM = 16;
 const FOCUS_PITCH_DEGREES = 42;
 const OVERVIEW_EDGE_PADDING = 48;
+/** How long after an instant Android move to set it again, once padding has applied. */
+const ANDROID_SETTLE_MS = 500;
 /**
  * Extra top padding in follow mode, as a share of the visible map. It moves
  * the rider down the screen so more road ahead is in view, as in Google Maps.
@@ -30,6 +32,11 @@ const FOLLOW_LOOK_AHEAD_SHARE = 0.35;
 
 interface UseNavigationCameraInput {
   mapRef: RefObject<MapView | null>;
+  /**
+   * False until the native map exists. Camera commands sent before then are
+   * dropped by the SDK (on Android, silently), so framing waits for it.
+   */
+  isMapReady: boolean;
   fix: NavigationFix | null;
   headingDegrees: number | null;
   /** Height covered at the top of the screen by the maneuver banner. */
@@ -63,6 +70,7 @@ interface FollowFrame {
 
 export const useNavigationCamera = ({
   mapRef,
+  isMapReady,
   fix,
   headingDegrees,
   topInset,
@@ -73,6 +81,13 @@ export const useNavigationCamera = ({
   const [overviewRequest, setOverviewRequest] = useState(0);
 
   const lastFollowRef = useRef<FollowFrame | null>(null);
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Drops a pending re-apply: the rider or another camera move took over. */
+  const cancelSettle = useCallback(() => {
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = null;
+  }, []);
+  useEffect(() => cancelSettle, [cancelSettle]);
   const zoomRef = useRef<number | undefined>(undefined);
   const overviewCoordinatesRef = useRef<LatLng[]>([]);
 
@@ -93,7 +108,9 @@ export const useNavigationCamera = ({
   // moves while riding still animate. iOS animates throughout.
   useEffect(() => {
     const map = mapRef.current;
-    if (mode !== "follow" || !fix || !map) return;
+    // Before the map is ready a move is dropped, yet would be recorded as the
+    // last frame, and a rider standing still is never framed again.
+    if (!isMapReady || mode !== "follow" || !fix || !map) return;
 
     const last = lastFollowRef.current;
     const heading = headingDegrees ?? last?.heading ?? 0;
@@ -113,11 +130,19 @@ export const useNavigationCamera = ({
     const target = { center: fix.coordinate, heading, pitch: FOLLOW_PITCH_DEGREES, zoom };
     if (Platform.OS === "android" && (last === null || isPaddingChanged)) {
       map.setCamera(target);
+      // The padding prop reaches the native map a moment after this render;
+      // set the same camera again once it has, so a rider standing still (no
+      // next fix to move the camera) is left framed.
+      if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+      settleTimerRef.current = setTimeout(() => {
+        settleTimerRef.current = null;
+        if (lastFollowRef.current?.center === target.center) mapRef.current?.setCamera(target);
+      }, ANDROID_SETTLE_MS);
     } else {
       map.animateCamera(target, { duration: FOLLOW_ANIMATION_MS });
     }
     lastFollowRef.current = { at: Date.now(), center: fix.coordinate, heading, paddingKey };
-  }, [fix, headingDegrees, mapRef, mode, mapPadding]);
+  }, [fix, headingDegrees, mapRef, mode, mapPadding, isMapReady]);
 
   // Frame the overview: north-up, flat, the whole remaining route in the
   // visible area, with a worked-out centre and zoom (core/overviewCamera.ts).
@@ -131,7 +156,7 @@ export const useNavigationCamera = ({
   const framedRequestRef = useRef(0);
   useEffect(() => {
     const map = mapRef.current;
-    if (overviewRequest === 0 || mode !== "overview" || !map) return;
+    if (!isMapReady || overviewRequest === 0 || mode !== "overview" || !map) return;
 
     const camera = overviewCamera(overviewCoordinatesRef.current, {
       width: windowWidth,
@@ -152,7 +177,7 @@ export const useNavigationCamera = ({
       return;
     }
     map.setCamera(target);
-  }, [mapRef, overviewRequest, mode, mapPadding.top, mapPadding.bottom, windowWidth, windowHeight]);
+  }, [mapRef, isMapReady, overviewRequest, mode, mapPadding.top, mapPadding.bottom, windowWidth, windowHeight]);
 
   const follow = useCallback(() => {
     lastFollowRef.current = null;
@@ -160,13 +185,15 @@ export const useNavigationCamera = ({
   }, []);
 
   const showOverview = useCallback((coordinates: LatLng[]) => {
+    cancelSettle();
     overviewCoordinatesRef.current = coordinates;
     setMode("overview");
     setOverviewRequest((request) => request + 1);
-  }, []);
+  }, [cancelSettle]);
 
   const focusOn = useCallback(
     (center: LatLng, heading: number, options?: FocusOptions) => {
+      cancelSettle();
       setMode("free");
       mapRef.current?.animateCamera(
         {
@@ -178,15 +205,21 @@ export const useNavigationCamera = ({
         { duration: FOCUS_ANIMATION_MS },
       );
     },
-    [mapRef],
+    [mapRef, cancelSettle],
   );
 
   // The camera's own animations report isGesture: false, so following never kicks itself out.
   const onRegionChange = useCallback((_region: Region, details: Details) => {
-    if (details?.isGesture) setMode("free");
-  }, []);
+    if (details?.isGesture) {
+      cancelSettle();
+      setMode("free");
+    }
+  }, [cancelSettle]);
 
-  const onPanDrag = useCallback(() => setMode("free"), []);
+  const onPanDrag = useCallback(() => {
+    cancelSettle();
+    setMode("free");
+  }, [cancelSettle]);
 
   return { mode, mapPadding, follow, showOverview, focusOn, onRegionChange, onPanDrag };
 };
