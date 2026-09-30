@@ -26,6 +26,8 @@ export interface Ride {
   status: string;
   visibility: string;
   scheduled_at: string;
+  /** When it was actually ridden (the rider's own start, else the live session's); null if never live. */
+  actual_started_at?: string | null;
   estimated_duration_min: number | null;
   max_capacity: number | null;
   current_rider_count: number;
@@ -302,6 +304,18 @@ export const createRide = async (
 /**
  * Gets ride details with captain's name, participants, and stops.
  */
+/**
+ * When a ride actually began, as opposed to when it was scheduled: the
+ * viewer's own start (an early start, or the group rolling out), else the
+ * live session's. Null for a ride that never went live.
+ */
+const actualStartSql = (riderParam: string | null): string => `(
+  SELECT COALESCE(${riderParam ? "p.ride_started_at, " : ""}ls.started_at)
+  FROM ride_live_sessions ls
+  ${riderParam ? `LEFT JOIN ride_live_presence p ON p.session_id = ls.id AND p.rider_id = ${riderParam}` : ""}
+  WHERE ls.ride_id = r.id
+)`;
+
 export const getRideById = async (
   id: string,
   viewerRiderId?: string,
@@ -353,6 +367,7 @@ export const getRideById = async (
   const result = await query(
     `SELECT r.*,
             c.display_name as captain_name,
+            ${actualStartSql(viewerRiderId ? "$2" : null)} AS actual_started_at,
             ST_AsGeoJSON(r.start_point)::json AS start_point_geojson,
             ST_AsGeoJSON(r.end_point)::json AS end_point_geojson,
             r.start_point_name,
@@ -474,6 +489,7 @@ export const listDiscoverableRides = async (
 export const getRideHistory = async (riderId: string): Promise<Ride[]> => {
   const result = await query(
     `SELECT r.*, c.display_name as captain_name,
+            ${actualStartSql("$1")} AS actual_started_at,
             (SELECT count(*) FROM ride_stops rs
               WHERE rs.ride_id = r.id AND rs.status = 'approved')::int AS stop_count
      FROM rides r
@@ -492,7 +508,8 @@ export const getRideHistory = async (riderId: string): Promise<Ride[]> => {
        AND (r.captain_id = $1 OR EXISTS (
          SELECT 1 FROM ride_participants rp WHERE rp.ride_id = r.id AND rp.rider_id = $1
        ))
-     ORDER BY r.scheduled_at DESC`,
+     -- Newest first by when each ride was actually ridden.
+     ORDER BY COALESCE(${actualStartSql("$1")}, r.scheduled_at) DESC`,
     [riderId],
   );
   return result.rows as Ride[];

@@ -4,6 +4,7 @@ import type MapView from "react-native-maps";
 import type { Details, EdgePadding, Region } from "react-native-maps";
 import { FOLLOW_PITCH_DEGREES, followZoomForSpeed } from "../core/cameraPolicy";
 import { angleDeltaDegrees, haversineMeters } from "../core/geometry";
+import { overviewCamera } from "../core/overviewCamera";
 import type { LatLng, NavigationFix } from "../types/navigation";
 
 /**
@@ -65,7 +66,7 @@ export const useNavigationCamera = ({
   topInset,
   bottomInset,
 }: UseNavigationCameraInput): NavigationCamera => {
-  const { height: windowHeight } = useWindowDimensions();
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const [mode, setMode] = useState<CameraMode>("follow");
   const [overviewRequest, setOverviewRequest] = useState(0);
 
@@ -105,23 +106,28 @@ export const useNavigationCamera = ({
     lastFollowRef.current = { at: Date.now(), center: fix.coordinate, heading };
   }, [fix, headingDegrees, mapRef, mode, mapPadding]);
 
-  // Frame the overview after its (unshifted) padding has applied.
+  // Frame the overview: north-up, flat, the whole remaining route in the
+  // visible area. One camera move with a worked-out centre and zoom
+  // (core/overviewCamera.ts): the map's own fit, with a tilt reset and a
+  // padding change in the same moment, left Android where it was.
   useEffect(() => {
     const map = mapRef.current;
-    const coordinates = overviewCoordinatesRef.current;
-    if (overviewRequest === 0 || !map || coordinates.length === 0) return;
+    if (overviewRequest === 0 || !map) return;
 
-    // Overview is north-up and flat; fitting keeps whatever heading the map had.
-    map.setCamera({ heading: 0, pitch: 0 });
-    map.fitToCoordinates(coordinates, {
-      edgePadding: {
-        top: OVERVIEW_EDGE_PADDING,
-        right: OVERVIEW_EDGE_PADDING,
-        bottom: OVERVIEW_EDGE_PADDING,
-        left: OVERVIEW_EDGE_PADDING,
-      },
-      animated: true,
+    const camera = overviewCamera(overviewCoordinatesRef.current, {
+      width: windowWidth,
+      height: windowHeight,
+      paddingTop: mapPadding.top,
+      paddingBottom: mapPadding.bottom,
+      margin: OVERVIEW_EDGE_PADDING,
     });
+    if (!camera) return;
+
+    map.animateCamera(
+      { center: camera.center, zoom: camera.zoom, heading: 0, pitch: 0 },
+      { duration: FOCUS_ANIMATION_MS },
+    );
+    // Padding is read, not a trigger: only a new request reframes.
   }, [mapRef, overviewRequest]);
 
   const follow = useCallback(() => {
