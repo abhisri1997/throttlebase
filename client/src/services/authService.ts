@@ -315,10 +315,21 @@ export const createAuthService = (deps: AuthServiceDeps): AuthService => {
       }
     },
 
-    deleteAccount: async (): Promise<void> => {
-      await api.request({ path: "/api/riders/me", method: "DELETE" });
-      await providers.googleSignOut();
+    requestDeletionCode: async (): Promise<void> => {
+      await api.request({ path: "/api/riders/me/deletion-code", method: "POST" });
+    },
+
+    deleteAccount: async (code: string): Promise<void> => {
+      await api.request({ path: "/api/riders/me", method: "DELETE", body: { code } });
+      // The account is gone whatever happens next, so the local session goes
+      // first: a failure after this must not leave the rider on a dead one.
       await persist(null);
+      try {
+        await providers.googleSignOut();
+      } catch {
+        // Only the Google SDK's remembered account is left, and it grants
+        // nothing now that the identity is unlinked.
+      }
     },
 
     signOut: async (): Promise<void> => {

@@ -1,6 +1,6 @@
 import type { OtpStore } from "../../ports/OtpStore.js";
 import type { VerifiedIdentity } from "../../ports/IdentityVerifier.js";
-import { AuthError } from "./errors.js";
+import { enforceRateLimit, redeemEmailCode } from "./emailCode.js";
 import { normalizeEmail } from "./email.js";
 import { issueSession, type IssueSessionDeps } from "./issueSession.js";
 import {
@@ -35,53 +35,19 @@ export const verifyEmailLogin = async (
   const address = normalizeEmail(input.email);
 
   if (input.ctx.ipAddress) {
-    const rule = deps.policy.otpRateLimits.verifyPerIp;
-    const decision = await deps.rateLimiter.consume({
-      bucket: "email_otp_verify_ip",
-      subject: input.ctx.ipAddress,
-      limit: rule.limit,
-      windowSeconds: rule.windowSeconds,
+    await enforceRateLimit(
+      deps,
+      {
+        bucket: "email_otp_verify_ip",
+        subject: input.ctx.ipAddress,
+        rule: deps.policy.otpRateLimits.verifyPerIp,
+        message: "Too many attempts. Try again later.",
+      },
       now,
-    });
-
-    if (!decision.allowed) {
-      throw new AuthError(
-        "RATE_LIMITED",
-        "Too many attempts. Try again later.",
-        decision.retryAfterSeconds,
-      );
-    }
-  }
-
-  const record = await deps.otps.findLatestUnconsumed(address);
-
-  if (!record) {
-    throw new AuthError("OTP_INVALID", "That code is not valid.");
-  }
-
-  if (record.expiresAt.getTime() <= now.getTime()) {
-    throw new AuthError("OTP_EXPIRED", "That code has expired.");
-  }
-
-  // Count the attempt before comparing, so a crash mid-verify cannot be used
-  // to retry for free.
-  const attempts = await deps.otps.incrementAttempts(record.id);
-
-  if (attempts > deps.policy.otpMaxAttempts) {
-    await deps.otps.consume(record.id, now);
-    throw new AuthError(
-      "OTP_ATTEMPTS_EXCEEDED",
-      "Too many incorrect attempts. Request a new code.",
     );
   }
 
-  const presentedHash = deps.hasher.sha256Hex(input.code.trim());
-
-  if (!deps.hasher.timingSafeEqual(presentedHash, record.codeHash)) {
-    throw new AuthError("OTP_INVALID", "That code is not valid.");
-  }
-
-  await deps.otps.consume(record.id, now);
+  await redeemEmailCode(deps, { address, code: input.code });
 
   // Reaching this point is itself proof of control of the inbox, which is
   // what "verified" means for the linking rules downstream.

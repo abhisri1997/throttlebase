@@ -5,7 +5,7 @@ import { useTheme } from '../theme/ThemeContext';
 interface ButtonProps {
   onPress: () => void;
   title: string;
-  variant?: 'primary' | 'secondary' | 'outline';
+  variant?: 'primary' | 'secondary' | 'outline' | 'danger';
   isLoading?: boolean;
   disabled?: boolean;
   className?: string;
@@ -26,12 +26,14 @@ export const Button = ({
     primary: colors.primary,
     secondary: colors.surface,
     outline: 'transparent',
+    danger: colors.danger,
   };
 
   const variantTextColor = {
     primary: '#ffffff',
     secondary: colors.text,
     outline: colors.primary,
+    danger: '#ffffff',
   };
 
   return (
