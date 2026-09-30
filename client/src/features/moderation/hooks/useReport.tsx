@@ -24,7 +24,10 @@ export const useReport = (): { openReport: (target: ReportTarget) => void; repor
         setTarget(null);
         // A block hides the rider's posts, routes and rides everywhere.
         if (response.blocked) void queryClient.invalidateQueries();
-        Alert.alert("Report sent", reportConfirmation(response.already_reported, response.blocked));
+        Alert.alert(
+          "Report sent",
+          reportConfirmation(response.already_reported, response.blocked, response.report?.reference),
+        );
       } catch (error) {
         Alert.alert("Report not sent", getApiErrorMessage(error, "Check your connection and try again."));
       } finally {

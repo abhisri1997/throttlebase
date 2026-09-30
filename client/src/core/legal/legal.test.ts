@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { list, paragraph, placeholdersIn, toMarkdown, type LegalDocument } from "./legalDocument";
 import { isLegalPath, LEGAL_PAGES } from "./legalPages";
+import { GRIEVANCE } from "./grievance";
 import { PRIVACY_POLICY } from "./privacyPolicy";
 import { TERMS } from "./terms";
 
@@ -23,6 +24,7 @@ test("the legal pages are open at /privacy and /terms, with or without a trailin
   assert.equal(isLegalPath("/feed"), false);
   assert.equal(LEGAL_PAGES.get("/privacy"), PRIVACY_POLICY);
   assert.equal(LEGAL_PAGES.get("/terms"), TERMS);
+  assert.equal(LEGAL_PAGES.get("/grievance"), GRIEVANCE);
 });
 
 test("a document renders as Markdown with its summary, sections and lists", () => {
@@ -58,7 +60,7 @@ test("placeholders left for a human are listed once each", () => {
   assert.deepEqual(placeholdersIn(sample("draft")), ["[CONTACT EMAIL]"]);
 });
 
-for (const document of [PRIVACY_POLICY, TERMS]) {
+for (const document of [PRIVACY_POLICY, TERMS, GRIEVANCE]) {
   test(`${document.title}: dated version, a grievance officer, and no empty sections`, () => {
     assert.match(document.version, /^\d{4}-\d{2}-\d{2}$/);
     assert.ok(document.summary.length > 0);

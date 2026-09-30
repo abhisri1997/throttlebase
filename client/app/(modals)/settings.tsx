@@ -23,6 +23,8 @@ import { Bell, ChevronLeft, FileText, LifeBuoy, Lock, Settings as SettingsIcon, 
 const LEGAL_LINKS = [
   { path: "/privacy", label: "Privacy Policy" },
   { path: "/terms", label: "Terms of Use" },
+  { path: "/grievance", label: "Grievance Officer" },
+  { path: "/(modals)/my-reports", label: "Your reports" },
 ] as const;
 
 interface SectionHeaderProps {

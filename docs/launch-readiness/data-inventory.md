@@ -344,6 +344,7 @@ Legend:
 - ✅ Blocking works both ways and hides posts, comments, reviews, routes, discoverable rides, profiles, search and mentions, and ends follows (`server/src/services/blocks.ts`, 2026-09-29). A ride both are already on is deliberately left alone; groups are not covered yet ([plans/ugc-safety.md](plans/ugc-safety.md)).
 - ✅ Reports (`reports`, migration 042; `POST /api/reports`) from posts, comments, profiles, rides and routes, and a word filter on posts and comments (2026-09-30). Reports hold the reporter, the reported thing and who made it, a reason and an optional note of up to 1000 characters.
 - ✅ Moderation (migration 043, 2026-09-30): admins remove posts, comments and routes (`removed_at`, `removed_by`, `removal_reason`; hidden at once, purged after 180 days), dismiss reports, and suspend riders (`riders.suspended_at`, `suspended_by`, `suspension_reason`; signed out, sign-in refused, content hidden). Each action notifies the rider in the app (not dismissals) and is recorded in `security_events` with the moderator, rider, target and reason.
+- ✅ Grievances (migration 044, 2026-09-30): each report has `acknowledged_at` (set on receipt) and `resolve_due_at` (7 days; 72 hours for sexual content). The reporter gets an in-app acknowledgement with a reference and an in-app outcome; `GET /api/reports/mine` lists their own reports. Public Grievance Officer page at `/grievance`.
 - ❌ No `reports` table or endpoint.
 - ❌ No word filter.
 - ❌ No admin moderation queue. Admin UI covers support tickets only.
