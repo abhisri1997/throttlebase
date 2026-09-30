@@ -19,7 +19,7 @@
 - **Withdrawal:** tracking stops (`consent:withdrawn`), the motion sensors aren't read without `motion_activity`, and a rider who withdrew disappears from the others' maps (`locationWithdrawn`).
 - `public_profile` and `marketing_notifications` are set only in Settings until they gate something.
 
-**Gates built (PR 2):** `location:update` needs `live_location_sharing`, is recorded only with `ride_recording`, and uses `activity` only with `motion_activity`. Withdrawing `live_location_sharing` clears the rider's position in live rides and takes them out of the live rooms. Samples already recorded are kept: withdrawal stops future processing and is not erasure (account deletion is). The `public_profile` gate waits for profile visibility to be enforced at all (E5, D11): today other riders see the same allowlisted fields whatever the setting.
+**Gates built (PR 2):** `location:update` needs `live_location_sharing`, is recorded only with `ride_recording`, and uses `activity` only with `motion_activity`. **Planned change (Ride now, [ride-now-ux.md §7.3](../../ride-now-ux.md#73-consent-split)):** refuse only when both `live_location_sharing` and `ride_recording` are off; record with `ride_recording`, broadcast with `live_location_sharing`, so a rider alone can record without sharing. Withdrawing `live_location_sharing` clears the rider's position in live rides and takes them out of the live rooms. Samples already recorded are kept: withdrawal stops future processing and is not erasure (account deletion is). The `public_profile` gate waits for profile visibility to be enforced at all (E5, D11): today other riders see the same allowlisted fields whatever the setting.
 
 ## Why two records, not one
 
