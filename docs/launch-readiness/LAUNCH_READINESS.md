@@ -145,7 +145,7 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 - Open-source licenses screen generated in CI from dependency metadata; flag any GPL/AGPL dependency.
 
 > **Current state (Phase 0):** Terms and Privacy links appear on sign-in only. There are no Settings links and no licences screen.
-> There is no CI: `.eas/workflows/` only runs EAS builds.
+> There was no CI: `.eas/workflows/` only runs EAS builds. **Update (2026-09-30):** CI exists (`.github/workflows/ci.yml`); the licences screen still needs its step.
 >
 > **Update (2026-09-29):** draft Privacy Policy and Terms are live in the app at `/privacy` and `/terms` (also throttlebase.in once `main` deploys), linked from sign-in and Settings. The text lives in `client/src/core/legal/`, and `docs/legal/drafts/` is generated from it. Still open: placeholders and legal review, Community Guidelines, deletion page, grievance screen, licences.
 
@@ -180,7 +180,9 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 > - **Secret in git history:** a Google Maps API key in commits `b5cfb62`, `c563109`, `891fcab`; rotate it or confirm it is restricted.
 > - **Gaps:** no audit log and no CI.
 >
-> **Update (2026-09-30):** `security_events` exists (migration 043) and records every moderation action with the moderator, the rider, the target and the reason. Auth events follow with the logging work (D10). No CI yet.
+> **Update (2026-09-30):** `security_events` exists (migration 043) and records every moderation action with the moderator, the rider, the target and the reason. Auth events follow with the logging work (D10).
+>
+> **Update (2026-09-30):** CI runs typecheck, lint, boundaries, unit and PostGIS integration tests for both packages, a migration check, and gitleaks over the full history on every PR and push to `dev`/`main`. The full-history scan found only the three already-known items (the dead Maps key in two commits, and a PEM header string), listed with reasons in `.gitleaksignore`. Still open: branch protection so PRs need a green, up-to-date run (a GitHub setting).
 >
 > See **D5**; inventory §7, §9 E10.
 

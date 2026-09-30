@@ -28,6 +28,11 @@ Client (`cd client`):
 
 Both packages: `npm run lint` (ESLint) and `npm run lint:boundaries` (architecture rules: `core/` and `ports/` import nothing external; vendor SDKs only in `adapters/`; legacy exceptions listed in `eslint.boundaries.*` may only shrink). No formatter is configured.
 
+CI (`.github/workflows/ci.yml`) runs all of the above on every PR and push to `dev`/`main`, plus integration tests on PostGIS 17, a migration check and a gitleaks scan of the full history.
+
+- A new migration takes the next free number: never reuse one or edit a migration that has merged (`server/scripts/check-migration-changes.mjs`, `migrationNames.test.ts`).
+- A secret in history is only added to `.gitleaksignore` once it is rotated or shown harmless.
+
 ## Launch readiness
 
 - Follow docs/launch-readiness/LAUNCH_READINESS.md for compliance/launch work.

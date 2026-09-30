@@ -46,6 +46,7 @@ When a migration changes the schema, update the matching table here.
   - `throttlebase_migrator` — for migrations and jobs.
 - **Hosted database today:** the API connects to the Supabase project as its `postgres` role, which has `BYPASSRLS`. Both custom roles exist but cannot log in. Verified against the live project on 2026-09-28. See [Row-level security](#row-level-security).
 - All 37 migration files (036 is the latest; there are two `004_*` files) are applied to the Supabase project.
+- **Numbering.** Each new migration takes the next free number. The runner tracks full filenames, so the three numbers already shared (`004`, `042`, `043`) run fine and stay as they are: renaming one would apply it again. CI fails a PR that reuses a number, numbers a migration below the highest on the base branch, or edits a merged migration (`server/src/adapters/postgres/migrationNames.ts`, `server/scripts/check-migration-changes.mjs`).
 
 ## Row-level security
 

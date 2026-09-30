@@ -419,7 +419,7 @@ Legend:
 - ❌ RLS not enforced (§1.5). No authorisation (IDOR) test suite across resource routes.
 - ❌ No log redaction (§7).
 - ❌ No admin audit-log table. Admin gate: `server/src/middleware/admin.middleware.ts:11`.
-- ❌ No CI of any kind. `.eas/workflows/*.yml` only run EAS builds, so there is no gitleaks.
+- ✅ CI with gitleaks over the full history (`.github/workflows/ci.yml`, 2026-09-30). Known findings: the dead Maps key (commits `c563109`, `891fcab`) and a PEM header string, listed in `.gitleaksignore`.
 - ✅ **Secret in git history is dead:** a Google Maps API key (`AIzaSyCd…`, truncated here) in the old `client/app.json`, commits `b5cfb62`, `c563109`, `891fcab`. The owner deleted it, and on 2026-09-29 Geocoding and Directions calls with it returned `REQUEST_DENIED — This API project was not found`. The current keys come from EAS env (`app.config.ts:85-97`); still confirm the shipped Android key is restricted to the package and signing fingerprint.
 - ❌ No `docs/launch-readiness/incident-response.md`.
 
