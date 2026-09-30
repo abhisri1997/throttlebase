@@ -3,6 +3,8 @@ import { Server, type Socket } from "socket.io";
 import { z } from "zod";
 import { authenticateLiveSocket } from "./auth.js";
 import { buildLiveRoomKey, buildRideSocketKey } from "./session-room.js";
+import { consentPermissions } from "../services/consent.service.js";
+import { locationUpdateUse } from "../core/consent/state.js";
 import { createSampleThrottle, type TrackPoint } from "./sampleThrottle.js";
 import { createLocationGate } from "./locationGate.js";
 import { RIDE_PROGRESS_CONFIG } from "../core/ride-progress/config.js";
@@ -130,6 +132,38 @@ const canAccessRideRoom = async (
   return result.rows.length > 0;
 };
 
+/** Every /live socket of one rider, so they can be reached across their devices. */
+const liveRiderRoomKey = (riderId: string): string => `live-rider:${riderId}`;
+
+const LIVE_LOCATION_OFF =
+  "Sharing your live location is off. Turn it on in Settings → Privacy to share your position on rides.";
+
+/**
+ * After a rider withdraws consent to share their live location: their
+ * sockets leave the live rooms they were in, the others see them go offline
+ * with no position, and their devices are told so tracking stops.
+ */
+export const endLiveLocationSharing = (
+  riderId: string,
+  sessions: readonly { rideId: string; sessionId: string }[],
+): void => {
+  if (!_liveNamespace) return;
+  const riderRoom = liveRiderRoomKey(riderId);
+
+  for (const { rideId, sessionId } of sessions) {
+    const roomKey = buildLiveRoomKey(rideId, sessionId);
+    _liveNamespace.in(riderRoom).socketsLeave(roomKey);
+    _liveNamespace.to(roomKey).emit("presence:update", {
+      riderId,
+      isOnline: false,
+      lastHeartbeatAt: null,
+      locationWithdrawn: true,
+    });
+  }
+
+  _liveNamespace.to(riderRoom).emit("consent:withdrawn", { purpose: "live_location_sharing" });
+};
+
 export const createLiveGateway = (httpServer: HttpServer) => {
   const io = new Server(httpServer, {
     cors: socketCorsOptions,
@@ -148,6 +182,8 @@ export const createLiveGateway = (httpServer: HttpServer) => {
       socket.disconnect(true);
       return;
     }
+
+    void socket.join(liveRiderRoomKey(rider.riderId));
 
     socket.on("session:join", async (rawPayload) => {
       try {
@@ -297,6 +333,19 @@ export const createLiveGateway = (httpServer: HttpServer) => {
         if (!admission.isAccepted) return;
         const { reservation } = admission;
 
+        // Checked after admission so updates in a batch are still admitted in
+        // the order they arrived. Riders never asked share as before (option
+        // B); a withdrawal stops it.
+        const use = locationUpdateUse(await consentPermissions(rider.riderId), payload.activity);
+        if (use.refuse) {
+          reservation?.release();
+          emitSocketError(socket, LIVE_LOCATION_OFF, 403);
+          return;
+        }
+        // Not recording: hand the sample slot back, so a track resumed later
+        // starts from its first stored point.
+        if (!use.record) reservation?.release();
+
         let location: Awaited<ReturnType<typeof updateLivePresenceLocation>>;
         try {
           location = await updateLivePresenceLocation(
@@ -309,9 +358,9 @@ export const createLiveGateway = (httpServer: HttpServer) => {
               heading_deg: payload.heading_deg,
               accuracy_m: payload.accuracy_m,
               captured_at: payload.captured_at,
-              activity: payload.activity,
+              activity: use.activity,
             },
-            { persistSample: reservation !== null },
+            { persistSample: reservation !== null && use.record },
           );
         } catch (error) {
           reservation?.release();

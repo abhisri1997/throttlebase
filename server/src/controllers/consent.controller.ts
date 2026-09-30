@@ -6,8 +6,25 @@ import {
   recordConsent,
   recordDeclaration,
 } from "../services/consent.service.js";
+import { stopSharingLiveLocation } from "../services/live-session.service.js";
+import { endLiveLocationSharing } from "../realtime/gateway.js";
 
 const rid = (req: Request): string => req.rider!.riderId;
+
+/**
+ * What a withdrawal stops straight away. The gates already refuse the
+ * rider's next update; this makes the others stop seeing them now, rather
+ * than when their last position goes stale. A failure here leaves the
+ * withdrawal recorded and the gate closed, so it is logged, not returned.
+ */
+const applyWithdrawal = async (riderId: string, purpose: string): Promise<void> => {
+  if (purpose !== "live_location_sharing") return;
+  try {
+    endLiveLocationSharing(riderId, await stopSharingLiveLocation(riderId));
+  } catch (error) {
+    console.error("Error stopping live location after a withdrawal:", error);
+  }
+};
 
 const refused = (res: Response, error: ConsentError): void => {
   // A stale notice means the app must fetch the new text and ask again.
@@ -44,6 +61,9 @@ export const answer = async (req: Request, res: Response): Promise<void> => {
       appVersion: parsed.data.app_version ?? null,
       platform: parsed.data.platform ?? null,
     });
+    if (outcome.changed && !parsed.data.granted) {
+      await applyWithdrawal(rid(req), purpose.data);
+    }
     res.json({ changed: outcome.changed, consents: outcome.consents });
   } catch (error) {
     if (error instanceof ConsentError) {

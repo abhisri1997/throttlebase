@@ -10,6 +10,10 @@
 - `consent_notices` keeps the full `body` rather than a `body_url`.
 - `rider_declarations` records an `answer` (yes or no), not only a declaration.
 
+**Riders never asked (decided 2026-09-30, option B):** riders who signed up before consent was asked for keep today's behaviour for each purpose until the app asks them on next use (`ALLOWED_WHEN_NOT_ASKED`, `server/src/core/consent/state.ts`). An explicit no, a withdrawal, or a grant of an older notice switches the feature off at once. `marketing_notifications` is opt-in only.
+
+**Gates built (PR 2):** `location:update` needs `live_location_sharing`, is recorded only with `ride_recording`, and uses `activity` only with `motion_activity`. Withdrawing `live_location_sharing` clears the rider's position in live rides and takes them out of the live rooms. Samples already recorded are kept: withdrawal stops future processing and is not erasure (account deletion is). The `public_profile` gate waits for profile visibility to be enforced at all (E5, D11): today other riders see the same allowlisted fields whatever the setting.
+
 ## Why two records, not one
 
 - **Terms acceptance is a contract.** DPDP consent must be "free, specific, informed, unconditional and unambiguous", for a specified purpose (DPDP Act s.6(1)). It cannot be bundled into accepting the Terms: a single "I agree" to the Terms is not valid consent for, say, live location sharing.

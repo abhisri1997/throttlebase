@@ -391,7 +391,7 @@ Legend:
 ### E6. Consent and age gate
 
 - 🟡 `rider_consents` (mig 023) records terms and privacy **document versions** plus IP at sign-up. Versions come from `TERMS_VERSION` / `PRIVACY_VERSION` (`server/src/composition/env.ts:140-143`).
-- ✅ Purpose-based consent ledger (migration 045, 2026-09-30): append-only `consent_events` against the exact notice text (hashed), `consent_state` per purpose, re-consent when a notice version changes, withdrawals audited in `security_events`, and `GET`/`PUT /api/consents`. Not yet wired to the features or the app.
+- ✅ Purpose-based consent ledger (migration 045, 2026-09-30): append-only `consent_events` against the exact notice text (hashed), `consent_state` per purpose, re-consent when a notice version changes, withdrawals audited in `security_events`, and `GET`/`PUT /api/consents`. Enforced on live location, ride recording and motion data; riders never asked keep today's behaviour until asked (option B). Not yet in the app.
 - ❌ No contextual consent (first ride, first live session).
 - ❌ No withdrawal UI.
 - 🟡 Re-consent on version bump: the server treats a grant of an older notice as not given (`reconsent_required`); the app does not ask yet.

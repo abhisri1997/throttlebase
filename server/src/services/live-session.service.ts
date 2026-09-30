@@ -1052,6 +1052,33 @@ export const markLivePresenceOffline = async (
   }
 };
 
+/**
+ * A rider withdrew consent to share their live location: every live ride
+ * they are in forgets where they were and shows them offline, so the others
+ * stop seeing them at once (plans/consent.md, "Withdrawal").
+ *
+ * Returns the sessions affected, for the gateway to take them out of the
+ * rooms and tell the others.
+ */
+export const stopSharingLiveLocation = async (
+  riderId: string,
+): Promise<{ rideId: string; sessionId: string }[]> => {
+  const result = await query(
+    `UPDATE ride_live_presence p
+        SET last_location = NULL,
+            is_online = false,
+            updated_at = now()
+       FROM ride_live_sessions s
+      WHERE s.id = p.session_id
+        AND p.rider_id = $1
+        AND s.status IN ('starting', 'active', 'paused')
+      RETURNING s.ride_id, s.id AS session_id`,
+    [riderId],
+  );
+
+  return result.rows.map((row) => ({ rideId: row.ride_id as string, sessionId: row.session_id as string }));
+};
+
 interface AdvanceArrivalInput {
   rideId: string;
   sessionId: string;

@@ -132,7 +132,7 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 > **Current state (Phase 0):** `rider_consents` already records terms/privacy **document versions** and IP at sign-up.
 > It has no purposes, no withdrawal and no re-consent. No age or DOB is collected anywhere. See **D3**.
 >
-> **Update (2026-09-30):** PR 1 of 3 (server ledger) is in: migration 045, `server/src/core/consent/`, `GET /api/consents`, `PUT /api/consents/:purpose`, `POST /api/consents/declarations`. Next: enforcing the gates in features and what a withdrawal stops (PR 2), then the app's 18+ screen, onboarding and contextual prompts, and Settings → Privacy (PR 3). ⚖️ Counsel to confirm the purposes, notice texts and the proof period.
+> **Update (2026-09-30):** PR 1 of 3 (server ledger) is in: migration 045, `server/src/core/consent/`, `GET /api/consents`, `PUT /api/consents/:purpose`, `POST /api/consents/declarations`. PR 2 (gates) is in: live location, recording and motion data follow consent, a withdrawal of live location sharing takes effect at once, and riders never asked keep today's behaviour until asked (option B). The `public_profile` gate waits for profile visibility enforcement (E5). Next: the app's 18+ screen, onboarding and contextual prompts, and Settings → Privacy (PR 3). ⚖️ Counsel to confirm the purposes, notice texts and the proof period.
 
 ### E7. Rider safety UX
 

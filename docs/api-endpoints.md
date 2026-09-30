@@ -127,7 +127,7 @@ The only path to Google. The client never calls `googleapis.com`. Rate-limited t
 ### Consents (launch readiness E6)
 
 - `GET /api/consents` — `notices` (the current notice per purpose: `purpose`, `version`, `title`, `body`, shown to the rider exactly as sent), `consents` (per purpose: `status` `granted` / `withdrawn` / `not_asked` / `reconsent_required`, `answeredVersion`, `updatedAt`), and `declarations.age_18_plus` (`true`, `false` or `null`)
-- `PUT /api/consents/:purpose` — `{ granted, notice_version, source: onboarding | contextual | settings, app_version?, platform? }`. Purposes: `ride_recording`, `live_location_sharing`, `motion_activity`, `public_profile`, `marketing_notifications`. `409 stale_notice` unless `notice_version` is the current one; `404` for an unknown purpose. Repeating the answer on record returns `changed: false` and records nothing. 60 changes an hour per rider
+- `PUT /api/consents/:purpose` — `{ granted, notice_version, source: onboarding | contextual | settings, app_version?, platform? }`. Purposes: `ride_recording`, `live_location_sharing`, `motion_activity`, `public_profile`, `marketing_notifications`. `409 stale_notice` unless `notice_version` is the current one; `404` for an unknown purpose. Repeating the answer on record returns `changed: false` and records nothing. 60 changes an hour per rider. Withdrawing `live_location_sharing` also clears the rider's position in every live ride, shows them offline, and takes their sockets out of the live rooms
 - `POST /api/consents/declarations` — `{ kind: age_18_plus, answer, source: onboarding | settings, app_version? }`. `201`. After a `false`, the app cannot send `true` (`403 age_declared_under_18`); support can
 
 ### Groups (flagged: `FEATURE_GROUPS`)
@@ -200,14 +200,14 @@ Client → server:
 
 - `session:join`, `session:leave` — `{ rideId }`
 - `presence:heartbeat`
-- `location:update` — `{ rideId, lat, lon, speed_kmh?, heading_deg?, accuracy_m?, captured_at?, activity?, simulated? }`. `activity` is the phone's motion reading (`automotive`, `cycling`, `walking`, `running`, `stationary`), sent only when recent. Updates older than 2 min, more than 30 s in the future, or out of order are dropped
+- `location:update` — `{ rideId, lat, lon, speed_kmh?, heading_deg?, accuracy_m?, captured_at?, activity?, simulated? }`. `activity` is the phone's motion reading (`automotive`, `cycling`, `walking`, `running`, `stationary`), sent only when recent. Updates older than 2 min, more than 30 s in the future, or out of order are dropped. Consent (E6): refused with `session:error` code `403` when the rider withdrew `live_location_sharing`; not stored in the rider's track without `ride_recording`; `activity` dropped without `motion_activity`. Riders never asked share and record as before
 - `waypoint:reached`
 - `incident:create`
 
 Server → client:
 
 - `session:state` — to the joining socket
-- `presence:update`
+- `presence:update` — after a rider withdraws live location sharing it carries `isOnline: false`, `lastHeartbeatAt: null` and `locationWithdrawn: true`, and their last position is cleared
 - `location:broadcast`
 - `incident:created`
 - `rider:progress` — a rider started, finished or resumed
@@ -215,6 +215,7 @@ Server → client:
 - `regroup:requested`, `regroup:decided`
 - `session:ended` — `{ rideId, sessionId, endedAt, endedBy, reason }`
 - `session:error` — `{ error, code }`
+- `consent:withdrawn` — `{ purpose: "live_location_sharing" }` to every `/live` socket of the rider who withdrew it; their sockets have already left the live rooms, and the app stops tracking
 
 ### `/rides` namespace
 
