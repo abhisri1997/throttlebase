@@ -1,5 +1,6 @@
 import type { Response } from "express";
 import { isAuthError, type AuthErrorCode } from "../../core/auth/errors.js";
+import { clientIpOf, type ClientIpRequest } from "./clientIp.js";
 
 /**
  * Maps core's vocabulary onto HTTP.
@@ -59,21 +60,14 @@ export const sendAuthError = (
 };
 
 /** Client IP and user agent, as core's RequestContext wants them. */
-export const requestContextFrom = (req: {
-  headers: Record<string, string | string[] | undefined>;
-  socket: { remoteAddress?: string | undefined };
+export const requestContextFrom = (req: ClientIpRequest & {
   body?: unknown;
 }): { ipAddress: string | null; userAgent: string | null } => {
-  const forwarded = req.headers["x-forwarded-for"];
-  const forwardedValue = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-  const ipAddress =
-    forwardedValue?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? null;
-
   const agent = req.headers["user-agent"];
   const agentValue = Array.isArray(agent) ? agent[0] : agent;
 
   return {
-    ipAddress: ipAddress || null,
+    ipAddress: clientIpOf(req),
     userAgent: agentValue ? agentValue.slice(0, 255) : null,
   };
 };
