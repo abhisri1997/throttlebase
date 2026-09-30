@@ -1,6 +1,6 @@
 import type { OtpStore } from "../../ports/OtpStore.js";
 import type { VerifiedIdentity } from "../../ports/IdentityVerifier.js";
-import { enforceRateLimit, redeemEmailCode } from "./emailCode.js";
+import { enforceVerifyLimitForIp, redeemEmailCode } from "./emailCode.js";
 import { normalizeEmail } from "./email.js";
 import { issueSession, type IssueSessionDeps } from "./issueSession.js";
 import {
@@ -35,16 +35,7 @@ export const verifyEmailLogin = async (
   const address = normalizeEmail(input.email);
 
   if (input.ctx.ipAddress) {
-    await enforceRateLimit(
-      deps,
-      {
-        bucket: "email_otp_verify_ip",
-        subject: input.ctx.ipAddress,
-        rule: deps.policy.otpRateLimits.verifyPerIp,
-        message: "Too many attempts. Try again later.",
-      },
-      now,
-    );
+    await enforceVerifyLimitForIp(deps, input.ctx.ipAddress, now);
   }
 
   await redeemEmailCode(deps, { address, code: input.code });

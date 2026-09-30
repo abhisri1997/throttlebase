@@ -9,7 +9,9 @@ import { refreshSession } from "../../core/auth/refreshSession.js";
 import { resolveOrCreateRider } from "../../core/auth/resolveOrCreateRider.js";
 import {
   deleteAccount,
+  deleteAccountByEmail,
   requestDeletionCode,
+  requestDeletionCodeByEmail,
 } from "../../core/riders/deleteAccount.js";
 import { startEmailLogin } from "../../core/auth/startEmailLogin.js";
 import { verifyEmailLogin } from "../../core/auth/verifyEmailLogin.js";
@@ -432,6 +434,32 @@ test(
         [rider.riderId],
       );
       assert.equal(live.rowCount, 0, "every session is revoked");
+    });
+
+    await t.test("the web deletion flow works by address alone, with no session", async () => {
+      // Arrange
+      const email = `web-delete-${Date.now()}@example.test`;
+      const nobody = `web-nobody-${Date.now()}@example.test`;
+      const rider = await resolveOrCreateRider(
+        deps,
+        identity({ email, emailVerified: true }),
+        ctx,
+      );
+
+      // Act: an address with no account gets no code at all
+      await requestDeletionCodeByEmail(deps, { email: nobody, ctx });
+      const noCode = await admin.query("SELECT 1 FROM email_otps WHERE email = $1", [nobody]);
+
+      // Act: the rider's address gets one, and it deletes the account
+      await requestDeletionCodeByEmail(deps, { email: email.toUpperCase(), ctx });
+      const code = await latestCodeFor(email);
+      const result = await deleteAccountByEmail(deps, { email, code, ctx });
+
+      // Assert
+      assert.equal(noCode.rowCount, 0);
+      assert.deepEqual(result, { deleted: true });
+      const row = await admin.query("SELECT deleted_at FROM riders WHERE id = $1", [rider.riderId]);
+      assert.ok(row.rows[0]?.deleted_at, "the rider is soft-deleted");
     });
   },
 );

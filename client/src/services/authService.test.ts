@@ -446,3 +446,34 @@ test("a deleted account is signed out here even if the Google sign-out fails", a
   assert.equal(storage.items.size, 0);
   assert.equal(service.getState().status, "signed-out");
 });
+
+test("signed out, asking to delete sends the address without a token", async () => {
+  // Arrange
+  const { service, calls } = buildService(
+    () => Promise.resolve({ accepted: true, expiresInSeconds: 600 }),
+    null,
+  );
+
+  // Act
+  await service.requestDeletionCodeFor(" ada@example.com ");
+
+  // Assert
+  assert.equal(calls[0]?.path, "/api/account-deletion/code");
+  assert.equal(calls[0]?.method, "POST");
+  assert.equal(calls[0]?.anonymous, true);
+  assert.deepEqual(calls[0]?.body, { email: "ada@example.com" });
+});
+
+test("signed out, deleting by address reports whether there was an account", async () => {
+  // Arrange
+  const { service, calls } = buildService(() => Promise.resolve({ deleted: true }), null);
+
+  // Act
+  const result = await service.deleteAccountByEmail("ada@example.com", " 123456 ");
+
+  // Assert
+  assert.deepEqual(result, { deleted: true });
+  assert.equal(calls[0]?.path, "/api/account-deletion/confirm");
+  assert.equal(calls[0]?.anonymous, true);
+  assert.deepEqual(calls[0]?.body, { email: "ada@example.com", code: "123456" });
+});

@@ -1,3 +1,4 @@
+import { ACCOUNT_DELETION } from "./accountDeletion";
 import type { LegalDocument } from "./legalDocument";
 import { GRIEVANCE } from "./grievance";
 import { PRIVACY_POLICY } from "./privacyPolicy";
@@ -11,6 +12,8 @@ export const LEGAL_PAGES: ReadonlyMap<string, LegalDocument> = new Map([
   ["/privacy", PRIVACY_POLICY],
   ["/terms", TERMS],
   ["/grievance", GRIEVANCE],
+  // Also the in-app deletion screen: open signed out, as Google Play requires.
+  ["/delete-account", ACCOUNT_DELETION],
 ]);
 
 /** Whether a pathname (as from usePathname) is a legal page, trailing slash or not. */

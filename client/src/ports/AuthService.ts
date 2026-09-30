@@ -50,6 +50,13 @@ export interface AuthService {
   requestDeletionCode(): Promise<void>;
   /** Deletes the account with that code, then signs out on this device. */
   deleteAccount(code: string): Promise<void>;
+  /**
+   * Signed out, as on throttlebase.in/delete-account: emails a deletion code
+   * to the address if it has an account. The answer never says whether it does.
+   */
+  requestDeletionCodeFor(email: string): Promise<void>;
+  /** Deletes the account at the address with that code; false if there was none. */
+  deleteAccountByEmail(email: string, code: string): Promise<{ deleted: boolean }>;
   signOut(): Promise<void>;
   signOutEverywhere(): Promise<void>;
 

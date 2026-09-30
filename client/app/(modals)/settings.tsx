@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Switch,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -172,37 +171,11 @@ export default function SettingsModal() {
 
   /**
    * Account deletion, which the app stores require to be reachable in-app.
-   *
-   * Two confirmations on purpose, then a code emailed to the rider
-   * (delete-account.tsx): this revokes every session and unlinks every
-   * sign-in method, and there is no undo from the rider's side.
+   * The page explains what goes and what stays, and confirms with a code
+   * emailed to the rider; it is also throttlebase.in/delete-account.
    */
   const handleDeleteAccount = (): void => {
-    Alert.alert(
-      "Delete account?",
-      "Your sign-in methods are removed and every device is signed out. Your rides stay part of other riders' history, but your profile details are erased.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            Alert.alert(
-              "This cannot be undone",
-              "Delete your ThrottleBase account permanently? We'll email you a code to confirm.",
-              [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Continue",
-                  style: "destructive",
-                  onPress: () => router.push("/(modals)/delete-account"),
-                },
-              ],
-            );
-          },
-        },
-      ],
-    );
+    router.push("/delete-account");
   };
 
   return (

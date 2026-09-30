@@ -2,14 +2,16 @@ import type { RiderRepository } from "../../ports/RiderRepository.js";
 import type { SessionRepository } from "../../ports/SessionRepository.js";
 import { AuthError } from "../auth/errors.js";
 import {
+  enforceCodeLimitForIp,
   enforceCodeLimitsForAddress,
+  enforceVerifyLimitForIp,
   redeemEmailCode,
   sendEmailCode,
   type EmailCodeDeps,
 } from "../auth/emailCode.js";
-import { normalizeEmail } from "../auth/email.js";
+import { isPlausibleEmail, normalizeEmail } from "../auth/email.js";
 import type { RequestContext } from "../auth/types.js";
-import { buildDeletionCodeEmail } from "./deletionCodeEmail.js";
+import { buildDeletionCodeEmail, buildNoAccountEmail } from "./deletionEmails.js";
 
 export interface DeleteAccountDeps extends EmailCodeDeps {
   riders: RiderRepository;
@@ -92,12 +94,93 @@ export const deleteAccount = async (
 
   await redeemEmailCode(deps, { address, code: input.code });
 
-  const now = deps.clock.now();
-  const deleted = await deps.riders.softDeleteAndUnlink(input.riderId, now);
-
-  if (!deleted) {
+  if (!(await removeRider(deps, input.riderId))) {
     throw new AuthError("RIDER_NOT_FOUND", "Account not found.");
   }
+};
 
-  await deps.sessions.revokeAllForRider(input.riderId, now);
+/** The deletion itself, once the code has been redeemed. False if already gone. */
+const removeRider = async (
+  deps: DeleteAccountDeps,
+  riderId: string,
+): Promise<boolean> => {
+  const now = deps.clock.now();
+  const deleted = await deps.riders.softDeleteAndUnlink(riderId, now);
+
+  if (deleted) {
+    await deps.sessions.revokeAllForRider(riderId, now);
+  }
+
+  return deleted;
+};
+
+const riderIdByEmail = async (
+  deps: Pick<DeleteAccountDeps, "riders">,
+  address: string,
+): Promise<string | null> => {
+  const rider = await deps.riders.withTransaction((tx) =>
+    tx.findRiderByEmail(address),
+  );
+  return rider?.id ?? null;
+};
+
+/**
+ * The signed-out path, for throttlebase.in/delete-account: emails a deletion
+ * code to `email` if it has an account, and otherwise says there is none.
+ *
+ * The answer is the same either way, so the page cannot be used to learn
+ * whether an address has an account. Only the inbox's owner finds out.
+ */
+export const requestDeletionCodeByEmail = async (
+  deps: DeleteAccountDeps,
+  input: { email: string; ctx: RequestContext },
+): Promise<{ accepted: true; expiresInSeconds: number }> => {
+  const now = deps.clock.now();
+  const address = normalizeEmail(input.email);
+
+  await enforceCodeLimitsForAddress(deps, address, now);
+  if (input.ctx.ipAddress) {
+    await enforceCodeLimitForIp(deps, input.ctx.ipAddress, now);
+  }
+
+  const uniform = { accepted: true as const, expiresInSeconds: deps.policy.otpTtlSeconds };
+
+  if (!isPlausibleEmail(address)) {
+    return uniform;
+  }
+
+  if ((await riderIdByEmail(deps, address)) === null) {
+    await deps.email.send(buildNoAccountEmail({ to: address }));
+    return uniform;
+  }
+
+  await sendEmailCode(deps, {
+    address,
+    ip: input.ctx.ipAddress,
+    buildEmail: (code, expiresInMinutes) =>
+      buildDeletionCodeEmail({ to: address, code, expiresInMinutes }),
+  });
+
+  return uniform;
+};
+
+/**
+ * Deletes the account at `email` with the code sent to it. Holding the code
+ * proves control of the inbox, so saying whether there was an account to
+ * delete tells nobody anything they couldn't learn from the inbox itself.
+ */
+export const deleteAccountByEmail = async (
+  deps: DeleteAccountDeps,
+  input: { email: string; code: string; ctx: RequestContext },
+): Promise<{ deleted: boolean }> => {
+  const address = normalizeEmail(input.email);
+
+  if (input.ctx.ipAddress) {
+    await enforceVerifyLimitForIp(deps, input.ctx.ipAddress, deps.clock.now());
+  }
+
+  await redeemEmailCode(deps, { address, code: input.code });
+
+  const riderId = await riderIdByEmail(deps, address);
+  return { deleted: riderId !== null && (await removeRider(deps, riderId)) };
 };

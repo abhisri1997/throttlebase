@@ -82,7 +82,7 @@ Under the Digital Personal Data Protection Act, 2023, you can:
 
 - Get a summary of the personal data we hold about you and how we use it.
 - Correct or update it. You can edit most of your profile in the app.
-- Have it erased. Delete your account in the app under Settings → Account → Delete account, or email [CONTACT EMAIL] from the address on your account.
+- Have it erased. Delete your account in the app under Settings → Account → Delete account, or at throttlebase.in/delete-account without the app, or email [CONTACT EMAIL] from the address on your account.
 - Withdraw your consent at any time, as easily as you gave it. Withdrawing doesn't affect processing before it, and features that need that data will stop working.
 - Nominate someone to exercise these rights for you if you die or become unable to.
 - Complain to us (see Grievance Officer below), and if you are not satisfied, to the Data Protection Board of India.

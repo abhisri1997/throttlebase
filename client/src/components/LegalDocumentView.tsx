@@ -1,4 +1,4 @@
-import React from "react";
+import React, { type ReactNode } from "react";
 import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -8,6 +8,8 @@ import type { LegalBlock, LegalDocument } from "../core/legal/legalDocument";
 
 interface LegalDocumentViewProps {
   document: LegalDocument;
+  /** Shown right under the summary, e.g. the form on the deletion page. */
+  children?: ReactNode;
 }
 
 /** Keeps lines readable on the website; phones use the full width. */
@@ -39,8 +41,8 @@ function Block({ block, color }: { block: LegalBlock; color: string }) {
   );
 }
 
-/** The Privacy Policy or Terms, readable signed in or out, in the app and on the web. */
-export function LegalDocumentView({ document }: LegalDocumentViewProps) {
+/** A legal page (Privacy Policy, Terms, deletion page), readable signed in or out, in the app and on the web. */
+export function LegalDocumentView({ document, children }: LegalDocumentViewProps) {
   const { colors } = useTheme();
   const router = useRouter();
 
@@ -97,6 +99,8 @@ export function LegalDocumentView({ document }: LegalDocumentViewProps) {
             </Text>
             <Bullets items={document.summary} color={colors.text} />
           </View>
+
+          {children}
 
           {document.sections.map((section) => (
             <View key={section.heading} className="mb-4">

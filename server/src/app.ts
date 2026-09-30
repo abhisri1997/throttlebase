@@ -21,6 +21,7 @@ import { buildAuthContainer } from "./composition/container.js";
 import { verifyEmailSender } from "./composition/createEmailSender.js";
 import { createAuthRoutes, createJwksRoute } from "./adapters/http/authRoutes.js";
 import { createRiderAccountRoutes } from "./adapters/http/riderAccountRoutes.js";
+import { createAccountDeletionRoutes } from "./adapters/http/accountDeletionRoutes.js";
 import { initAuthentication } from "./middleware/auth.middleware.js";
 import { initSocketAuthentication } from "./realtime/auth.js";
 import cors from "cors";
@@ -195,6 +196,7 @@ initSocketAuthentication(authContainer.tokenVerifier);
 // otherwise swallow /api/riders/username-available.
 app.use("/auth", createAuthRoutes(authContainer));
 app.use("/api/riders", createRiderAccountRoutes(authContainer));
+app.use("/api/account-deletion", createAccountDeletionRoutes(authContainer));
 app.use("/.well-known", createJwksRoute(authContainer));
 
 // --- Rider routes (protected) ---
