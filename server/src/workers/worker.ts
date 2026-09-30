@@ -39,8 +39,10 @@ import {
   enqueueLivePresenceSweepJob,
   enqueueCleanupExpiredSessionsJob,
   enqueueAccountPurgeJob,
+  enqueueRegistrationRecordsPurgeJob,
   enqueueRideProgressSweepJob,
 } from "../services/jobs.service.js";
+import { processRegistrationRecordsPurge } from "./processors/registration-records-purge.processor.js";
 
 type JobProcessor = (
   payload: Record<string, unknown>,
@@ -54,6 +56,7 @@ const processors: Record<string, JobProcessor> = {
   [JOB_TYPES.REWARDS_RECOMPUTE]: processRewardsRecompute,
   [JOB_TYPES.CLEANUP_EXPIRED_SESSIONS]: processCleanupExpiredSessions,
   [JOB_TYPES.ACCOUNT_PURGE]: processAccountPurge,
+  [JOB_TYPES.REGISTRATION_RECORDS_PURGE]: processRegistrationRecordsPurge,
   [JOB_TYPES.RIDE_LEADER_CHANGED]: processRideLeaderChanged,
   [JOB_TYPES.GROUP_LEADER_CHANGED]: processGroupLeaderChanged,
   [JOB_TYPES.RIDE_JOIN_REQUESTED]: processRideJoinRequested,
@@ -75,6 +78,7 @@ const scheduleOperationalJobs = async (): Promise<void> => {
       enqueueLiveIncidentEscalationJob(),
       enqueueCleanupExpiredSessionsJob(),
       enqueueAccountPurgeJob(),
+      enqueueRegistrationRecordsPurgeJob(),
       enqueueRideProgressSweepJob(),
     ]);
   } catch (error) {
