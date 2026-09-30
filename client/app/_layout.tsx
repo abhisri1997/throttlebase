@@ -10,6 +10,9 @@ import { useBackgroundLocationTracker } from "../src/hooks/useBackgroundLocation
 import { installPerformanceBufferGuard } from "../src/dev/performanceBufferGuard";
 import { FEATURES, isPathEnabled } from "../src/core/features/features";
 import { isLegalPath } from "../src/core/legal/legalPages";
+import { ageGate } from "../src/features/consent/core/consent";
+import { useConsents } from "../src/features/consent/hooks/useConsents";
+import { RideConsentHost } from "../src/features/consent/components/RideConsentHost";
 import "../global.css";
 
 // Dev builds only: React's per-render performance entries otherwise pile up
@@ -32,6 +35,8 @@ function AppInner() {
   const auth = useAuthState();
   const isAuthenticated = auth.status === "signed-in";
   const needsOnboarding = auth.status === "signed-in" && auth.session.needsOnboarding;
+  const consents = useConsents();
+  const age = ageGate(consents.data, consents.isError);
 
   useEffect(() => {
     (NativeWindStyleSheet as any).setFlag?.("darkMode", "class");
@@ -40,7 +45,7 @@ function AppInner() {
   // Global background location tracking for active rides
   useBackgroundLocationTracker();
 
-  if (!authChecked) {
+  if (!authChecked || (isAuthenticated && age === "checking")) {
     return (
       <View
         className='flex-1 items-center justify-center'
@@ -69,9 +74,23 @@ function AppInner() {
     );
   }
 
+  // The 18+ question comes before anything else, onboarding included (E6).
+  // A rider who said no stays on the under-18 screen, which leads only to
+  // deleting the account, the Grievance Officer or signing out.
+  if (isAuthenticated && age === "ask" && pathname !== "/age" && !isLegalRoute) {
+    return <Redirect href='/(consent)/age' />;
+  }
+  if (isAuthenticated && age === "under_18" && pathname !== "/under-18" && !isLegalRoute) {
+    return <Redirect href='/(consent)/under-18' />;
+  }
+  if (isAuthenticated && age === "ok" && (pathname === "/age" || pathname === "/under-18")) {
+    return <Redirect href={needsOnboarding ? "/(auth)/onboarding" : "/(tabs)/feed"} />;
+  }
+  const ageAnswered = age === "ok";
+
   // A signed-in rider who has not picked a username stays in onboarding —
   // otherwise they reach a feed where they cannot be mentioned or followed.
-  if (isAuthenticated && needsOnboarding && pathname !== "/onboarding" && !isLegalRoute) {
+  if (isAuthenticated && ageAnswered && needsOnboarding && pathname !== "/onboarding" && !isLegalRoute) {
     return <Redirect href='/(auth)/onboarding' />;
   }
 
@@ -95,6 +114,7 @@ function AppInner() {
         }}
       >
         <Stack.Screen name='(auth)' options={{ headerShown: false }} />
+        <Stack.Screen name='(consent)' options={{ headerShown: false }} />
         <Stack.Screen name='(tabs)' options={{ headerShown: false }} />
         <Stack.Screen name='ride/[id]' options={{ headerShown: false }} />
         <Stack.Screen
@@ -109,6 +129,7 @@ function AppInner() {
           options={{ presentation: "modal", headerShown: false }}
         />
       </Stack>
+      <RideConsentHost />
     </>
   );
 }
