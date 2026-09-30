@@ -59,6 +59,7 @@ import {
   withOwnPosition,
   type RollCallRider,
 } from "../../src/features/navigation/core/rollCall";
+import { rideTimeLabel } from "../../src/features/rides/core/rideTime";
 import {
   canLeaveRide,
   isSoloRide,
@@ -1459,13 +1460,16 @@ useEffect(() => {
     ride.status === "completed" && isParticipant && !hasReviewed;
   const isFull =
     ride.max_capacity && ride.current_rider_count >= ride.max_capacity;
-  const dateStr = new Date(ride.scheduled_at).toLocaleString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  // Once the ride has started, when it actually did (the schedule can be off).
+  const dateStr = rideTimeLabel(ride, (date) =>
+    date.toLocaleString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+  );
   const nextAction = NEXT_STATUS[ride.status];
   const onlineCount = Object.values(presence).filter(
     (member) => member.isOnline,

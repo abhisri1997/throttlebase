@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import { Calendar, Users, MapPin, Gauge, Lock } from 'lucide-react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { formatDuration } from '../features/navigation/core/format';
+import { rideTimeLabel } from '../features/rides/core/rideTime';
 
 const SECONDS_PER_MINUTE = 60;
 
@@ -11,6 +12,8 @@ interface RideCardProps {
     id: string;
     title: string;
     scheduled_at: string;
+    /** When it was actually ridden; shown instead of the schedule once set. */
+    actual_started_at?: string | null;
     max_capacity: number;
     current_rider_count: number;
     estimated_duration_min: number;
@@ -28,9 +31,9 @@ interface RideCardProps {
 
 export const RideCard = ({ ride, onPress }: RideCardProps) => {
   const { colors } = useTheme();
-  const dateStr = new Date(ride.scheduled_at).toLocaleString('en-US', {
-    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
-  });
+  const dateStr = rideTimeLabel(ride, (date) =>
+    date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
+  );
 
   // Minutes, not whole hours: rounding a 5-minute ride to hours read as "0h".
   const durationLabel =

@@ -35,6 +35,7 @@ import {
 import { haversineMeters, projectOntoPolyline } from "../../../src/features/navigation/core/geometry";
 import { ArrivalPrompt } from "../../../src/features/navigation/components/ArrivalPrompt";
 import { useMyRideProgress } from "../../../src/features/rides/hooks/useMyRideProgress";
+import { SpeedBubble } from "../../../src/features/navigation/components/SpeedBubble";
 
 /** The server's default wait at the destination before finishing a rider's ride itself. */
 const DEFAULT_AUTO_FINISH_AFTER_MS = 10 * 60 * 1000;
@@ -878,25 +879,25 @@ export default function RideNavigationScreen() {
         }
       />
 
+      {/* Speed bottom left, the alert bottom right, re-center between them. */}
+      <View pointerEvents='box-none' style={[styles.speedSlot, { bottom: sheetHeight + RECENTER_GAP }]}>
+        <SpeedBubble speedMps={fix?.speedMps ?? null} />
+      </View>
+
       {camera.mode !== "follow" ? (
-        <TouchableOpacity
-          accessibilityRole='button'
-          accessibilityLabel={fix ? "Re-center on your position" : "Show the whole route"}
-          onPress={recenter}
-          style={[
-            styles.recenter,
-            {
-              bottom: sheetHeight + RECENTER_GAP,
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <LocateFixed color={colors.primary} size={18} />
-          <Text style={[styles.recenterText, { color: colors.text }]}>
-            {fix ? "Re-center" : "Show route"}
-          </Text>
-        </TouchableOpacity>
+        <View pointerEvents='box-none' style={[styles.recenterRow, { bottom: sheetHeight + RECENTER_GAP + 10 }]}>
+          <TouchableOpacity
+            accessibilityRole='button'
+            accessibilityLabel={fix ? "Re-center on your position" : "Show the whole route"}
+            onPress={recenter}
+            style={[styles.recenter, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          >
+            <LocateFixed color={colors.primary} size={18} />
+            <Text style={[styles.recenterText, { color: colors.text }]}>
+              {fix ? "Re-center" : "Show route"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       ) : null}
 
       {/* One tap from anywhere in navigation, never hidden behind the sheet. */}
@@ -971,17 +972,27 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
-  recenter: {
+  speedSlot: {
     position: "absolute",
     left: 16,
+    zIndex: 66,
+    elevation: 66,
+  },
+  recenterRow: {
+    position: "absolute",
+    left: 96,
+    right: 96,
+    alignItems: "center",
+    zIndex: 65,
+    elevation: 65,
+  },
+  recenter: {
     flexDirection: "row",
     alignItems: "center",
     minHeight: 44,
     paddingHorizontal: 16,
     borderRadius: 999,
     borderWidth: 1,
-    zIndex: 65,
-    elevation: 65,
   },
   alertButton: {
     position: "absolute",

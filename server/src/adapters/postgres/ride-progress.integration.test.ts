@@ -115,6 +115,13 @@ test("per-rider ride progress", { skip: !CONNECTION }, async (t) => {
     assert.equal(started.openedSession, true);
     assert.equal(started.session?.status, "starting");
 
+    // The ride is shown as ridden when A actually started, not at its scheduled time.
+    const asSeenByA = await rides!.getRideById(rideId, RIDER_A);
+    const scheduledMs = new Date(asSeenByA!.scheduled_at).getTime();
+    const actualMs = new Date(asSeenByA!.actual_started_at!).getTime();
+    assert.ok(Math.abs(actualMs - Date.now()) < 60_000, "actual start is now");
+    assert.ok(scheduledMs - actualMs > 20 * 60_000, "not the scheduled time, 30 min out");
+
     // B is in the roll call but has not started: shared, not recorded.
     await sendFix(rideId, RIDER_B, 5_000, 100);
     assert.equal(await sampleCount(admin, rideId, RIDER_B), 0);

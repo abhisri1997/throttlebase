@@ -44,10 +44,10 @@ Account routes (`server/src/adapters/http/riderAccountRoutes.ts`) are mounted be
 ## Rides
 
 - `GET /api/rides` — upcoming rides anyone can find, and your own open rides. A ride that needs approval (`visibility: "private"`) you aren't on comes as a preview (`is_preview: true`, see below)
-- `GET /api/rides/history` — rides you took part in
+- `GET /api/rides/history` — rides you took part in, newest first by when they were actually ridden. Each carries `actual_started_at`: your own start, else the live session's (null if it never went live)
 - `GET /api/rides/riding` — rides you are riding right now (started, not finished). The background tracker follows these
 - `POST /api/rides` — create a ride; you become captain
-- `GET /api/rides/:id` — ride with captain, participants and stops. For a ride that needs approval you aren't on: a preview instead, with only `id`, `title`, `status`, `visibility`, `scheduled_at`, `estimated_duration_min`, `max_capacity`, `current_rider_count`, `requirements`, `stop_count`, `captain_id`, `captain_name`, `is_preview: true` and `my_request: { status: none | requested | declined, can_request }`. Never the meeting point, route, stops, description or riders
+- `GET /api/rides/:id` — ride with captain, participants and stops, and `actual_started_at` (your own start, else the live session's; null before it goes live). For a ride that needs approval you aren't on: a preview instead, with only `id`, `title`, `status`, `visibility`, `scheduled_at`, `estimated_duration_min`, `max_capacity`, `current_rider_count`, `requirements`, `stop_count`, `captain_id`, `captain_name`, `is_preview: true` and `my_request: { status: none | requested | declined, can_request }`. Never the meeting point, route, stops, description or riders
 - `PATCH /api/rides/:id` — captain / co-captain; status transitions validated
 - `DELETE /api/rides/:id` — captain; not for active or completed rides
 - `POST /api/rides/:id/join` — `{ location_coords?: [lng, lat] }` (where you ride from). Scheduled or active rides only. A public ride is joined at once, enforcing capacity (`outcome: "joined"`, broadcasts `ride:joined`). A ride that needs approval records a request instead (`outcome: "requested"`, holds no seat, broadcasts `ride:roster_changed`; the captain and co-captains are notified). 409 while a request waits; 403 after two declines. A rider who left can join or ask again
