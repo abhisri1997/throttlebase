@@ -153,6 +153,10 @@ export interface SearchNearbyParams {
   radiusMeters: number;
   /** Nearby Search takes up to 50 types in ONE call (Text Search takes one). */
   includedTypes: string[];
+  /** A place of any of these types is left out, even if it has an included type too. */
+  excludedTypes?: string[] | undefined;
+  /** Nearest first rather than Google's default, most popular first. */
+  rankByDistance?: boolean | undefined;
   maxResultCount?: number | undefined;
 }
 

@@ -205,3 +205,18 @@ test("an existing rider signing in does not need to re-accept terms", async () =
 
   assert.equal(result.riderId, "rider-1");
 });
+
+test("a suspended rider can't sign in, and gets a message saying so", async () => {
+  // Arrange: an existing rider, then a moderator suspends them.
+  const h = buildHarness();
+  const first = await resolveOrCreateRider(h, googleIdentity(), testContext());
+  const row = h.riders.state.riders.find((r) => r.id === first.riderId)!;
+  row.suspended = true;
+
+  // Act + Assert
+  await assert.rejects(
+    resolveOrCreateRider(h, googleIdentity(), testContext()),
+    (error: unknown) =>
+      error instanceof AuthError && error.code === "ACCOUNT_SUSPENDED" && /Grievance Officer/.test(error.message),
+  );
+});

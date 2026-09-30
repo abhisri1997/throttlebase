@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { list, paragraph, placeholdersIn, toMarkdown, type LegalDocument } from "./legalDocument";
+import { ACCOUNT_DELETION } from "./accountDeletion";
 import { isLegalPath, LEGAL_PAGES } from "./legalPages";
+import { GRIEVANCE } from "./grievance";
 import { PRIVACY_POLICY } from "./privacyPolicy";
 import { TERMS } from "./terms";
 
@@ -23,6 +25,26 @@ test("the legal pages are open at /privacy and /terms, with or without a trailin
   assert.equal(isLegalPath("/feed"), false);
   assert.equal(LEGAL_PAGES.get("/privacy"), PRIVACY_POLICY);
   assert.equal(LEGAL_PAGES.get("/terms"), TERMS);
+  assert.equal(LEGAL_PAGES.get("/grievance"), GRIEVANCE);
+});
+
+test("the deletion page is open signed out, so it works on the web without the app", () => {
+  assert.equal(isLegalPath("/delete-account"), true);
+  assert.equal(LEGAL_PAGES.get("/delete-account"), ACCOUNT_DELETION);
+});
+
+test("the deletion page and the Privacy Policy say the same about what is kept", () => {
+  const texts = (document: LegalDocument) =>
+    document.sections.flatMap((section) =>
+      section.blocks.flatMap((block) => (block.kind === "list" ? [...block.items] : [block.text])),
+    );
+  const policy = new Set(texts(PRIVACY_POLICY));
+  const kept = ACCOUNT_DELETION.sections.find((section) => section.heading === "What is kept, and for how long");
+
+  assert.ok(kept, "the page lists what is kept");
+  for (const item of kept.blocks.flatMap((block) => (block.kind === "list" ? block.items : []))) {
+    assert.ok(policy.has(item), `the Privacy Policy says: ${item.slice(0, 40)}…`);
+  }
 });
 
 test("a document renders as Markdown with its summary, sections and lists", () => {
@@ -58,7 +80,7 @@ test("placeholders left for a human are listed once each", () => {
   assert.deepEqual(placeholdersIn(sample("draft")), ["[CONTACT EMAIL]"]);
 });
 
-for (const document of [PRIVACY_POLICY, TERMS]) {
+for (const document of [PRIVACY_POLICY, TERMS, GRIEVANCE]) {
   test(`${document.title}: dated version, a grievance officer, and no empty sections`, () => {
     assert.match(document.version, /^\d{4}-\d{2}-\d{2}$/);
     assert.ok(document.summary.length > 0);

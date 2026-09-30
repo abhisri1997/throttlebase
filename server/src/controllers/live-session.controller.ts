@@ -7,6 +7,8 @@ import {
   saveRouteFromRide,
 } from "../services/route-from-ride.service.js";
 import { SaveRouteFromRideSchema } from "../schemas/route.schemas.js";
+import { GOOGLE_LOOKUPS } from "../services/route-place-lookups.js";
+import { RouteTooShortError } from "../services/route-public-view.js";
 import {
   CreateIncidentSchema,
   EndLiveSessionSchema,
@@ -45,6 +47,13 @@ export const handleLiveSessionError = (res: Response, error: any, context: strin
 
   if (error instanceof LiveSessionError) {
     res.status(error.statusCode).json({ error: error.message });
+    return;
+  }
+
+  // Saved public, a route others would see without its personal ends must
+  // have enough left to show.
+  if (error instanceof RouteTooShortError) {
+    res.status(422).json({ error: error.message, code: "ROUTE_TOO_SHORT" });
     return;
   }
 
@@ -245,6 +254,7 @@ export const saveRouteFromMyRide = async (req: Request, res: Response): Promise<
     const input = SaveRouteFromRideSchema.parse(req.body ?? {});
     const { route, created } = await saveRouteFromRide(rideId, rid(req), input, {
       nameArea: nameAreaWithGoogle,
+      publicPlaces: GOOGLE_LOOKUPS,
     });
     res.status(created ? 201 : 200).json({ route, created });
   } catch (error: any) {

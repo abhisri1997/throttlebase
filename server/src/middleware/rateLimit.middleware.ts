@@ -1,5 +1,6 @@
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import type { Request } from "express";
+import { clientIpOf } from "../adapters/http/clientIp.js";
 
 /**
  * Rate limits for endpoints that spend money on outbound Google calls.
@@ -20,8 +21,9 @@ const riderKey = (req: Request): string => {
 
   // The IP fallback goes through ipKeyGenerator, which normalises IPv6 to its
   // /56 prefix. Keying on a raw IPv6 address would let one client vary the
-  // low bits and get an unlimited number of fresh buckets.
-  return ipKeyGenerator(req.ip ?? "unknown");
+  // low bits and get an unlimited number of fresh buckets. Not req.ip: behind
+  // Cloudflare that is Cloudflare's address for everyone (see clientIp.ts).
+  return ipKeyGenerator(clientIpOf(req) ?? "unknown");
 };
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -68,5 +70,38 @@ export const mapsProxyLimiter = rateLimit({
   message: {
     error: "Maps quota reached. Try again shortly.",
     code: "maps_quota",
+  },
+});
+
+/**
+ * Reports are cheap to send and expensive to review, so a rider gets enough
+ * for any real situation and no more: 20 an hour.
+ */
+export const reportLimiter = rateLimit({
+  windowMs: HOUR_MS,
+  limit: 20,
+  keyGenerator: riderKey,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "You've sent a lot of reports. Try again later, or contact the Grievance Officer.",
+    code: "report_limit",
+  },
+});
+
+/**
+ * Consent answers and declarations. Each one is kept for years as evidence
+ * (plans/consent.md), so a client stuck toggling in a loop must not be able
+ * to fill the ledger. Far more than anyone changes their mind in an hour.
+ */
+export const consentLimiter = rateLimit({
+  windowMs: HOUR_MS,
+  limit: 60,
+  keyGenerator: riderKey,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "You've changed these settings a lot in a short time. Try again later.",
+    code: "consent_limit",
   },
 });

@@ -10,6 +10,8 @@ import type {
   RiderRepository,
   RiderTransaction,
 } from "../../ports/RiderRepository.js";
+import type { RegistrationSealer } from "../../ports/RegistrationSealer.js";
+import { buildRegistrationRecord, purgeAfter } from "../../core/riders/registrationRecord.js";
 import { handOverGroupsOf } from "../../services/group-roster.service.js";
 import { handOffRidesOf } from "../../services/ride-roster.service.js";
 import { assumeRider, withRiderTransaction } from "./requestContext.js";
@@ -21,6 +23,7 @@ interface RiderRow {
   username: string | null;
   profile_picture_url: string | null;
   created_at: Date;
+  suspended: boolean;
 }
 
 const toRecord = (row: RiderRow): RiderRecord => ({
@@ -30,10 +33,11 @@ const toRecord = (row: RiderRow): RiderRecord => ({
   username: row.username,
   avatarUrl: row.profile_picture_url,
   createdAt: row.created_at,
+  suspended: row.suspended,
 });
 
 const RIDER_COLUMNS =
-  "id, email, display_name, username, profile_picture_url, created_at";
+  "id, email, display_name, username, profile_picture_url, created_at, suspended_at IS NOT NULL AS suspended";
 
 /**
  * Transaction-scoped rider operations.
@@ -158,7 +162,66 @@ const buildTransaction = (client: pg.PoolClient): RiderTransaction => ({
   },
 });
 
-export const createRiderRepository = (pool: pg.Pool): RiderRepository => ({
+/**
+ * Seals what the rider gave to register (core/riders/registrationRecord.ts),
+ * in the transaction that deletes their account and before their identities
+ * and profile are cleared: the record is all that remains of them.
+ */
+const sealRegistration = async (
+  client: pg.PoolClient,
+  sealer: RegistrationSealer,
+  riderId: string,
+  at: Date,
+): Promise<void> => {
+  const rider = await client.query(
+    `SELECT email, display_name, username, phone_number, created_at
+       FROM riders WHERE id = $1 AND deleted_at IS NULL
+      FOR UPDATE`,
+    [riderId],
+  );
+  const row = rider.rows[0];
+  // Already deleted, or no such rider: nothing to seal, and nothing to delete.
+  if (!row) return;
+
+  const identities = await client.query(
+    `SELECT provider, subject, email FROM rider_identities WHERE rider_id = $1 ORDER BY created_at`,
+    [riderId],
+  );
+  const consent = await client.query(
+    `SELECT host(ip) AS ip, accepted_at FROM rider_consents
+      WHERE rider_id = $1 ORDER BY accepted_at ASC LIMIT 1`,
+    [riderId],
+  );
+  const firstConsent = consent.rows[0];
+
+  const record = buildRegistrationRecord({
+    riderId,
+    email: row.email ?? null,
+    displayName: row.display_name,
+    username: row.username ?? null,
+    phoneNumber: row.phone_number ?? null,
+    registeredAt: new Date(row.created_at),
+    identities: identities.rows.map((identity) => ({
+      provider: String(identity.provider),
+      subject: String(identity.subject),
+      email: identity.email ?? null,
+    })),
+    firstConsent: firstConsent
+      ? { ip: firstConsent.ip ?? null, acceptedAt: new Date(firstConsent.accepted_at) }
+      : null,
+    cancelledAt: at,
+  });
+  const sealed = sealer.seal(record);
+  await client.query(`SELECT sealed.seal_registration($1, $2, $3::jsonb, $4, $5)`, [
+    riderId,
+    sealed.keyId,
+    JSON.stringify(sealed.box),
+    at,
+    purgeAfter(at),
+  ]);
+};
+
+export const createRiderRepository = (pool: pg.Pool, sealer: RegistrationSealer): RiderRepository => ({
   withTransaction: <T>(fn: (tx: RiderTransaction) => Promise<T>): Promise<T> =>
     // Starts with no rider context; the transaction adopts one as soon as it
     // identifies the rider.
@@ -218,7 +281,12 @@ export const createRiderRepository = (pool: pg.Pool): RiderRepository => ({
 
   softDeleteAndUnlink: async (riderId: string, at: Date): Promise<boolean> =>
     await withRiderTransaction(pool, riderId, async (client) => {
-      // Identities go first: while any remain, the provider could sign this
+      // The registration details are sealed before anything is cleared
+      // (IT Rules 2021, Rule 3(1)(h)): kept 180 days, opened only for a
+      // lawful request.
+      await sealRegistration(client, sealer, riderId, at);
+
+      // Identities go next: while any remain, the provider could sign this
       // account straight back in.
       await client.query("DELETE FROM rider_identities WHERE rider_id = $1", [
         riderId,

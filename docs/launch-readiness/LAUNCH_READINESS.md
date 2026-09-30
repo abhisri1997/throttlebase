@@ -62,6 +62,13 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 > Rides, tracks and UGC are kept, then the hourly cleanup hard-deletes the rider after 30 days and cascades into rides they captained.
 > No re-auth, web flow or Apple revocation. There are no push tokens to delete. See **D1**, **D4**; inventory §8, §9 E1.
 
+> **Current state (2026-09-30): built for the Android launch** (PRs #49–#83; [plans/account-deletion.md](plans/account-deletion.md)).
+> Deletion needs a code emailed to the account's address, in the app or at `throttlebase.in/delete-account` without the app.
+> It signs out everywhere, hides the rider at once and hands their rides and groups to the next leader; 30 days later `account.purge`
+> removes only their own data and leaves an empty tombstone. Public routes stay as anonymised Community routes, and registration
+> details are sealed for 180 days (IT Rules 3(1)(h)). Still open: a security-log retention period and purge (E11), Apple token
+> revocation (with Apple sign-in, D6), the Play Console Delete account URL, and legal review of the texts. Inventory §8.1, §9 E1.
+
 ### E2. Sign in with Apple in production (Apple 4.8)
 
 - The config plugin that strips the Apple sign-in entitlement must apply **only** to dev/free-account EAS profiles.
@@ -82,6 +89,8 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 
 > **Current state (Phase 0):** `blocked_riders` exists, but a block only filters notifications. There are no reports, filter,
 > moderation queue or grievance screen. Posts accept external image URLs (`media_urls`) that bypass moderation. Inventory §6, §9 E3.
+>
+> **Update (2026-09-29):** plan in [plans/ugc-safety.md](plans/ugc-safety.md). Blocking now works both ways and hides the other rider everywhere (PR 1 of 4). Reports and the word filter are in (PR 2). The admin moderation queue, removals, suspensions and the 180-day purge of removed content are in (PR 3). Grievances are in (PR 4): acknowledgement with a reference on receipt, 7-day and 72-hour deadlines, outcomes to reporters, the public Grievance Officer page and "Your reports". **E3's build is complete**; left for humans: the Grievance Officer's details, a lawyer's review of the deadlines, word list and Community Guidelines (E8).
 
 ### E4. Location & ride recording
 
@@ -122,6 +131,8 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 
 > **Current state (Phase 0):** `rider_consents` already records terms/privacy **document versions** and IP at sign-up.
 > It has no purposes, no withdrawal and no re-consent. No age or DOB is collected anywhere. See **D3**.
+>
+> **Update (2026-09-30):** PR 1 of 3 (server ledger) is in: migration 045, `server/src/core/consent/`, `GET /api/consents`, `PUT /api/consents/:purpose`, `POST /api/consents/declarations`. Next: enforcing the gates in features and what a withdrawal stops (PR 2), then the app's 18+ screen, onboarding and contextual prompts, and Settings → Privacy (PR 3). ⚖️ Counsel to confirm the purposes, notice texts and the proof period.
 
 ### E7. Rider safety UX
 
@@ -143,7 +154,7 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 - Open-source licenses screen generated in CI from dependency metadata; flag any GPL/AGPL dependency.
 
 > **Current state (Phase 0):** Terms and Privacy links appear on sign-in only. There are no Settings links and no licences screen.
-> There is no CI: `.eas/workflows/` only runs EAS builds.
+> There was no CI: `.eas/workflows/` only runs EAS builds. **Update (2026-09-30):** CI exists (`.github/workflows/ci.yml`); the licences screen still needs its step.
 >
 > **Update (2026-09-29):** draft Privacy Policy and Terms are live in the app at `/privacy` and `/terms` (also throttlebase.in once `main` deploys), linked from sign-in and Settings. The text lives in `client/src/core/legal/`, and `docs/legal/drafts/` is generated from it. Still open: placeholders and legal review, Community Guidelines, deletion page, grievance screen, licences.
 
@@ -178,6 +189,10 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 > - **Secret in git history:** a Google Maps API key in commits `b5cfb62`, `c563109`, `891fcab`; rotate it or confirm it is restricted.
 > - **Gaps:** no audit log and no CI.
 >
+> **Update (2026-09-30):** `security_events` exists (migration 043) and records every moderation action with the moderator, the rider, the target and the reason. Auth events follow with the logging work (D10).
+>
+> **Update (2026-09-30):** CI runs typecheck, lint, boundaries, unit and PostGIS integration tests for both packages, a migration check, and gitleaks over the full history on every PR and push to `dev`/`main`. The full-history scan found only the three already-known items (the dead Maps key in two commits, and a PEM header string), listed with reasons in `.gitleaksignore`. Rulesets on `dev` and `main` now require a PR, a green `Server`, `Client` and `Secret scan` run on a branch that is up to date with its base, and block force-pushes and deletion.
+>
 > See **D5**; inventory §7, §9 E10.
 
 ### E11. Retention jobs (worker)
@@ -188,6 +203,8 @@ Each epic below carries a short *Current state* note; the evidence is in `data-i
 
 > **Current state (Phase 0):** the only purges are expired or revoked sessions (hourly) and riders 30 days after deletion.
 > Live samples, events, incidents, notifications, `login_activity`, `email_otps` and `jobs` are kept forever. Inventory §8.
+>
+> **Update (2026-09-30):** the hourly cleanup also purges finished jobs (#51) and posts, comments and routes a moderator removed more than 180 days ago (`REMOVED_CONTENT_RETENTION_DAYS`, `server/src/core/moderation/actions.ts`).
 
 ---
 

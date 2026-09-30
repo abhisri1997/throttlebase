@@ -72,6 +72,9 @@ test("was the road as described?", { skip: !CONNECTION }, async (t) => {
   });
 
   await runMigrations(admin);
+  // Start each run clean. Rides left by earlier runs pile up in the shared
+  // list of upcoming rides and push other tests' rides out of it.
+  await admin.query(`DELETE FROM rides WHERE captain_id = $1`, [CAPTAIN]);
   await admin.query(
     `INSERT INTO riders (id, email, display_name, username) VALUES
        ($1, 'rf-captain@example.test', 'Captain', 'rfcaptain'),

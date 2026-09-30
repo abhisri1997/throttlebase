@@ -18,6 +18,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { MentionSuggestions } from "../../src/components/MentionSuggestions";
+import { getApiErrorMessage } from "../../src/utils/apiError";
 import {
   applyMentionSuggestion,
   findActiveMention,
@@ -100,10 +101,7 @@ export default function CreatePostModal() {
       closeModal();
     },
     onError: (err: any) => {
-      Alert.alert(
-        "Error",
-        err.response?.data?.message || "Failed to post to timeline",
-      );
+      Alert.alert("Post not shared", getApiErrorMessage(err, "Failed to post to timeline"));
     },
   });
 

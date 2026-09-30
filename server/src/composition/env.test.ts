@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { ConfigError, readAuthConfig, type Env } from "./env.js";
 
 const baseEnv = (overrides: Env = {}): Env => ({
-  AUTH_JWT_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
+  AUTH_JWT_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----", // gitleaks:allow (fake)
   AUTH_JWT_KID: "tb-test",
   GOOGLE_CLIENT_IDS: "web.apps.googleusercontent.com,ios.apps.googleusercontent.com",
   TERMS_VERSION: "2026-01-01",
@@ -26,6 +26,32 @@ test("accepts a configured Apple client id list", () => {
   );
 
   assert.deepEqual(config.apple.allowedAudiences, ["in.throttlebase.rider"]);
+});
+
+const PUBLIC_KEY = "-----BEGIN PUBLIC KEY-----\nabc\n-----END PUBLIC KEY-----";
+
+test("in production, the server won't start without the key that seals registration records", () => {
+  assert.throws(
+    () => readAuthConfig(baseEnv({ NODE_ENV: "production", SEALED_RECORD_PUBLIC_KEY: undefined })),
+    (error: unknown) => error instanceof ConfigError && /SEALED_RECORD_PUBLIC_KEY/.test(error.message),
+  );
+});
+
+test("the sealing key can be a PEM or its base64 encoding", () => {
+  const asPem = readAuthConfig(baseEnv({ NODE_ENV: "production", SEALED_RECORD_PUBLIC_KEY: PUBLIC_KEY }));
+  const asBase64 = readAuthConfig(
+    baseEnv({ NODE_ENV: "production", SEALED_RECORD_PUBLIC_KEY: Buffer.from(PUBLIC_KEY).toString("base64") }),
+  );
+  assert.equal(asPem.sealing.publicKeyPem, PUBLIC_KEY);
+  assert.equal(asBase64.sealing.publicKeyPem, PUBLIC_KEY);
+  assert.throws(
+    () => readAuthConfig(baseEnv({ SEALED_RECORD_PUBLIC_KEY: "not a key" })),
+    (error: unknown) => error instanceof ConfigError,
+  );
+});
+
+test("outside production the sealing key may be absent", () => {
+  assert.equal(readAuthConfig(baseEnv({ NODE_ENV: "development" })).sealing.publicKeyPem, null);
 });
 
 test("still requires at least one Google client id", () => {

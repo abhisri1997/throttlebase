@@ -14,11 +14,15 @@ import securityRoutes from "./routes/security.routes.js";
 import liveSessionRoutes from "./routes/live-session.routes.js";
 import stopSuggestionRoutes from "./routes/placeSuggestion.routes.js";
 import mapsRoutes from "./routes/maps.routes.js";
+import reportRoutes from "./routes/report.routes.js";
+import moderationRoutes from "./routes/moderation.routes.js";
+import consentRoutes from "./routes/consent.routes.js";
 import { createLiveGateway } from "./realtime/gateway.js";
 import { buildAuthContainer } from "./composition/container.js";
 import { verifyEmailSender } from "./composition/createEmailSender.js";
 import { createAuthRoutes, createJwksRoute } from "./adapters/http/authRoutes.js";
 import { createRiderAccountRoutes } from "./adapters/http/riderAccountRoutes.js";
+import { createAccountDeletionRoutes } from "./adapters/http/accountDeletionRoutes.js";
 import { initAuthentication } from "./middleware/auth.middleware.js";
 import { initSocketAuthentication } from "./realtime/auth.js";
 import cors from "cors";
@@ -189,11 +193,11 @@ const authContainer = await buildAuthContainer(process.env);
 initAuthentication(authContainer.tokenVerifier);
 initSocketAuthentication(authContainer.tokenVerifier);
 
-// Auth routes are mounted before the rider router so the passwordless
-// DELETE /api/riders/me wins over the older profile handler, which does not
-// unlink identities or revoke sessions.
+// Account routes are mounted before the rider router, whose GET /:id would
+// otherwise swallow /api/riders/username-available.
 app.use("/auth", createAuthRoutes(authContainer));
 app.use("/api/riders", createRiderAccountRoutes(authContainer));
+app.use("/api/account-deletion", createAccountDeletionRoutes(authContainer));
 app.use("/.well-known", createJwksRoute(authContainer));
 
 // --- Rider routes (protected) ---
@@ -213,6 +217,9 @@ app.use("/api/security", requireFeature(featureFlags.accountSecurity), securityR
 app.use("/api/live", liveSessionRoutes);
 app.use("/api/stop-suggestions", stopSuggestionRoutes);
 app.use("/api/maps", mapsRoutes);
+app.use("/api/reports", reportRoutes);
+app.use("/api/consents", consentRoutes);
+app.use("/api/admin/moderation", moderationRoutes);
 
 // Database health check route
 app.get("/db-test", async (req, res) => {

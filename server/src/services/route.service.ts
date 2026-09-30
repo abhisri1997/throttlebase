@@ -9,9 +9,13 @@ import {
 import { roadViaPoints, routeLine } from "../core/routes/roadVia.js";
 import { enqueueRideStatsRecompute } from "./jobs.service.js";
 import { getRouteRoadFeedback, type RouteRoadFeedback } from "./road-feedback.service.js";
+import { visibleToViewerSql } from "./blocks.js";
+import { NO_LOOKUPS, type RoutePlaceLookups } from "./route-place-lookups.js";
+import { findPublicEnds, viewRoute, type PublicEnds } from "./route-public-view.js";
 import type {
   CreateRouteInput,
   GpsTraceBatchInput,
+  RouteVisibility,
 } from "../schemas/route.schemas.js";
 
 /**
@@ -24,7 +28,8 @@ import type {
 
 export interface Route {
   id: string;
-  creator_id: string;
+  /** Null for a community route: kept, anonymised, after its rider left. */
+  creator_id: string | null;
   ride_id: string | null;
   parent_route_id: string | null;
   title: string;
@@ -66,6 +71,36 @@ export type RouteWithStops = Route & {
   /** Points that hold a ride to this road, start to end; see core/routes/roadVia. */
   road_via: [number, number][];
 };
+
+/**
+ * A route whose rider is still here, or a community route, which has no
+ * rider. A rider who deleted their account takes their routes with them
+ * until the purge, which deletes them or keeps public ones anonymised.
+ * For queries that LEFT JOIN riders as `rd` on the creator.
+ */
+/**
+ * A route anyone may still see: its creator's account is live, or it was
+ * kept for the community; and a moderator hasn't removed it.
+ */
+const LIVE_OR_COMMUNITY = "((r.creator_id IS NULL OR rd.deleted_at IS NULL) AND r.removed_at IS NULL)";
+
+/**
+ * What reads need to work out a route's public view (route-public-view.ts):
+ * every stop's point in order, and what was found at its ends. Never sent
+ * as they are: viewRoute drops them.
+ */
+const STOP_POINTS_SQL = `COALESCE((
+    SELECT json_agg(json_build_object(
+             'name', rs.name, 'lat', ST_Y(rs.location::geometry), 'lng', ST_X(rs.location::geometry)
+           ) ORDER BY rs.position)
+      FROM route_stops rs WHERE rs.route_id = r.id
+  ), '[]'::json)`;
+const VIEW_COLUMNS = `r.public_ends, ${STOP_POINTS_SQL} AS via_points`;
+
+interface ViewInternals {
+  via_points: { name: string | null; lat: number; lng: number }[];
+  public_ends: PublicEnds | null;
+}
 
 /** Every route read uses these, so points come back as numbers, not PostGIS hex. */
 export const ROUTE_COLUMNS = `
@@ -139,47 +174,125 @@ export const getRouteById = async (
   routeId: string,
   viewerId: string,
 ): Promise<RouteWithStops | null> => {
-  // Fetch route with creator name, respecting visibility. A creator who has
-  // deleted their account takes their routes with them until the purge,
-  // which deletes them or, if the rider chose, keeps them anonymised.
+  // Fetch route with creator name, respecting visibility.
   const result = await query(
-    `SELECT ${ROUTE_COLUMNS}, rd.display_name AS creator_name
+    `SELECT ${ROUTE_COLUMNS}, ${VIEW_COLUMNS}, rd.display_name AS creator_name
      FROM routes r
-     JOIN riders rd ON r.creator_id = rd.id
+     LEFT JOIN riders rd ON r.creator_id = rd.id
      WHERE r.id = $1
-       AND rd.deleted_at IS NULL
+       AND ${LIVE_OR_COMMUNITY}
+       -- Hidden from, and never shown by, a rider blocked either way. A
+       -- community route has no rider, so no block hides it.
+       AND (r.creator_id = $2 OR ${visibleToViewerSql("$2::uuid", "r.creator_id")})
        AND (
          r.visibility = 'public'
          OR r.creator_id = $2
-         OR EXISTS (
-           SELECT 1 FROM route_shares rs
-           WHERE rs.route_id = r.id AND rs.shared_with_rider_id = $2
+         -- Shares count only while the owner keeps the route shared: made
+         -- private, it is theirs alone again.
+         OR (
+           r.visibility = 'specific_riders'
+           AND EXISTS (
+             SELECT 1 FROM route_shares rs
+             WHERE rs.route_id = r.id AND rs.shared_with_rider_id = $2
+           )
          )
        )`,
     [routeId, viewerId],
   );
-  const route = result.rows[0] as Route | undefined;
-  if (!route) return null;
+  const row = result.rows[0] as (Route & ViewInternals) | undefined;
+  if (!row) return null;
+  // Anyone but its owner sees it without its personal ends.
+  const view = viewRoute(row, viewerId);
+  if (!view) return null;
+
+  const allStops = await listRouteStops(routeId);
+  const stops = view.plan
+    ? view.plan.stops.map((kept) => ({
+        ...allStops[kept.sourceIndex]!,
+        position: kept.position,
+        distance_from_start_km: kept.distanceFromStartKm,
+      }))
+    : allStops;
   return {
-    ...route,
+    ...view.route,
     road_feedback: await getRouteRoadFeedback(routeId),
-    stops: await listRouteStops(routeId),
-    road_via: roadViaPoints(routeLine(route.geojson)),
+    stops,
+    road_via: roadViaPoints(routeLine(view.route.geojson)),
   };
 };
 
 /** Public routes, plus the viewer's own private ones so "only me" stays findable. */
 export const listVisibleRoutes = async (viewerId: string): Promise<Route[]> => {
   const result = await query(
-    `SELECT ${ROUTE_COLUMNS}, rd.display_name AS creator_name
+    `SELECT ${ROUTE_COLUMNS}, ${VIEW_COLUMNS}, rd.display_name AS creator_name
      FROM routes r
-     JOIN riders rd ON r.creator_id = rd.id
-     WHERE (r.visibility = 'public' OR r.creator_id = $1) AND rd.deleted_at IS NULL
+     LEFT JOIN riders rd ON r.creator_id = rd.id
+     WHERE (r.visibility = 'public' OR r.creator_id = $1) AND ${LIVE_OR_COMMUNITY}
+       AND (r.creator_id = $1 OR ${visibleToViewerSql("$1::uuid", "r.creator_id")})
      ORDER BY r.created_at DESC
      LIMIT 50`,
     [viewerId],
   );
-  return result.rows as Route[];
+  return asSeenBy(result.rows as (Route & ViewInternals)[], viewerId);
+};
+
+/** Each route as the viewer may see it, leaving out any too short to show them. */
+const asSeenBy = (rows: readonly (Route & ViewInternals)[], viewerId: string): Route[] =>
+  rows.flatMap((row) => {
+    const view = viewRoute(row, viewerId);
+    return view ? [view.route as Route] : [];
+  });
+
+// ---------------------------------------------------------------------------
+// The owner's control over their routes
+// ---------------------------------------------------------------------------
+
+/**
+ * The owner deletes their route, at once and for good. Its stops, shares,
+ * bookmarks and other riders' road feedback on it go with it. Rides planned
+ * on it keep the road they were planned on (copied into rides.road_via) and
+ * lose only the link. False when there is no such route of theirs.
+ */
+export const deleteRoute = async (routeId: string, ownerId: string): Promise<boolean> => {
+  const result = await query(`DELETE FROM routes WHERE id = $1 AND creator_id = $2 RETURNING id`, [routeId, ownerId]);
+  return result.rows.length > 0;
+};
+
+/**
+ * The owner changes who can see their route. Made private, it leaves search,
+ * the Routes list and other riders' bookmarks at once. Shown to others, it is
+ * shown without its personal ends. Null when there is no such route of theirs.
+ */
+export const setRouteVisibility = async (
+  routeId: string,
+  ownerId: string,
+  visibility: RouteVisibility,
+  lookups: RoutePlaceLookups = NO_LOOKUPS,
+): Promise<{ id: string; visibility: RouteVisibility } | null> => {
+  if (visibility === "private") {
+    const result = await query(
+      `UPDATE routes SET visibility = $3, public_ends = NULL WHERE id = $1 AND creator_id = $2 RETURNING id, visibility`,
+      [routeId, ownerId, visibility],
+    );
+    return (result.rows[0] as { id: string; visibility: RouteVisibility } | undefined) ?? null;
+  }
+
+  // Shown to others: look at its ends first. Too short to show without its
+  // personal ends, it is refused (RouteTooShortError) and stays as it was.
+  const loaded = await query(
+    `SELECT r.geojson, ${STOP_POINTS_SQL} AS via_points FROM routes r WHERE r.id = $1 AND r.creator_id = $2`,
+    [routeId, ownerId],
+  );
+  const route = loaded.rows[0] as { geojson: unknown; via_points: ViewInternals["via_points"] } | undefined;
+  if (!route) return null;
+  const ends = await findPublicEnds(routeLine(route.geojson), route.via_points, lookups);
+
+  const result = await query(
+    `UPDATE routes SET visibility = $3, public_ends = $4::jsonb
+      WHERE id = $1 AND creator_id = $2 RETURNING id, visibility`,
+    [routeId, ownerId, visibility, JSON.stringify(ends)],
+  );
+  return (result.rows[0] as { id: string; visibility: RouteVisibility } | undefined) ?? null;
 };
 
 // ---------------------------------------------------------------------------
@@ -217,18 +330,40 @@ export const unbookmarkRoute = async (
 // Sharing
 // ---------------------------------------------------------------------------
 
+export type ShareOutcome = "shared" | "already_shared" | "not_found";
+
+/**
+ * The owner shares their route with another rider. Only the owner can: a
+ * share grants access to the route. "not_found" when the route isn't theirs
+ * or the rider doesn't exist.
+ */
 export const shareRouteWithRider = async (
   routeId: string,
+  ownerId: string,
   sharedWithRiderId: string,
-): Promise<boolean> => {
+): Promise<ShareOutcome> => {
   const result = await query(
-    `INSERT INTO route_shares (route_id, shared_with_rider_id)
-     VALUES ($1, $2)
-     ON CONFLICT DO NOTHING
-     RETURNING id`,
-    [routeId, sharedWithRiderId],
+    `WITH target AS (
+       SELECT r.id AS route_id, rd.id AS rider_id
+         FROM routes r, riders rd
+        WHERE r.id = $1 AND r.creator_id = $2
+          AND rd.id = $3 AND rd.deleted_at IS NULL
+     ),
+     inserted AS (
+       INSERT INTO route_shares (route_id, shared_with_rider_id)
+       SELECT route_id, rider_id FROM target t
+        WHERE NOT EXISTS (
+          SELECT 1 FROM route_shares rs
+           WHERE rs.route_id = t.route_id AND rs.shared_with_rider_id = t.rider_id
+        )
+       RETURNING id
+     )
+     SELECT (SELECT count(*) FROM target)::int AS found, (SELECT count(*) FROM inserted)::int AS inserted`,
+    [routeId, ownerId, sharedWithRiderId],
   );
-  return result.rows.length > 0;
+  const { found, inserted } = result.rows[0] as { found: number; inserted: number };
+  if (found === 0) return "not_found";
+  return inserted > 0 ? "shared" : "already_shared";
 };
 
 // ---------------------------------------------------------------------------
@@ -348,17 +483,19 @@ export const searchRoutes = async (viewerId: string, search: RouteSearchQuery): 
     });
 
   const result = await query(
-    `SELECT ${ROUTE_COLUMNS}, rd.display_name AS creator_name
+    `SELECT ${ROUTE_COLUMNS}, ${VIEW_COLUMNS}, rd.display_name AS creator_name
      FROM routes r
-     JOIN riders rd ON r.creator_id = rd.id
+     LEFT JOIN riders rd ON r.creator_id = rd.id
      WHERE (r.visibility = 'public' OR r.creator_id = $1)
-       AND rd.deleted_at IS NULL
+       AND ${LIVE_OR_COMMUNITY}
+       AND (r.creator_id = $1 OR ${visibleToViewerSql("$1::uuid", "r.creator_id")})
        ${placeConditions.length > 0 ? `AND (${placeConditions.join(" OR ")})` : ""}
      ORDER BY r.created_at DESC
      LIMIT ${MAX_SEARCH_CANDIDATES}`,
     params,
   );
-  const routes = result.rows as Route[];
+  // Matched on what the searcher can see: a hidden end matches nothing.
+  const routes = asSeenBy(result.rows as (Route & ViewInternals)[], viewerId);
 
   const matches = rankRouteMatches(
     routes.map((route) => ({

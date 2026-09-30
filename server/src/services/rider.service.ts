@@ -1,5 +1,6 @@
 import { query } from "../config/db.js";
 import type { UpdateRiderInput } from "../schemas/rider.schemas.js";
+import { visibleToViewerSql } from "./blocks.js";
 
 /**
  * RiderService — Profile management business logic.
@@ -9,8 +10,6 @@ import type { UpdateRiderInput } from "../schemas/rider.schemas.js";
  * - update: Builds a dynamic SQL SET clause from only the provided fields.
  *   This is a common pattern for PATCH endpoints in raw SQL — it's more
  *   complex than an ORM but teaches you exactly what's happening.
- * - softDelete: Sets deleted_at instead of removing the row. The 30-day
- *   grace period is enforced by a scheduled job (not yet implemented).
  */
 
 /**
@@ -154,21 +153,6 @@ export const update = async (
   return result.rows[0] as RiderProfile;
 };
 
-/**
- * Soft-delete a rider's account.
- * Sets deleted_at to now() — the account can be recovered within 30 days.
- */
-export const softDelete = async (id: string): Promise<boolean> => {
-  const result = await query(
-    `UPDATE riders
-     SET deleted_at = now()
-     WHERE id = $1 AND deleted_at IS NULL`,
-    [id],
-  );
-
-  return (result.rowCount ?? 0) > 0;
-};
-
 export const searchMentionSuggestions = async (
   viewerId: string,
   prefix: string,
@@ -195,6 +179,7 @@ export const searchMentionSuggestions = async (
        AND r.id != $1
        AND r.username IS NOT NULL
        AND LOWER(r.username) LIKE $2
+       AND ${visibleToViewerSql("$1::uuid", "r.id")}
      ORDER BY is_following DESC,
               CASE WHEN LOWER(r.username) = $3 THEN 0 ELSE 1 END,
               LOWER(r.username) ASC

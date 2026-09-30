@@ -127,6 +127,9 @@ test("saving a finished ride as a route", { skip: !CONNECTION }, async (t) => {
   });
 
   await runMigrations(admin);
+  // Start each run clean. Rides left by earlier runs pile up in the shared
+  // list of upcoming rides and push other tests' rides out of it.
+  await admin.query(`DELETE FROM rides WHERE captain_id = $1`, [CAPTAIN]);
   await admin.query(
     `INSERT INTO riders (id, email, display_name, username) VALUES
        ($1, 'rc@example.test', 'Captain', 'routecaptain'),
@@ -159,7 +162,8 @@ test("saving a finished ride as a route", { skip: !CONNECTION }, async (t) => {
 
   await t.test("the rider's own track becomes a public route, once", async () => {
     const { rideId, sessionId } = await createRide(admin, "completed");
-    await recordRide(admin, sessionId, RIDER, 200);
+    // ~7.8 km: long enough to show others once its personal ends are hidden.
+    await recordRide(admin, sessionId, RIDER, 700);
 
     const first = await routeFromRide!.saveRouteFromRide(rideId, RIDER, {
       title: "Morning loop",
@@ -170,7 +174,7 @@ test("saving a finished ride as a route", { skip: !CONNECTION }, async (t) => {
     assert.equal(first.route.creator_id, RIDER);
     assert.equal(first.route.ride_id, rideId);
     assert.equal(first.route.visibility, "public");
-    assert.ok(Math.abs(Number(first.route.distance_km) - 2.21) < 0.03, `distance ${first.route.distance_km}`);
+    assert.ok(Math.abs(Number(first.route.distance_km) - 7.77) < 0.03, `distance ${first.route.distance_km}`);
     const geojson = first.route.geojson as { type: string; coordinates: number[][] };
     assert.equal(geojson.type, "LineString");
     // A straight ride simplifies to its two ends, longitude first.
@@ -180,6 +184,11 @@ test("saving a finished ride as a route", { skip: !CONNECTION }, async (t) => {
 
     const listed = await routes!.listVisibleRoutes(OUTSIDER);
     assert.ok(listed.some((route) => route.id === first.route.id));
+    // Saved public, its ends were looked at, so others see it without the personal ones.
+    const ends = await admin.query(`SELECT public_ends FROM routes WHERE id = $1`, [first.route.id]);
+    assert.notEqual(ends.rows[0].public_ends, null);
+    const seen = listed.find((route) => route.id === first.route.id)!;
+    assert.ok(Number(seen.distance_km) < Number(first.route.distance_km) - 0.9, "others see it without its ends");
 
     const again = await routeFromRide!.saveRouteFromRide(rideId, RIDER, {
       title: "Morning loop, again",
@@ -201,7 +210,7 @@ test("saving a finished ride as a route", { skip: !CONNECTION }, async (t) => {
       RIDER,
       {
         title: "Testville run",
-        visibility: "public",
+        visibility: "private",
         highlights: ["scenic_road", "great_stops"],
         stop_notes: [{ ride_stop_id: cafe, note: "  Opens at 6  " }],
       },
@@ -215,14 +224,14 @@ test("saving a finished ride as a route", { skip: !CONNECTION }, async (t) => {
     assert.equal(saved.route.ridden_duration_s, 199);
     assert.deepEqual(saved.route.via, ["Hill Cafe"]);
 
-    const detail = await routes!.getRouteById(saved.route.id, OUTSIDER);
+    const detail = await routes!.getRouteById(saved.route.id, RIDER);
     assert.ok(detail);
     assert.equal(detail.stops.length, 1);
     assert.equal(detail.stops[0]!.name, "Hill Cafe");
     assert.equal(detail.stops[0]!.note, "Opens at 6");
     assert.ok(Math.abs(Number(detail.stops[0]!.distance_from_start_km) - 1.11) < 0.03);
 
-    const listed = (await routes!.listVisibleRoutes(OUTSIDER)).find((route) => route.id === saved.route.id);
+    const listed = (await routes!.listVisibleRoutes(RIDER)).find((route) => route.id === saved.route.id);
     assert.deepEqual(listed?.via, ["Hill Cafe"]);
     assert.equal(listed?.end_name, "North End, Testville");
   });
@@ -317,7 +326,7 @@ test("saving a finished ride as a route", { skip: !CONNECTION }, async (t) => {
     const { parked, building } = await recordRideWithWalkOff(admin, sessionId, RIDER);
     await addStop(admin, rideId, 1, "Building 37", building.lat, building.lng);
 
-    const saved = await routeFromRide!.saveRouteFromRide(rideId, RIDER, { title: "Office run", visibility: "public" });
+    const saved = await routeFromRide!.saveRouteFromRide(rideId, RIDER, { title: "Office run", visibility: "private" });
 
     assert.ok(Math.abs(Number(saved.route.distance_km) - 2.21) < 0.05, `rode ${saved.route.distance_km} km`);
     assert.ok(Math.abs(Number(saved.route.ridden_duration_s) - 198) < 5, `rode ${saved.route.ridden_duration_s} s`);
@@ -388,7 +397,7 @@ test("saving a finished ride as a route", { skip: !CONNECTION }, async (t) => {
       RIDER,
       {
         title: "Found it",
-        visibility: "public",
+        visibility: "private",
         stops: [{ key: found.key, name: "Campus cafe", note: "Chai at the gate" }],
       },
       { nameArea: fakeNameArea },
@@ -406,7 +415,7 @@ test("saving a finished ride as a route", { skip: !CONNECTION }, async (t) => {
 
     const saved = await routeFromRide!.saveRouteFromRide(rideId, RIDER, {
       title: "No stops",
-      visibility: "public",
+      visibility: "private",
       stops: [],
     });
 

@@ -2,6 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import pg from "pg";
 import { runMigrations } from "./migrate.js";
+import { createRegistrationSealer } from "../crypto/registrationSealer.js";
+import { generateSealingKeyPair } from "../crypto/sealedBox.js";
+
+/** Seals deleted accounts' registration records with a throwaway key. */
+const testSealer = createRegistrationSealer(generateSealingKeyPair().publicKeyPem);
 
 /**
  * A group carries on when the rider who runs it leaves, as a WhatsApp group
@@ -21,6 +26,8 @@ if (CONNECTION) {
 }
 
 const db = CONNECTION ? await import("../../config/db.js") : null;
+// Never Google in tests: the local .env may hold a real key.
+const lookups = CONNECTION ? await import("../../services/community-route.service.js") : null;
 const repository = CONNECTION ? await import("./riderRepository.js") : null;
 const community = CONNECTION ? await import("../../services/community.service.js") : null;
 const leadership = CONNECTION ? await import("../../workers/processors/group-leadership.processor.js") : null;
@@ -110,7 +117,7 @@ test("a group carries on when the rider running it leaves", { skip: !CONNECTION 
   });
 
   // ── Act 1: OWN deletes their account.
-  assert.equal(await repository!.createRiderRepository(admin).softDeleteAndUnlink(OWN, new Date()), true);
+  assert.equal(await repository!.createRiderRepository(admin, testSealer).softDeleteAndUnlink(OWN, new Date()), true);
 
   await t.test("another admin takes over before any member", async () => {
     assert.equal(await ownerOf(g1), ADM2);
@@ -182,7 +189,7 @@ test("a group carries on when the rider running it leaves", { skip: !CONNECTION 
 
   // ── Act 3: the hourly purge.
   await t.test("the purge hands over groups of riders deleted before this existed, and ends empty ones", async () => {
-    const result = await purge!.processAccountPurge({});
+    const result = await purge!.processAccountPurge({}, lookups!.NO_LOOKUPS);
     assert.ok(Number(result.groupsHandedOver) >= 1);
     assert.equal(await ownerOf(g8), LATE);
     // LONG_GONE is purged, and their group with nobody left goes with them.
@@ -190,7 +197,7 @@ test("a group carries on when the rider running it leaves", { skip: !CONNECTION 
   });
 
   await t.test("running the purge again finds nothing to hand over", async () => {
-    const result = await purge!.processAccountPurge({});
+    const result = await purge!.processAccountPurge({}, lookups!.NO_LOOKUPS);
     assert.equal(result.groupsHandedOver, 0);
   });
 });

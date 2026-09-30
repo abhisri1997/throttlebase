@@ -696,7 +696,10 @@ router.get("/:id/track", authenticate, liveSessionController.getTrack);
  *       409:
  *         description: The ride is not completed yet
  *       422:
- *         description: Not enough of the ride was recorded to make a route
+ *         description: >
+ *           Not enough of the ride was recorded to make a route; or, saved
+ *           public, too short to show other riders once its personal ends are
+ *           hidden (code ROUTE_TOO_SHORT)
  */
 router.post("/:id/route", authenticate, liveSessionController.saveRouteFromMyRide);
 

@@ -48,7 +48,7 @@ We do not record audio, access your contacts, or collect photos from your device
 - Your profile (name, username, photo, bio, city, experience and ride totals) and your follower counts are visible to other signed-in riders. Your email address and phone number never are.
 - Posts, comments, likes, ride reviews and road feedback are visible to other signed-in riders.
 - Rides are public by default: signed-in riders can see the ride, its plan and who has joined. For a ride that needs approval, other signed-in riders see only its title, date, length, captain and number of riders; its meeting point, route and who has joined are shown only to riders the captain or a co-captain accepts. When you ask to join such a ride, its captain and co-captains see your name.
-- Routes are private by default. You can share a route with specific riders or make it public, which lets every signed-in rider see and follow it.
+- Routes are private by default. You can share a route with specific riders or make it public, which lets every signed-in rider see and follow it. Other riders see it without its first and last 500 m or so, unless it starts or ends at a public place such as a hotel, café or fuel station, so it doesn't show where you set off from or arrive; a route too short to show that way can't be made public. You always see your own route whole.
 - Your ride history is shown on your profile according to the privacy setting you choose in Settings.
 
 ## Who we share data with
@@ -69,8 +69,8 @@ Some of these providers process data outside India. We transfer data only to cou
 
 - Most of your data, including your ride history, routes and posts, is kept until you delete it or your account.
 - When you delete your account, you are signed out everywhere and your profile and content are hidden at once. Your data is deleted 30 days later.
-- Registration details (your email, name, username and sign-in method) are kept sealed for 180 days after your account is deleted, as the Information Technology Rules, 2021 require. They are used only if the law requires it, never to contact you or for anything else.
-- Public routes you created are kept after your account is deleted, without your name or any link to you, with the first and last part of each route removed so it can't lead back to where you start or finish. Private routes and routes shared with specific riders are deleted.
+- Registration details (your email, name, username, phone number, sign-in methods, when you registered, and the IP address you signed up from) are kept sealed and encrypted for 180 days after your account is deleted, as the Information Technology Rules, 2021 require, and then deleted. They can be opened only for a lawful request, such as a court order, and every opening is recorded. They are never used to contact you or for anything else.
+- Public routes you created are kept after your account is deleted, without your name or any link to you. Where a route starts or finishes somewhere other than a public place such as a hotel, café, fuel station, viewpoint or station, about 500 m of that end is removed so it can't lead back to where you start or finish, and a route with less than 5 km left is deleted instead. The route's name, your stop notes and the name of each stop are replaced, and its ride time is removed. Private routes and routes shared with specific riders are deleted.
 - Rides you took part in with other riders stay in their ride history; your own track, stats and participation are deleted.
 - Sign-in and security records are kept for [SECURITY LOG RETENTION PERIOD].
 - Records of your consent are kept for as long as we may need to show that you gave it.
@@ -82,7 +82,7 @@ Under the Digital Personal Data Protection Act, 2023, you can:
 
 - Get a summary of the personal data we hold about you and how we use it.
 - Correct or update it. You can edit most of your profile in the app.
-- Have it erased. Delete your account in the app under Settings → Account → Delete account, or email [CONTACT EMAIL] from the address on your account.
+- Have it erased. Delete your account in the app under Settings → Account → Delete account, or at throttlebase.in/delete-account without the app, or email [CONTACT EMAIL] from the address on your account.
 - Withdraw your consent at any time, as easily as you gave it. Withdrawing doesn't affect processing before it, and features that need that data will stop working.
 - Nominate someone to exercise these rights for you if you die or become unable to.
 - Complain to us (see Grievance Officer below), and if you are not satisfied, to the Data Protection Board of India.

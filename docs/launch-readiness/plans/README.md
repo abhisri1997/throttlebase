@@ -15,5 +15,6 @@ Each plan says what exists today, what to build, in what order, and how to test 
 | [consent.md](consent.md) | E6 | New purpose-based consent ledger; `rider_consents` stays for Terms acceptance |
 | [rls-enforcement.md](rls-enforcement.md) | E10 | Close the Supabase Data API surface, then move the API off `postgres` onto `throttlebase_app` |
 | [privacy-defaults.md](privacy-defaults.md) | E5 | Sensitive fields are never public; profile fields go through an allowlist |
+| [ugc-safety.md](ugc-safety.md) | E3 | Two-way blocking, reports and a word filter, a moderation queue with 180-day retention, and grievance tracking |
 
 When a plan ships, update `data-inventory.md` in the same PR.

@@ -13,6 +13,7 @@ import { getRouteById } from "./route.service.js";
 import { describeMyRequest, type ParticipantStatus } from "../core/rides/joinRequest.js";
 import { toRidePreview, type RidePreview } from "../core/rides/ridePreview.js";
 import { previewNextCaptain } from "./ride-roster.service.js";
+import { visibleToViewerSql } from "./blocks.js";
 
 /** Rides that are over; nothing about who is on them changes any more. */
 const FINISHED_RIDE_STATUSES: ReadonlySet<string> = new Set(["completed", "cancelled"]);
@@ -330,7 +331,11 @@ export const getRideById = async (
           r.status <> 'active'
           AND (
             -- A deleted captain's ride stays with the riders already on it.
-            (r.visibility = 'public' AND c.deleted_at IS NULL)
+            -- So does one whose captain the viewer blocked, or was blocked by.
+            (
+              r.visibility = 'public' AND c.deleted_at IS NULL
+              AND ${visibleToViewerSql("$2::uuid", "r.captain_id")}
+            )
             OR r.captain_id = $2
             OR EXISTS (
               SELECT 1
@@ -442,7 +447,10 @@ export const listDiscoverableRides = async (
       AND (
         -- A ride led by a rider who deleted their account leaves discovery
         -- at once; its own riders still see it.
-        (r.status = 'scheduled' AND c.deleted_at IS NULL)
+        (
+          r.status = 'scheduled' AND c.deleted_at IS NULL
+          AND ${visibleToViewerSql("$1::uuid", "r.captain_id")}
+        )
         OR r.captain_id = $1
         OR me.status = 'confirmed'
       )

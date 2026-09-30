@@ -6,6 +6,8 @@ import type {
   CreateReviewInput,
 } from "../schemas/community.schemas.js";
 import { attachMentionedRiders } from "./mention.service.js";
+import { isHiddenFrom, visibleToViewerSql } from "./blocks.js";
+import { assertContentAllowed } from "./contentFilter.js";
 import { pickGroupSuccessor } from "../core/groups/groupSuccessor.js";
 import { leaveGroup as leaveGroupAndHandOver, type LeaveGroupOutcome } from "./group-roster.service.js";
 
@@ -14,6 +16,7 @@ import { leaveGroup as leaveGroupAndHandOver, type LeaveGroupOutcome } from "./g
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const createPost = async (riderId: string, data: CreatePostInput) => {
+  assertContentAllowed(data.content);
   const result = await query(
     `INSERT INTO posts (rider_id, content, media_urls, shared_route_id)
      VALUES ($1, $2, $3, $4)
@@ -46,40 +49,46 @@ const VISIBLE_POST_COLUMNS = `
     WHERE l.post_id = p.id AND lr.deleted_at IS NULL) AS like_count,
   (SELECT count(*)::int
      FROM comments c JOIN riders cr ON cr.id = c.rider_id
-    WHERE c.post_id = p.id AND cr.deleted_at IS NULL) AS comment_count`;
+    WHERE c.post_id = p.id AND cr.deleted_at IS NULL AND c.removed_at IS NULL) AS comment_count`;
 
-/** Refuses to act on a post nobody can see: missing, or its author deleted. */
-const assertPostVisible = async (postId: string): Promise<void> => {
+/**
+ * Refuses to act on a post the rider can't see: missing, its author deleted,
+ * or its author and the rider blocked either way (services/blocks.ts).
+ */
+const assertPostVisible = async (postId: string, riderId: string): Promise<void> => {
   const result = await query(
     `SELECT 1
      FROM posts p JOIN riders r ON r.id = p.rider_id
-     WHERE p.id = $1 AND r.deleted_at IS NULL`,
-    [postId],
+     WHERE p.id = $1 AND r.deleted_at IS NULL AND p.removed_at IS NULL
+       AND ${visibleToViewerSql("$2", "p.rider_id")}`,
+    [postId, riderId],
   );
   if (result.rows.length === 0) {
     throw new Error("Post not found");
   }
 };
 
-export const getFeed = async (limit = 50, offset = 0) => {
+export const getFeed = async (limit = 50, offset = 0, viewerId: string | null = null) => {
   const result = await query(
     `SELECT ${VISIBLE_POST_COLUMNS}
      FROM posts p
      JOIN riders r ON p.rider_id = r.id
-     WHERE r.deleted_at IS NULL
+     WHERE r.deleted_at IS NULL AND p.removed_at IS NULL
+       AND ${visibleToViewerSql("$3", "p.rider_id")}
      ORDER BY p.created_at DESC
      LIMIT $1 OFFSET $2`,
-    [limit, offset],
+    [limit, offset, viewerId],
   );
   return attachMentionedRiders(result.rows);
 };
 
-export const getPostById = async (postId: string) => {
+export const getPostById = async (postId: string, viewerId: string | null = null) => {
   const result = await query(
     `SELECT ${VISIBLE_POST_COLUMNS}
      FROM posts p JOIN riders r ON p.rider_id = r.id
-     WHERE p.id = $1 AND r.deleted_at IS NULL`,
-    [postId],
+     WHERE p.id = $1 AND r.deleted_at IS NULL AND p.removed_at IS NULL
+       AND ${visibleToViewerSql("$2", "p.rider_id")}`,
+    [postId, viewerId],
   );
   if (result.rows.length === 0) {
     return null;
@@ -94,8 +103,9 @@ export const updatePost = async (
   riderId: string,
   content: string,
 ) => {
+  assertContentAllowed(content);
   const result = await query(
-    `UPDATE posts SET content = $1 WHERE id = $2 AND rider_id = $3 RETURNING *`,
+    `UPDATE posts SET content = $1 WHERE id = $2 AND rider_id = $3 AND removed_at IS NULL RETURNING *`,
     [content, postId, riderId],
   );
   return result.rows[0] || null;
@@ -103,7 +113,8 @@ export const updatePost = async (
 
 export const deletePost = async (postId: string, riderId: string) => {
   const result = await query(
-    `DELETE FROM posts WHERE id = $1 AND rider_id = $2 RETURNING id`,
+    // Removed content is kept 180 days, so its author can't delete it meanwhile.
+    `DELETE FROM posts WHERE id = $1 AND rider_id = $2 AND removed_at IS NULL RETURNING id`,
     [postId, riderId],
   );
   return result.rows.length > 0;
@@ -118,7 +129,8 @@ export const addComment = async (
   riderId: string,
   data: CreateCommentInput,
 ) => {
-  await assertPostVisible(postId);
+  assertContentAllowed(data.content);
+  await assertPostVisible(postId, riderId);
   const result = await query(
     `INSERT INTO comments (post_id, rider_id, content, mentions)
      VALUES ($1, $2, $3, $4)
@@ -133,7 +145,7 @@ export const addComment = async (
   return result.rows[0];
 };
 
-export const getComments = async (postId: string) => {
+export const getComments = async (postId: string, viewerId: string | null = null) => {
   const result = await query(
     `SELECT c.*, r.display_name AS author_name
      FROM comments c
@@ -143,19 +155,26 @@ export const getComments = async (postId: string) => {
      WHERE c.post_id = $1
        AND r.deleted_at IS NULL
        AND post_author.deleted_at IS NULL
+       AND c.removed_at IS NULL AND p.removed_at IS NULL
+       AND ${visibleToViewerSql("$2", "c.rider_id")}
+       AND ${visibleToViewerSql("$2", "p.rider_id")}
      ORDER BY c.created_at ASC`,
-    [postId],
+    [postId, viewerId],
   );
   return attachMentionedRiders(result.rows);
 };
 
-export const getCommentById = async (commentId: string) => {
+export const getCommentById = async (commentId: string, viewerId: string | null = null) => {
   const result = await query(
     `SELECT c.*, r.display_name AS author_name
      FROM comments c
      JOIN riders r ON c.rider_id = r.id
-     WHERE c.id = $1 AND r.deleted_at IS NULL`,
-    [commentId],
+     JOIN posts p ON p.id = c.post_id
+     WHERE c.id = $1 AND r.deleted_at IS NULL
+       AND c.removed_at IS NULL AND p.removed_at IS NULL
+       AND ${visibleToViewerSql("$2", "c.rider_id")}
+       AND ${visibleToViewerSql("$2", "p.rider_id")}`,
+    [commentId, viewerId],
   );
 
   if (result.rows.length === 0) {
@@ -171,8 +190,9 @@ export const updateComment = async (
   riderId: string,
   content: string,
 ) => {
+  assertContentAllowed(content);
   const result = await query(
-    `UPDATE comments SET content = $1 WHERE id = $2 AND rider_id = $3 RETURNING *`,
+    `UPDATE comments SET content = $1 WHERE id = $2 AND rider_id = $3 AND removed_at IS NULL RETURNING *`,
     [content, commentId, riderId],
   );
   return result.rows[0] || null;
@@ -180,7 +200,7 @@ export const updateComment = async (
 
 export const deleteComment = async (commentId: string, riderId: string) => {
   const result = await query(
-    `DELETE FROM comments WHERE id = $1 AND rider_id = $2 RETURNING post_id`,
+    `DELETE FROM comments WHERE id = $1 AND rider_id = $2 AND removed_at IS NULL RETURNING post_id`,
     [commentId, riderId],
   );
   if (result.rows.length > 0) {
@@ -199,7 +219,7 @@ export const deleteComment = async (commentId: string, riderId: string) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const likePost = async (postId: string, riderId: string) => {
-  await assertPostVisible(postId);
+  await assertPostVisible(postId, riderId);
   const result = await query(
     `INSERT INTO likes (post_id, rider_id) VALUES ($1, $2)
      ON CONFLICT (post_id, rider_id) DO NOTHING RETURNING id`,
@@ -240,6 +260,8 @@ export const followRider = async (followerId: string, followingId: string) => {
     [followingId],
   );
   if (target.rows.length === 0) throw new Error("Rider not found");
+  // Blocked either way, or suspended, reads as not found.
+  if (await isHiddenFrom(followerId, followingId)) throw new Error("Rider not found");
   const result = await query(
     `INSERT INTO follows (follower_id, following_id) VALUES ($1, $2)
      ON CONFLICT DO NOTHING RETURNING follower_id`,
@@ -270,6 +292,7 @@ export const getFollowers = async (riderId: string, viewerId?: string) => {
             ) AS is_following
      FROM follows f JOIN riders r ON f.follower_id = r.id
      WHERE f.following_id = $1 AND r.deleted_at IS NULL
+       AND ${visibleToViewerSql("$2", "r.id")}
      ORDER BY f.created_at DESC`,
     [riderId, viewerId ?? null],
   );
@@ -287,6 +310,7 @@ export const getFollowing = async (riderId: string, viewerId?: string) => {
             ) AS is_following
      FROM follows f JOIN riders r ON f.following_id = r.id
      WHERE f.follower_id = $1 AND r.deleted_at IS NULL
+       AND ${visibleToViewerSql("$2", "r.id")}
      ORDER BY f.created_at DESC`,
     [riderId, viewerId ?? null],
   );
@@ -593,13 +617,14 @@ export const addRideReview = async (
   return result.rows[0];
 };
 
-export const getRideReviews = async (rideId: string) => {
+export const getRideReviews = async (rideId: string, viewerId: string | null = null) => {
   const result = await query(
     `SELECT rr.*, r.display_name AS reviewer_name
      FROM ride_reviews rr JOIN riders r ON rr.rider_id = r.id
      WHERE rr.ride_id = $1 AND r.deleted_at IS NULL
+       AND ${visibleToViewerSql("$2", "rr.rider_id")}
      ORDER BY rr.created_at DESC`,
-    [rideId],
+    [rideId, viewerId],
   );
   return result.rows;
 };

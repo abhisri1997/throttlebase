@@ -1,5 +1,6 @@
 import type { Response } from "express";
 import { isAuthError, type AuthErrorCode } from "../../core/auth/errors.js";
+import { clientIpOf, type ClientIpRequest } from "./clientIp.js";
 
 /**
  * Maps core's vocabulary onto HTTP.
@@ -22,11 +23,28 @@ const STATUS_BY_CODE: Record<AuthErrorCode, number> = {
   USERNAME_INVALID: 400,
   USERNAME_TAKEN: 409,
   RIDER_NOT_FOUND: 404,
+  ACCOUNT_SUSPENDED: 403,
+  REAUTH_REQUIRED: 403,
+  NO_EMAIL_ON_FILE: 409,
 };
 
-export const sendAuthError = (res: Response, error: unknown): void => {
+/**
+ * For routes already behind a valid access token. A code refused there says
+ * nothing about the token, and a 401 would make the app refresh it and resend
+ * the same code, spending a second attempt.
+ */
+export const SIGNED_IN_CODE_STATUS: Partial<Record<AuthErrorCode, number>> = {
+  OTP_INVALID: 403,
+  OTP_EXPIRED: 403,
+};
+
+export const sendAuthError = (
+  res: Response,
+  error: unknown,
+  overrides: Partial<Record<AuthErrorCode, number>> = {},
+): void => {
   if (isAuthError(error)) {
-    const status = STATUS_BY_CODE[error.code];
+    const status = overrides[error.code] ?? STATUS_BY_CODE[error.code];
 
     if (error.retryAfterSeconds !== undefined) {
       res.setHeader("Retry-After", String(error.retryAfterSeconds));
@@ -42,21 +60,14 @@ export const sendAuthError = (res: Response, error: unknown): void => {
 };
 
 /** Client IP and user agent, as core's RequestContext wants them. */
-export const requestContextFrom = (req: {
-  headers: Record<string, string | string[] | undefined>;
-  socket: { remoteAddress?: string | undefined };
+export const requestContextFrom = (req: ClientIpRequest & {
   body?: unknown;
 }): { ipAddress: string | null; userAgent: string | null } => {
-  const forwarded = req.headers["x-forwarded-for"];
-  const forwardedValue = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-  const ipAddress =
-    forwardedValue?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? null;
-
   const agent = req.headers["user-agent"];
   const agentValue = Array.isArray(agent) ? agent[0] : agent;
 
   return {
-    ipAddress: ipAddress || null,
+    ipAddress: clientIpOf(req),
     userAgent: agentValue ? agentValue.slice(0, 255) : null,
   };
 };

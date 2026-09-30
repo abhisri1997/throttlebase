@@ -88,7 +88,33 @@ export interface AuthConfig {
   /** Empty when Apple sign-in is not configured yet. */
   apple: { allowedAudiences: string[] };
   policy: AuthPolicy;
+  sealing: {
+    /**
+     * The public key that seals registration records at account deletion
+     * (adapters/crypto/sealedBox.ts). Its private half is kept offline.
+     * Required in production; elsewhere, null means a throwaway key.
+     */
+    publicKeyPem: string | null;
+  };
 }
+
+const PUBLIC_KEY_HEADER = "-----BEGIN PUBLIC KEY-----";
+
+/**
+ * SEALED_RECORD_PUBLIC_KEY: a PEM, or its base64 encoding. In production an
+ * account deletion must never go unsealed, so the server won't start without it.
+ */
+const readSealingPublicKey = (env: Env): string | null => {
+  const name = "SEALED_RECORD_PUBLIC_KEY";
+  const raw = env.NODE_ENV === "production" ? required(env, name) : optional(env, name);
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  const pem = trimmed.startsWith(PUBLIC_KEY_HEADER) ? trimmed : Buffer.from(trimmed, "base64").toString("utf8").trim();
+  if (!pem.startsWith(PUBLIC_KEY_HEADER)) {
+    throw new ConfigError(`${name} must be a public key PEM, or its base64 encoding. Run npm run sealed:keygen to make one.`);
+  }
+  return pem;
+};
 
 /**
  * Retired verification keys, as `kid:base64pem` pairs.
@@ -126,6 +152,7 @@ export const readAuthConfig = (env: Env): AuthConfig => ({
   },
   google: { allowedAudiences: list(env, "GOOGLE_CLIENT_IDS") },
   apple: { allowedAudiences: optionalList(env, "APPLE_CLIENT_IDS") },
+  sealing: { publicKeyPem: readSealingPublicKey(env) },
   policy: {
     accessTokenTtlSeconds: integer(env, "AUTH_ACCESS_TOKEN_TTL_SECONDS", 900),
     refreshTokenTtlSeconds: integer(

@@ -8,18 +8,21 @@
  *      jobs are removed after a retention window: completed and cancelled
  *      after JOB_RETENTION_DAYS, failed after FAILED_JOB_RETENTION_DAYS (kept
  *      longer for debugging). Pending and running jobs are never touched.
+ *   3. Purges posts, comments and routes a moderator removed more than
+ *      REMOVED_CONTENT_RETENTION_DAYS ago. They are kept that long for
+ *      appeals and legal requests (docs/launch-readiness/plans/ugc-safety.md).
  *
  * It never deletes riders. Deleting an account anonymises the rider row and
  * keeps it (core/riders/deleteAccount.ts), because other riders' records
- * point at it: rides.captain_id is ON DELETE CASCADE, so removing the row
- * would take every ride the rider captained with it, along with the other
- * riders' participation, tracks and stats. Removing a leaving rider's own
- * data is a separate, explicit purge (docs/launch-readiness/plans/account-deletion.md).
+ * point at it (rides.captain_id and groups.created_by are ON DELETE
+ * RESTRICT since migration 037). Removing a leaving rider's own data is a
+ * separate, explicit purge (account-purge.processor.ts).
  *
  * Safe to run as a recurring job (idempotent DELETE).
  */
 
 import { query } from "../../config/db.js";
+import { REMOVED_CONTENT_RETENTION_DAYS } from "../../core/moderation/actions.js";
 
 const purgeExpiredSessions = async (): Promise<number> => {
   const result = await query(
@@ -69,16 +72,31 @@ const purgeFinishedJobs = async (): Promise<number> => {
   return deleted;
 };
 
+/** Deleting a post takes its comments and likes with it (ON DELETE CASCADE). */
+const purgeRemovedContent = async (): Promise<Record<string, number>> => {
+  const purged: Record<string, number> = {};
+  for (const table of ["comments", "posts", "routes"] as const) {
+    const result = await query(
+      `DELETE FROM ${table} WHERE removed_at < now() - ($1 || ' days')::interval`,
+      [String(REMOVED_CONTENT_RETENTION_DAYS)],
+    );
+    purged[table] = result.rowCount ?? 0;
+  }
+  return purged;
+};
+
 export const processCleanupExpiredSessions = async (
   _payload: Record<string, unknown>,
 ): Promise<Record<string, unknown>> => {
   const sessionsDeleted = await purgeExpiredSessions();
   const jobsDeleted = await purgeFinishedJobs();
+  const removedContentPurged = await purgeRemovedContent();
 
   return {
     processor: "cleanup-expired-sessions",
     sessionsDeleted,
     jobsDeleted,
+    removedContentPurged,
     handledAt: new Date().toISOString(),
   };
 };

@@ -2,6 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import pg from "pg";
 import { runMigrations } from "./migrate.js";
+import { createRegistrationSealer } from "../crypto/registrationSealer.js";
+import { generateSealingKeyPair } from "../crypto/sealedBox.js";
+
+/** Seals deleted accounts' registration records with a throwaway key. */
+const testSealer = createRegistrationSealer(generateSealingKeyPair().publicKeyPem);
 
 /**
  * A rider chosen to take over can be deleting their own account at the
@@ -77,7 +82,7 @@ test("a successor deleting their account at the same moment is passed over", { s
     [groupId, OWNER, NEXT, THIRD],
   );
 
-  const riders = repository!.createRiderRepository(admin);
+  const riders = repository!.createRiderRepository(admin, testSealer);
 
   // NEXT's deletion is under way: their rows are changed but not committed.
   const nextDeletion = await admin.connect();

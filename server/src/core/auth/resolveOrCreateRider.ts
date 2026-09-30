@@ -157,6 +157,15 @@ const finish = async (
     throw new AuthError("RIDER_NOT_FOUND", "Rider disappeared mid-transaction");
   }
 
+  // A moderator suspended the account. The transaction rolls back, so the
+  // attempt leaves no sign-in record and no session.
+  if (rider.suspended) {
+    throw new AuthError(
+      "ACCOUNT_SUSPENDED",
+      "This account is suspended. If you think this is a mistake, contact the Grievance Officer through throttlebase.in.",
+    );
+  }
+
   return {
     riderId,
     isNewRider,

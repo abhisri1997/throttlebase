@@ -74,7 +74,7 @@ export const TERMS: LegalDocument = {
         list(
           "You own the posts, comments, reviews, routes and other content you add.",
           "You give us a non-exclusive, royalty-free licence to store, show, copy and adapt it as needed to run ThrottleBase, for the people you share it with.",
-          "When you make a route public, you also let us keep a copy after you delete your account, without your name or any link to you and with the first and last part of the route removed. This lets other riders keep using it. This licence does not apply to private routes or routes shared with specific riders.",
+          "When you make a route public, you also let us keep a copy after you delete your account, without your name or any link to you. Any end of the route that isn't at a public place (such as a hotel, café, fuel station, viewpoint or station) is shortened by about 500 m, and your own words on it (its name, stop names and notes) are replaced or removed. This lets other riders keep using it. This licence does not apply to private routes or routes shared with specific riders.",
           "Only add content you have the right to share.",
         ),
       ],
@@ -112,7 +112,7 @@ export const TERMS: LegalDocument = {
       heading: "Reporting, moderation and ending your access",
       blocks: [
         list(
-          "To report content or a rider, contact our Grievance Officer (below).",
+          "To report content or a rider, tap Report on it in the app, or contact our Grievance Officer (below). Every report is a complaint to the Grievance Officer.",
           "We may remove content or restrict, suspend or close an account that breaks these terms or the law, and we act on valid orders from courts and the government within the time the law sets.",
           "Where the law requires, we keep removed content and related records for 180 days, or longer if the law requires, for investigations.",
           "We will tell you when we act against your account, unless the law or someone's safety prevents it.",
@@ -168,7 +168,7 @@ export const TERMS: LegalDocument = {
       blocks: [
         paragraph("For complaints about content, another rider, or these terms, contact our Grievance Officer:"),
         list("[GRIEVANCE OFFICER NAME]", "Email: [GRIEVANCE OFFICER EMAIL]", "Address: [CONTACT ADDRESS]"),
-        paragraph("We acknowledge complaints within 24 hours and aim to resolve them within 7 days."),
+        paragraph("We acknowledge complaints within 24 hours and resolve them within 7 days, or within 72 hours for sexual content. See throttlebase.in/grievance."),
       ],
     },
   ],

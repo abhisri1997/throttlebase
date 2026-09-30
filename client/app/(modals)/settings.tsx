@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Switch,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -15,7 +14,6 @@ import { apiClient } from "../../src/api/client";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { isAdmin } from "../../src/core/auth/roles";
-import { authService } from "../../src/services/auth";
 import { FEATURES } from "../../src/core/features/features";
 import type { ReactNode } from "react";
 import { Bell, ChevronLeft, FileText, LifeBuoy, Lock, Settings as SettingsIcon, Shield, Trash2, User, UserX } from "lucide-react-native";
@@ -23,6 +21,8 @@ import { Bell, ChevronLeft, FileText, LifeBuoy, Lock, Settings as SettingsIcon, 
 const LEGAL_LINKS = [
   { path: "/privacy", label: "Privacy Policy" },
   { path: "/terms", label: "Terms of Use" },
+  { path: "/grievance", label: "Grievance Officer" },
+  { path: "/(modals)/my-reports", label: "Your reports" },
 ] as const;
 
 interface SectionHeaderProps {
@@ -93,8 +93,8 @@ export default function SettingsModal() {
   const unblockRider = useMutation({
     mutationFn: async (id: string) =>
       apiClient.delete(`/api/notifications/blocked/${id}`),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["settings", "blocked"] }),
+    // Their posts, routes and rides show again everywhere.
+    onSuccess: () => queryClient.invalidateQueries(),
   });
 
   const renderCycler = (
@@ -171,48 +171,11 @@ export default function SettingsModal() {
 
   /**
    * Account deletion, which the app stores require to be reachable in-app.
-   *
-   * Two steps on purpose: this revokes every session and unlinks every
-   * sign-in method, and there is no undo from the rider's side.
+   * The page explains what goes and what stays, and confirms with a code
+   * emailed to the rider; it is also throttlebase.in/delete-account.
    */
   const handleDeleteAccount = (): void => {
-    Alert.alert(
-      "Delete account?",
-      "Your sign-in methods are removed and every device is signed out. Your rides stay part of other riders' history, but your profile details are erased.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            Alert.alert(
-              "This cannot be undone",
-              "Delete your ThrottleBase account permanently?",
-              [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Delete permanently",
-                  style: "destructive",
-                  onPress: () => {
-                    void (async () => {
-                      try {
-                        await authService.deleteAccount();
-                        router.replace("/(auth)/sign-in");
-                      } catch (error) {
-                        Alert.alert(
-                          "Couldn't delete account",
-                          (error as Error)?.message ?? "Please try again.",
-                        );
-                      }
-                    })();
-                  },
-                },
-              ],
-            );
-          },
-        },
-      ],
-    );
+    router.push("/delete-account");
   };
 
   return (
@@ -475,6 +438,40 @@ export default function SettingsModal() {
             </View>
           </View>
         )}
+
+        {isAdmin(rider?.roles) ? (
+          <View className='pb-6'>
+            <SectionHeader
+              icon={<Shield color={colors.primary} size={18} />}
+              label='Admin'
+              color={colors.primary}
+            />
+            <View
+              style={{
+                backgroundColor: colors.surface,
+                borderTopWidth: 1,
+                borderBottomWidth: 1,
+                borderColor: colors.border,
+              }}
+            >
+              <TouchableOpacity
+                accessibilityRole='button'
+                onPress={() => router.push("/(modals)/moderation")}
+                className='px-4 py-4 flex-row items-center justify-between'
+              >
+                <View>
+                  <Text className='text-base font-medium' style={{ color: colors.text }}>
+                    Moderation
+                  </Text>
+                  <Text className='text-sm mt-1' style={{ color: colors.textMuted }}>
+                    Review reports, remove content, suspend riders.
+                  </Text>
+                </View>
+                <Text style={{ color: colors.textMuted }}>➔</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
 
         <View className='pb-12'>
           <SectionHeader

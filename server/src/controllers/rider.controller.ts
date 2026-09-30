@@ -3,6 +3,7 @@ import { UpdateRiderSchema } from "../schemas/rider.schemas.js";
 import * as RiderService from "../services/rider.service.js";
 import { toPublicRider } from "../services/publicRider.js";
 import { query } from "../config/db.js";
+import { isHiddenFrom } from "../services/blocks.js";
 
 /**
  * RiderController — Handles HTTP request/response for rider profile endpoints.
@@ -55,7 +56,10 @@ export const getPublicProfile = async (
       return;
     }
 
-    const rider = await RiderService.getById(id);
+    const viewerId = req.rider!.riderId;
+    // Blocked either way, or suspended, reads as not found.
+    const rider =
+      viewerId !== id && (await isHiddenFrom(viewerId, id)) ? null : await RiderService.getById(id);
 
     if (!rider) {
       res.status(404).json({ error: "Rider not found" });
@@ -63,7 +67,6 @@ export const getPublicProfile = async (
     }
 
     // Check if the authenticated viewer already follows this rider
-    const viewerId = req.rider!.riderId;
     let is_following = false;
     if (viewerId !== id) {
       const followCheck = await query(
@@ -141,31 +144,6 @@ export const updateMyProfile = async (
     });
   } catch (error: any) {
     console.error("Update profile error:", error.message);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-/**
- * DELETE /api/riders/me
- * Soft-delete the authenticated rider's account.
- */
-export const deleteMyAccount = async (
-  req: Request,
-  res: Response,
-): Promise<void> => {
-  try {
-    const deleted = await RiderService.softDelete(req.rider!.riderId);
-
-    if (!deleted) {
-      res.status(404).json({ error: "Rider not found" });
-      return;
-    }
-
-    res.json({
-      message: "Account deleted. You have 30 days to recover it.",
-    });
-  } catch (error: any) {
-    console.error("Delete account error:", error.message);
     res.status(500).json({ error: "Internal server error" });
   }
 };

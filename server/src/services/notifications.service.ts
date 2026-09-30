@@ -316,10 +316,20 @@ export const updatePrivacy = async (
 // BLOCKED RIDERS
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Blocks a rider, and ends any follow between the two in the same statement.
+ * What a block hides everywhere else is in services/blocks.ts.
+ */
 export const blockRider = async (blockerId: string, blockedId: string) => {
   if (blockerId === blockedId) throw new Error("Cannot block yourself");
   const result = await query(
-    `INSERT INTO blocked_riders (blocker_id, blocked_id) VALUES ($1, $2)
+    `WITH unfollowed AS (
+       DELETE FROM follows
+        WHERE (follower_id = $1 AND following_id = $2)
+           OR (follower_id = $2 AND following_id = $1)
+     )
+     INSERT INTO blocked_riders (blocker_id, blocked_id)
+     SELECT $1, $2 WHERE EXISTS (SELECT 1 FROM riders WHERE id = $2)
      ON CONFLICT DO NOTHING RETURNING blocker_id`,
     [blockerId, blockedId],
   );
@@ -336,7 +346,8 @@ export const unblockRider = async (blockerId: string, blockedId: string) => {
 
 export const getBlockedRiders = async (blockerId: string) => {
   const result = await query(
-    `SELECT r.id, r.display_name FROM blocked_riders br
+    `SELECT r.id AS blocked_id, r.display_name AS blocked_name, br.created_at AS blocked_at
+     FROM blocked_riders br
      JOIN riders r ON br.blocked_id = r.id
      WHERE br.blocker_id = $1
      ORDER BY br.created_at DESC`,

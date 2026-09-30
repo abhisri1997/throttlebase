@@ -21,7 +21,11 @@
     "routes:name-ends": "tsx src/adapters/postgres/nameRouteEnds.ts",
     "migrate:baseline": "tsx src/adapters/postgres/migrate.ts --baseline-existing",
     "test:integration": "tsx --test --test-concurrency=1 \"src/adapters/postgres/*.integration.test.ts\"",
-    "rides:recompute-riding": "tsx src/adapters/postgres/recomputeRiding.ts"
+    "rides:recompute-riding": "tsx src/adapters/postgres/recomputeRiding.ts",
+    "sealed:keygen": "tsx src/adapters/postgres/sealedRecordsCli.ts keygen",
+    "sealed:open": "tsx src/adapters/postgres/sealedRecordsCli.ts open",
+    "sealed:hold": "tsx src/adapters/postgres/sealedRecordsCli.ts hold",
+    "sealed:release": "tsx src/adapters/postgres/sealedRecordsCli.ts release"
   },
   "keywords": [],
   "author": "",

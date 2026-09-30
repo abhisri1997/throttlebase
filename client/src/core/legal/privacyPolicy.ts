@@ -4,6 +4,14 @@
  * `status` becomes "final". Keep it in step with the code: a new data type,
  * recipient or retention rule means a change here and a new `version`.
  */
+import {
+  LEGALLY_PRESERVED,
+  ON_ACCOUNT_DELETION,
+  PUBLIC_ROUTES_KEPT,
+  SEALED_REGISTRATION_RECORD,
+  SECURITY_RECORDS_KEPT,
+  SHARED_RIDES_KEPT,
+} from "./deletionRetention";
 import { list, paragraph, type LegalDocument } from "./legalDocument";
 
 export const PRIVACY_POLICY: LegalDocument = {
@@ -69,7 +77,7 @@ export const PRIVACY_POLICY: LegalDocument = {
           "Your profile (name, username, photo, bio, city, experience and ride totals) and your follower counts are visible to other signed-in riders. Your email address and phone number never are.",
           "Posts, comments, likes, ride reviews and road feedback are visible to other signed-in riders.",
           "Rides are public by default: signed-in riders can see the ride, its plan and who has joined. For a ride that needs approval, other signed-in riders see only its title, date, length, captain and number of riders; its meeting point, route and who has joined are shown only to riders the captain or a co-captain accepts. When you ask to join such a ride, its captain and co-captains see your name.",
-          "Routes are private by default. You can share a route with specific riders or make it public, which lets every signed-in rider see and follow it.",
+          "Routes are private by default. You can share a route with specific riders or make it public, which lets every signed-in rider see and follow it. Other riders see it without its first and last 500 m or so, unless it starts or ends at a public place such as a hotel, café or fuel station, so it doesn't show where you set off from or arrive; a route too short to show that way can't be made public. You always see your own route whole.",
           "Your ride history is shown on your profile according to the privacy setting you choose in Settings.",
         ),
       ],
@@ -99,13 +107,13 @@ export const PRIVACY_POLICY: LegalDocument = {
       blocks: [
         list(
           "Most of your data, including your ride history, routes and posts, is kept until you delete it or your account.",
-          "When you delete your account, you are signed out everywhere and your profile and content are hidden at once. Your data is deleted 30 days later.",
-          "Registration details (your email, name, username and sign-in method) are kept sealed for 180 days after your account is deleted, as the Information Technology Rules, 2021 require. They are used only if the law requires it, never to contact you or for anything else.",
-          "Public routes you created are kept after your account is deleted, without your name or any link to you, with the first and last part of each route removed so it can't lead back to where you start or finish. Private routes and routes shared with specific riders are deleted.",
-          "Rides you took part in with other riders stay in their ride history; your own track, stats and participation are deleted.",
-          "Sign-in and security records are kept for [SECURITY LOG RETENTION PERIOD].",
+          ON_ACCOUNT_DELETION,
+          SEALED_REGISTRATION_RECORD,
+          PUBLIC_ROUTES_KEPT,
+          SHARED_RIDES_KEPT,
+          SECURITY_RECORDS_KEPT,
           "Records of your consent are kept for as long as we may need to show that you gave it.",
-          "Content or records we are legally required to preserve, for example under a court order or after a complaint, are kept for 180 days or longer if the law requires.",
+          LEGALLY_PRESERVED,
         ),
       ],
     },
@@ -116,7 +124,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         list(
           "Get a summary of the personal data we hold about you and how we use it.",
           "Correct or update it. You can edit most of your profile in the app.",
-          "Have it erased. Delete your account in the app under Settings → Account → Delete account, or email [CONTACT EMAIL] from the address on your account.",
+          "Have it erased. Delete your account in the app under Settings → Account → Delete account, or at throttlebase.in/delete-account without the app, or email [CONTACT EMAIL] from the address on your account.",
           "Withdraw your consent at any time, as easily as you gave it. Withdrawing doesn't affect processing before it, and features that need that data will stop working.",
           "Nominate someone to exercise these rights for you if you die or become unable to.",
           "Complain to us (see Grievance Officer below), and if you are not satisfied, to the Data Protection Board of India.",

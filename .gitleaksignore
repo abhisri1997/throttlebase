@@ -1,0 +1,10 @@
+# Findings in git history that gitleaks may skip (CI scans the full history).
+# Only ever add a line after the secret is rotated or confirmed harmless; say which, and when.
+
+# Google Maps API key in client/app.json: verified dead on 2026-09-29 (Google answers REQUEST_DENIED,
+# "API project not found"). See docs/launch-readiness/LAUNCH_READINESS.md, "Leaked Maps key".
+c5631092806ed0ab02eb7319721f1253f33ff6bc:client/app.json:gcp-api-key:19
+891fcab11fd3050b056945c5452c8626619fb8f1:client/app.json:gcp-api-key:31
+
+# Not a key: the "-----BEGIN PRIVATE KEY-----" header text that keys.ts uses to recognise PEM input.
+1eb1dc572b9475ccfbfd505ddfdd6523019d1195:server/src/adapters/tokens/keys.ts:private-key:35

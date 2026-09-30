@@ -13,6 +13,7 @@
  */
 
 import { query } from "../config/db.js";
+import { visibleToViewerSql } from "./blocks.js";
 import {
   createNotificationsForRiders,
   getEligibleInAppRecipients,
@@ -53,7 +54,9 @@ export const resolveMentionedRiders = async (
      FROM riders
      WHERE LOWER(username) = ANY($1::text[])
        AND id != $2
-       AND deleted_at IS NULL`,
+       AND deleted_at IS NULL
+       -- Nobody is notified of a mention by a rider they blocked, or who blocked them.
+       AND ${visibleToViewerSql("$2::uuid", "riders.id")}`,
     [handles, actorRiderId],
   );
 

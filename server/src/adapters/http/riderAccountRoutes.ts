@@ -5,10 +5,17 @@ import {
   isUsernameAvailable,
   EXPERIENCE_LEVELS,
 } from "../../core/riders/completeOnboarding.js";
-import { deleteAccount } from "../../core/riders/deleteAccount.js";
+import {
+  deleteAccount,
+  requestDeletionCode,
+} from "../../core/riders/deleteAccount.js";
 import type { AuthContainer } from "../../composition/container.js";
 import { createAuthenticate } from "./authenticate.js";
-import { sendAuthError } from "./errorMapping.js";
+import {
+  requestContextFrom,
+  sendAuthError,
+  SIGNED_IN_CODE_STATUS,
+} from "./errorMapping.js";
 
 const OnboardingSchema = z.object({
   username: z.string().min(1).max(40),
@@ -24,6 +31,10 @@ const OnboardingSchema = z.object({
     })
     .nullable()
     .optional(),
+});
+
+const DeleteAccountSchema = z.object({
+  code: z.string().min(4).max(10).optional(),
 });
 
 export const createRiderAccountRoutes = (container: AuthContainer): Router => {
@@ -83,19 +94,42 @@ export const createRiderAccountRoutes = (container: AuthContainer): Router => {
     }
   });
 
+  /** Emails the rider the code that confirms deleting their account. */
+  router.post("/me/deletion-code", authenticate, async (req, res) => {
+    try {
+      const result = await requestDeletionCode(container, {
+        riderId: req.auth?.riderId as string,
+        ctx: { ...requestContextFrom(req), acceptedTermsVersion: null },
+      });
+      res.status(202).json(result);
+    } catch (error) {
+      sendAuthError(res, error);
+    }
+  });
+
   /**
-   * Account deletion, which the app stores require.
+   * Account deletion, which the app stores require, confirmed by the emailed
+   * code. Without one it answers 403 REAUTH_REQUIRED.
    *
    * Identities and sessions go immediately; the rider row is retained
    * anonymised because rides and safety records reference it. What is kept
    * and why is documented in core/riders/deleteAccount.ts.
    */
   router.delete("/me", authenticate, async (req, res) => {
+    const parsed = DeleteAccountSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
+      return;
+    }
+
     try {
-      await deleteAccount(container, req.auth?.riderId as string);
+      await deleteAccount(container, {
+        riderId: req.auth?.riderId as string,
+        code: parsed.data.code ?? null,
+      });
       res.status(204).end();
     } catch (error) {
-      sendAuthError(res, error);
+      sendAuthError(res, error, SIGNED_IN_CODE_STATUS);
     }
   });
 

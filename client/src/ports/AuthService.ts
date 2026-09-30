@@ -46,7 +46,17 @@ export interface AuthService {
   /** Availability check behind the onboarding form. */
   checkUsername(candidate: string): Promise<{ available: boolean; reason: string }>;
   completeOnboarding(details: OnboardingDetails): Promise<void>;
-  deleteAccount(): Promise<void>;
+  /** Emails the rider the code that confirms deleting their account. */
+  requestDeletionCode(): Promise<void>;
+  /** Deletes the account with that code, then signs out on this device. */
+  deleteAccount(code: string): Promise<void>;
+  /**
+   * Signed out, as on throttlebase.in/delete-account: emails a deletion code
+   * to the address if it has an account. The answer never says whether it does.
+   */
+  requestDeletionCodeFor(email: string): Promise<void>;
+  /** Deletes the account at the address with that code; false if there was none. */
+  deleteAccountByEmail(email: string, code: string): Promise<{ deleted: boolean }>;
   signOut(): Promise<void>;
   signOutEverywhere(): Promise<void>;
 

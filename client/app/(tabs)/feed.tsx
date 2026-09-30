@@ -17,6 +17,7 @@ import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { Plus } from "lucide-react-native";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { NotificationBell } from "../../src/components/NotificationBell";
+import { useReport } from "../../src/features/moderation/hooks/useReport";
 
 const fetchFeed = async () => {
   const { data } = await apiClient.get("/api/community/posts");
@@ -28,6 +29,7 @@ export default function FeedScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { rider } = useCurrentRider();
+  const { openReport, reportSheet } = useReport();
 
   const {
     data: posts,
@@ -98,6 +100,7 @@ export default function FeedScreen() {
               } as any)
             }
             onDelete={() => deletePostMutation.mutate(item.id)}
+            onReport={() => openReport({ type: "post", id: item.id, ownerName: item.author_name })}
           />
         )}
         ListEmptyComponent={
@@ -163,6 +166,8 @@ export default function FeedScreen() {
       >
         <Plus color='white' size={30} />
       </TouchableOpacity>
+
+      {reportSheet}
     </SafeAreaView>
   );
 }

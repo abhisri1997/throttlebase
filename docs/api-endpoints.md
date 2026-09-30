@@ -69,7 +69,7 @@ Account routes (`server/src/adapters/http/riderAccountRoutes.ts`) are mounted be
 ### Save a ride as a route
 
 - `GET /api/rides/:id/route/preview` — what saving would produce: `{ saved_route_id, start_name, end_name, distance_km, duration_s, stops: [{ ride_stop_id, name, distance_from_start_km }] }`
-- `POST /api/rides/:id/route` — `{ title, visibility, highlights?, stop_notes?: [{ ride_stop_id, note }] }`. `201` created, `200` already saved, `409` ride not completed, `422` too little recorded. Ends are named from the route's own first and last points
+- `POST /api/rides/:id/route` — `{ title, visibility, highlights?, stop_notes?: [{ ride_stop_id, note }] }`. `201` created, `200` already saved, `409` ride not completed, `422` too little recorded, or (saved public) `code: ROUTE_TOO_SHORT` when under 5 km would be left to show others once its personal ends are hidden. Ends are named from the route's own first and last points
 
 ### Live session and per-rider progress
 
@@ -88,12 +88,14 @@ Account routes (`server/src/adapters/http/riderAccountRoutes.ts`) are mounted be
 
 ## Routes
 
-- `GET /api/routes` — public routes plus your private ones. Each carries `start_name`, `end_name`, `start_lat/lng`, `end_lat/lng`, `via` (stop names in order), `highlights`, `ridden_duration_s`
+- `GET /api/routes` — public routes plus your private ones. Another rider's route comes as others see it: without its first and last ~500 m unless an end is at a public place, with stops in those ends left out; you always get your own whole. `creator_id` and `creator_name` are null on a community route: a deleted rider's public route, kept anonymised. Each carries `start_name`, `end_name`, `start_lat/lng`, `end_lat/lng`, `via` (stop names in order), `highlights`, `ridden_duration_s`
 - `GET /api/routes/search?from_lat&from_lng&from_name&to_lat&to_lng&to_name&min_km&max_km&highlights=a,b` — all optional. A place matches a route end named after it, a stop, or a point within the route's radius (15% of its length, 5–25 km). Same-direction matches first, then reversed. Each result has `match: { direction, start_gap_km, end_gap_km }`. Max 50
 - `POST /api/routes`
-- `GET /api/routes/:id` — route plus `stops` (position, name, lat/lng, `note`, `distance_from_start_km`), visibility-aware
+- `GET /api/routes/:id` — route plus `stops` (position, name, lat/lng, `note`, `distance_from_start_km`), visibility-aware. A share grants access only while the route is `specific_riders`
+- `PATCH /api/routes/:id` — `{ visibility: private | specific_riders | public }`, owner only (404 otherwise). Shown to others, its ends are looked at first; `422` with `code: ROUTE_TOO_SHORT` when under 5 km would be left to show. Made private, the route leaves search, the Routes list and other riders' bookmarks at once
+- `DELETE /api/routes/:id` — owner only (404 otherwise); for good. Stops, shares, bookmarks and road feedback go with it; rides planned on it keep their `road_via` and lose only `route_id`
 - `POST /api/routes/:id/bookmark`, `DELETE /api/routes/:id/bookmark`
-- `POST /api/routes/:id/share` — share with another rider
+- `POST /api/routes/:id/share` — `{ rider_id }`: the owner shares their route with another rider. 404 unless the route is yours and the rider exists
 - `POST /api/routes/traces` — legacy batch GPS upload. No client uses it
 - `GET /api/routes/traces/:rideId` — reads that legacy table
 
@@ -118,6 +120,15 @@ The only path to Google. The client never calls `googleapis.com`. Rate-limited t
 - `POST /api/community/riders/:id/follow`, `DELETE /api/community/riders/:id/follow`
 - `GET /api/community/riders/:id/followers`, `GET /api/community/riders/:id/following`
 - `GET /api/community/rides/:rideId/reviews`, `POST /api/community/rides/:rideId/reviews` — 1–5 stars
+- Creating or editing a post or comment runs the word filter (`server/src/core/moderation/`): a blocked term is refused with `422 { code: "CONTENT_NOT_ALLOWED" }`
+- `POST /api/reports` — report a `post`, `comment`, `rider`, `ride`, `route` or `group` with a `reason`, optional `note`, optional `also_block`. `201`, or `200` with `already_reported` when the reporter's earlier report is still open. `400` for the rider's own content, `404` when it doesn't exist. 20 an hour per rider. Acknowledged on receipt: the response carries `report.reference` (`R-XXXXXXXX`) and `resolve_due_at`, and the rider gets an in-app notice
+- `GET /api/reports/mine` — the rider's own reports, newest first: reference, what and why, `status`, `outcome` text, `resolve_due_at`, `resolved_at`, `overdue`
+
+### Consents (launch readiness E6)
+
+- `GET /api/consents` — `notices` (the current notice per purpose: `purpose`, `version`, `title`, `body`, shown to the rider exactly as sent), `consents` (per purpose: `status` `granted` / `withdrawn` / `not_asked` / `reconsent_required`, `answeredVersion`, `updatedAt`), and `declarations.age_18_plus` (`true`, `false` or `null`)
+- `PUT /api/consents/:purpose` — `{ granted, notice_version, source: onboarding | contextual | settings, app_version?, platform? }`. Purposes: `ride_recording`, `live_location_sharing`, `motion_activity`, `public_profile`, `marketing_notifications`. `409 stale_notice` unless `notice_version` is the current one; `404` for an unknown purpose. Repeating the answer on record returns `changed: false` and records nothing. 60 changes an hour per rider
+- `POST /api/consents/declarations` — `{ kind: age_18_plus, answer, source: onboarding | settings, app_version? }`. `201`. After a `false`, the app cannot send `true` (`403 age_declared_under_18`); support can
 
 ### Groups (flagged: `FEATURE_GROUPS`)
 
@@ -133,7 +144,7 @@ The only path to Google. The client never calls `googleapis.com`. Rate-limited t
 - `GET /api/notifications/preferences`, `PUT /api/notifications/preferences`
 - `GET /api/notifications/settings`, `PATCH /api/notifications/settings`
 - `GET /api/notifications/privacy`, `PATCH /api/notifications/privacy`
-- `GET /api/notifications/blocked`, `POST /api/notifications/blocked/:id`, `DELETE /api/notifications/blocked/:id`
+- `GET /api/notifications/blocked` (`blocked_id`, `blocked_name`, `blocked_at`), `POST /api/notifications/blocked/:id` (also ends follows both ways), `DELETE /api/notifications/blocked/:id`. A block works both ways: see `server/src/services/blocks.ts` for what it hides
 
 ## Rewards (flagged: `FEATURE_RANK`)
 
@@ -162,6 +173,11 @@ The only path to Google. The client never calls `googleapis.com`. Rate-limited t
 ## Admin
 
 "Admin" means the access token's `roles` include `admin`. Roles come from `rider_roles` and are refreshed on every token refresh. Enforced by `requireAdmin` (`server/src/middleware/admin.middleware.ts`).
+
+- `GET /api/admin/moderation/queue` — open reports, one row per reported thing (preview, maker, count, reasons, recent notes, earliest `resolve_due_at`, `overdue`), soonest due first
+- `GET /api/admin/moderation/suspended` — riders under suspension
+- `POST /api/admin/moderation/actions` — `{ target_type, target_id, action: remove | dismiss | suspend | lift_suspension, reason }`. One transaction: the change, closing the open reports, an in-app notice to the maker (not for dismissals), and a `security_events` entry. Only posts, comments and routes can be removed
+- Sign-in by a suspended rider fails with `403 ACCOUNT_SUSPENDED`
 
 ## Feature flags
 

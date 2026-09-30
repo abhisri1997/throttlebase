@@ -214,6 +214,16 @@ export const enqueueAccountPurgeJob = async (): Promise<boolean> => {
   );
 };
 
+/** Purges sealed registration records past their 180 days (registration-records-purge.processor). */
+export const enqueueRegistrationRecordsPurgeJob = async (): Promise<boolean> => {
+  return enqueueRecurringJobIfDue(
+    JOB_TYPES.REGISTRATION_RECORDS_PURGE,
+    { enqueuedAt: new Date().toISOString() },
+    86400, // once a day
+    3,
+  );
+};
+
 export const enqueueLivePresenceSweepJob = async (): Promise<boolean> => {
   return enqueueRecurringJobIfDue(
     JOB_TYPES.LIVE_PRESENCE_SWEEP,

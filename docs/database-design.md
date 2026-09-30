@@ -46,6 +46,7 @@ When a migration changes the schema, update the matching table here.
   - `throttlebase_migrator` — for migrations and jobs.
 - **Hosted database today:** the API connects to the Supabase project as its `postgres` role, which has `BYPASSRLS`. Both custom roles exist but cannot log in. Verified against the live project on 2026-09-28. See [Row-level security](#row-level-security).
 - All 37 migration files (036 is the latest; there are two `004_*` files) are applied to the Supabase project.
+- **Numbering.** Each new migration takes the next free number. The runner tracks full filenames, so the three numbers already shared (`004`, `042`, `043`) run fine and stay as they are: renaming one would apply it again. CI fails a PR that reuses a number, numbers a migration below the highest on the base branch, or edits a merged migration (`server/src/adapters/postgres/migrationNames.ts`, `server/scripts/check-migration-changes.mjs`).
 
 ## Row-level security
 
@@ -192,6 +193,7 @@ Written on each successful sign-in: `rider_id`, `device_fingerprint`, `ip_addres
 | `total_rides`, `total_distance_km`, `total_ride_time_sec` | int / numeric / bigint | Denormalized; recomputed from `ride_history_stats` |
 | `created_at`, `updated_at` | timestamptz | `updated_at` via trigger |
 | `deleted_at` | timestamptz | Soft delete; hard-deleted after 30 days by the cleanup job |
+| `suspended_at`, `suspended_by`, `suspension_reason` | timestamptz / uuid / text | Set by a moderator (migration 043). A suspended rider can't sign in and their content is hidden until it's lifted |
 
 `needsOnboarding` in the auth response means `username IS NULL`.
 
@@ -382,7 +384,9 @@ Bookmarks: unique `(route_id, rider_id)`. Shares: `route_id`, `shared_with_rider
 | `follows` | PK `(follower_id, following_id)` | Indexed both ways |
 | `groups` | `name`, `description`, `visibility` (`public`/`private`), `created_by` | Behind `FEATURE_GROUPS` |
 | `group_members` | PK `(group_id, rider_id)`, `role` (`admin`/`member`) | |
-| `blocked_riders` | PK `(blocker_id, blocked_id)` | |
+| `blocked_riders` | PK `(blocker_id, blocked_id)` | Works both ways; what it hides is in `server/src/services/blocks.ts` |
+| `posts`, `comments`, `routes`: `removed_at`, `removed_by`, `removal_reason` | | Set by a moderator (migration 043). Hidden from everyone; purged 180 days after `removed_at` |
+| `reports` | `acknowledged_at`, `resolve_due_at` (migration 044, the grievance deadlines), `reporter_id`, `target_type` (`post`/`comment`/`rider`/`ride`/`route`/`group`), `target_id`, `target_rider_id`, `reason`, `note` (≤1000), `status` (`open`/`actioned`/`dismissed`), `resolved_at`, `resolved_by` | Migration 042. One open report per reporter per target (partial unique index). `target_rider_id` is who made the reported thing, resolved at report time |
 
 ---
 
@@ -424,6 +428,22 @@ Behind `FEATURE_SUPPORT`.
 ---
 
 ## Platform tables
+
+### `security_events`
+
+Append-only audit log (migration 043). `actor_id` (moderator or admin), `subject_id` (the rider it was about), `event` (`moderation.remove`, `moderation.dismiss`, `moderation.suspend`, `moderation.lift_suspension`, `consent.withdrawn` with the purpose as `reason`; auth events to follow), `target_type`, `target_id`, `reason`, `metadata` jsonb with no personal data. Indexed on `occurred_at` and `(subject_id, occurred_at)`.
+
+### Consent ledger (migration 045)
+
+Purpose-based consent and the 18+ declaration (launch readiness E6, `docs/launch-readiness/plans/consent.md`). `rider_consents` (023) stays the record of Terms and Privacy acceptance.
+
+| Table | Notes |
+| --- | --- |
+| `consent_purposes` | `code` (`ride_recording`, `live_location_sharing`, `motion_activity`, `public_profile`, `marketing_notifications`), `description`, `required_for` |
+| `consent_notices` | Every notice version shown: `purpose_code`, `version`, `locale`, `body` and `body_sha256` of the exact text. Published by the server on first use from `server/src/core/consent/notices.ts`; the same version with different text is refused |
+| `consent_events` | Append-only: `rider_id`, `purpose_code`, `notice_id`, `action` (`granted`/`withdrawn`), `source`, `app_version`, `platform`, `occurred_at`. A trigger refuses UPDATE, and DELETE unless the transaction sets `throttlebase.purging_consent_events = 'on'` (the retention purge). No cascade from `riders` |
+| `consent_state` | Latest answer per `(rider_id, purpose_code)`: `granted`, `notice_id`, `updated_at`. Written in the same transaction as the event. A grant counts only against the current notice version |
+| `rider_declarations` | `rider_id`, `kind` (`age_18_plus`), `answer`, `source` (`onboarding`/`settings`/`support`), `app_version`, `declared_at`. Every answer kept; the latest (highest `id`) is the one in force |
 
 ### `jobs`
 

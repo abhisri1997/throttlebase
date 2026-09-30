@@ -8,6 +8,7 @@ import {
 import * as CommunityService from "../services/community.service.js";
 import { dispatchMentionNotifications } from "../services/mention.service.js";
 import { query } from "../config/db.js";
+import { ContentNotAllowedError } from "../services/contentFilter.js";
 
 interface RiderPayload {
   riderId: string;
@@ -26,6 +27,13 @@ const getRiderDisplayName = async (riderId: string): Promise<string> => {
     [riderId],
   );
   return (result.rows[0]?.display_name as string | undefined) ?? "A rider";
+};
+
+/** A post or comment the word filter refused: 422, with a message the app shows. */
+const sendIfContentRefused = (res: Response, error: unknown): boolean => {
+  if (!(error instanceof ContentNotAllowedError)) return false;
+  res.status(422).json({ error: error.message, code: error.code });
+  return true;
 };
 
 // ── Posts ────────────────────────────────────────────────────────────────────
@@ -55,6 +63,7 @@ export const createPost = async (
         console.error("[mention] post mention dispatch failed:", err),
       );
   } catch (error: any) {
+    if (sendIfContentRefused(res, error)) return;
     if (error.name === "ZodError") {
       res.status(400).json({ errors: error.issues });
       return;
@@ -68,7 +77,7 @@ export const getFeed = async (req: Request, res: Response): Promise<void> => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 100);
     const offset = Number(req.query.offset) || 0;
-    const posts = await CommunityService.getFeed(limit, offset);
+    const posts = await CommunityService.getFeed(limit, offset, rid(req));
     res.json(posts);
   } catch (error: any) {
     console.error("Error fetching feed:", error);
@@ -78,7 +87,7 @@ export const getFeed = async (req: Request, res: Response): Promise<void> => {
 
 export const getPost = async (req: Request, res: Response): Promise<void> => {
   try {
-    const post = await CommunityService.getPostById(req.params.id as string);
+    const post = await CommunityService.getPostById(req.params.id as string, rid(req));
     if (!post) {
       res.status(404).json({ error: "Post not found" });
       return;
@@ -112,6 +121,7 @@ export const updatePost = async (
     }
     res.json(post);
   } catch (error: any) {
+    if (sendIfContentRefused(res, error)) return;
     console.error("Error updating post:", error);
     res.status(500).json({ error: "Internal server error" });
   }
@@ -173,6 +183,7 @@ export const addComment = async (
         ),
       );
   } catch (error: any) {
+    if (sendIfContentRefused(res, error)) return;
     if (error.name === "ZodError") {
       res.status(400).json({ errors: error.issues });
       return;
@@ -193,6 +204,7 @@ export const getComments = async (
   try {
     const comments = await CommunityService.getComments(
       req.params.id as string,
+      rid(req),
     );
     res.json(comments);
   } catch (error: any) {
@@ -206,7 +218,7 @@ export const getComment = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const comment = await CommunityService.getCommentById(req.params.id as string);
+    const comment = await CommunityService.getCommentById(req.params.id as string, rid(req));
     if (!comment) {
       res.status(404).json({ error: "Comment not found" });
       return;
@@ -241,6 +253,7 @@ export const updateComment = async (
 
     res.json(comment);
   } catch (error: any) {
+    if (sendIfContentRefused(res, error)) return;
     console.error("Error updating comment:", error);
     res.status(500).json({ error: "Internal server error" });
   }
@@ -521,7 +534,7 @@ export const getReviews = async (
 ): Promise<void> => {
   try {
     res.json(
-      await CommunityService.getRideReviews(req.params.rideId as string),
+      await CommunityService.getRideReviews(req.params.rideId as string, rid(req)),
     );
   } catch (error: any) {
     console.error("Error fetching reviews:", error);

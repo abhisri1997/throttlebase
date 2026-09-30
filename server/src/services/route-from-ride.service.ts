@@ -16,8 +16,6 @@ import {
   type StopChoice,
 } from "../core/routes/routeStops.js";
 import type { SaveRouteFromRideInput } from "../schemas/route.schemas.js";
-import { reverseGeocodeArea } from "./maps.service.js";
-import { resolveMapsProvider } from "./maps/resolveProvider.js";
 import { LiveSessionError } from "./live-session.service.js";
 import { assertConfirmedParticipant, loadRiderSamples } from "./ride-track.service.js";
 import { ROUTE_COLUMNS, type Route } from "./route.service.js";
@@ -35,15 +33,19 @@ export interface SaveRouteFromRideDeps {
    * HTTP layer ever calls Google.
    */
   nameArea?: (point: LatLngPoint) => Promise<string | null>;
+  /**
+   * What is at a public route's ends, so others see it without the personal
+   * ones (route-public-view.ts). The API passes GOOGLE_LOOKUPS; left out,
+   * both ends are trimmed for everyone else.
+   */
+  publicPlaces?: RoutePlaceLookups;
 }
 
 const noAreaName = async (): Promise<string | null> => null;
 
-export const nameAreaWithGoogle = async (point: LatLngPoint): Promise<string | null> => {
-  const provider = resolveMapsProvider();
-  if (!provider) return null;
-  return (await reverseGeocodeArea(point, { provider })).areaName;
-};
+export { nameAreaWithGoogle } from "./route-place-lookups.js";
+import { NO_LOOKUPS, type RoutePlaceLookups } from "./route-place-lookups.js";
+import { findPublicEnds } from "./route-public-view.js";
 
 /** A name is a nicety: an outage or spent quota must never stop a route saving. */
 const nameOrNull = async (
@@ -397,6 +399,16 @@ export const saveRouteFromRide = async (
     ? new Map<string, KeptStop>(input.stops.map((stop) => [stop.key, { note: stop.note ?? null, name: stop.name ?? null }]))
     : plannedStopsRiddenPast(choices, (choice) => notesByRideStopId.get(choice.rideStopId ?? ""));
   const stops: RouteStopDraft[] = keptRouteStops(choices, kept);
+  // Saved public, others see it without its personal ends; too short for
+  // that, it is refused (RouteTooShortError) before anything is written.
+  const publicEnds =
+    input.visibility === "public"
+      ? await findPublicEnds(
+          geometry.coordinates,
+          [...stops].sort((a, b) => a.position - b.position),
+          deps.publicPlaces ?? NO_LOOKUPS,
+        )
+      : null;
 
   let createdRouteId: string | undefined;
   const client = await pool.connect();
@@ -405,12 +417,12 @@ export const saveRouteFromRide = async (
     const inserted = await client.query(
       `INSERT INTO routes (
          creator_id, ride_id, title, geojson, distance_km, visibility,
-         start_name, end_name, start_point, end_point, highlights, ridden_duration_s
+         start_name, end_name, start_point, end_point, highlights, ridden_duration_s, public_ends
        )
        SELECT $1, $2, $3, $4, $5, $6, $7, $8,
               ST_SetSRID(ST_MakePoint($9, $10), 4326)::geography,
               ST_SetSRID(ST_MakePoint($11, $12), 4326)::geography,
-              $13, $14
+              $13, $14, $15::jsonb
        WHERE NOT EXISTS (SELECT 1 FROM routes WHERE creator_id = $1 AND ride_id = $2)
        RETURNING id`,
       [
@@ -428,6 +440,7 @@ export const saveRouteFromRide = async (
         end.lat,
         input.highlights ?? [],
         geometry.durationS,
+        publicEnds ? JSON.stringify(publicEnds) : null,
       ],
     );
 

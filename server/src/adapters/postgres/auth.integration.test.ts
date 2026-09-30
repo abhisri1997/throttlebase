@@ -7,6 +7,12 @@ import { issueSession } from "../../core/auth/issueSession.js";
 import { logout, logoutAll } from "../../core/auth/logout.js";
 import { refreshSession } from "../../core/auth/refreshSession.js";
 import { resolveOrCreateRider } from "../../core/auth/resolveOrCreateRider.js";
+import {
+  deleteAccount,
+  deleteAccountByEmail,
+  requestDeletionCode,
+  requestDeletionCodeByEmail,
+} from "../../core/riders/deleteAccount.js";
 import { startEmailLogin } from "../../core/auth/startEmailLogin.js";
 import { verifyEmailLogin } from "../../core/auth/verifyEmailLogin.js";
 import type { AuthPolicy, RequestContext } from "../../core/auth/types.js";
@@ -15,6 +21,11 @@ import { nodeHasher } from "../system/nodeHasher.js";
 import { nodeRandomSource } from "../system/nodeRandomSource.js";
 import { systemClock } from "../system/systemClock.js";
 import { runMigrations } from "./migrate.js";
+import { createRegistrationSealer } from "../crypto/registrationSealer.js";
+import { generateSealingKeyPair } from "../crypto/sealedBox.js";
+
+/** Seals deleted accounts' registration records with a throwaway key. */
+const testSealer = createRegistrationSealer(generateSealingKeyPair().publicKeyPem);
 import { createOtpStore } from "./otpStore.js";
 import { createRateLimiter } from "./rateLimiter.js";
 import { createRiderRepository } from "./riderRepository.js";
@@ -98,7 +109,7 @@ test(
     const pool = new pg.Pool({ connectionString: url.toString() });
 
     const deps = {
-      riders: createRiderRepository(pool),
+      riders: createRiderRepository(pool, testSealer),
       sessions: createSessionRepository(pool),
       otps: createOtpStore(pool),
       rateLimiter: createRateLimiter(pool),
@@ -108,6 +119,27 @@ test(
       clock: systemClock,
       tokenIssuer: stubTokenIssuer,
       policy,
+    };
+
+    /**
+     * Reads the latest code's digest back as admin and searches the six-digit
+     * space for it: the code itself is never stored, which is the point.
+     */
+    const latestCodeFor = async (email: string): Promise<string> => {
+      const stored = await admin.query<{ code_hash: string }>(
+        "SELECT code_hash FROM email_otps WHERE email = $1 ORDER BY created_at DESC LIMIT 1",
+        [email],
+      );
+      const hash = stored.rows[0]?.code_hash;
+      assert.ok(hash, "a code must have been issued");
+
+      for (let i = 0; i < 1_000_000; i += 1) {
+        const candidate = String(i).padStart(6, "0");
+        if (nodeHasher.sha256Hex(candidate) === hash) {
+          return candidate;
+        }
+      }
+      assert.fail("the stored digest must be a digest of a 6-digit code");
     };
 
     t.after(async () => {
@@ -319,25 +351,7 @@ test(
       const email = `otp-${Date.now()}@example.test`;
 
       await startEmailLogin(deps, { email, ctx });
-
-      // Read the digest back as admin and search the six-digit space for it —
-      // the code itself is never stored, which is the point.
-      const stored = await admin.query<{ code_hash: string }>(
-        "SELECT code_hash FROM email_otps WHERE email = $1 ORDER BY created_at DESC LIMIT 1",
-        [email],
-      );
-      const hash = stored.rows[0]?.code_hash;
-      assert.ok(hash, "a code must have been issued");
-
-      let code: string | null = null;
-      for (let i = 0; i < 1_000_000; i += 1) {
-        const candidate = String(i).padStart(6, "0");
-        if (nodeHasher.sha256Hex(candidate) === hash) {
-          code = candidate;
-          break;
-        }
-      }
-      assert.ok(code, "the stored digest must be a digest of a 6-digit code");
+      const code = await latestCodeFor(email);
 
       const result = await verifyEmailLogin(deps, { email, code, ctx });
 
@@ -379,6 +393,73 @@ test(
         (error: unknown) =>
           error instanceof AuthError && error.code === "RATE_LIMITED",
       );
+    });
+
+    await t.test("deleting an account needs the emailed code, end to end", async () => {
+      // Arrange: a signed-up rider with a live session
+      const email = `delete-${Date.now()}@example.test`;
+      const rider = await resolveOrCreateRider(
+        deps,
+        identity({ email, emailVerified: true }),
+        ctx,
+      );
+      await issueSession(deps, { riderId: rider.riderId, roles: [], ctx });
+
+      // Act + Assert: no code, nothing happens
+      await assert.rejects(
+        () => deleteAccount(deps, { riderId: rider.riderId, code: null }),
+        (error: unknown) =>
+          error instanceof AuthError && error.code === "REAUTH_REQUIRED",
+      );
+      const untouched = await admin.query(
+        "SELECT deleted_at FROM riders WHERE id = $1",
+        [rider.riderId],
+      );
+      assert.equal(untouched.rows[0]?.deleted_at, null);
+
+      // Act: the code goes to the address on file, and redeeming it deletes
+      await requestDeletionCode(deps, { riderId: rider.riderId, ctx });
+      const code = await latestCodeFor(email);
+      await deleteAccount(deps, { riderId: rider.riderId, code });
+
+      // Assert
+      const deleted = await admin.query(
+        "SELECT deleted_at, email FROM riders WHERE id = $1",
+        [rider.riderId],
+      );
+      assert.ok(deleted.rows[0]?.deleted_at, "the rider is soft-deleted");
+      assert.equal(deleted.rows[0]?.email, null);
+      const live = await admin.query(
+        "SELECT 1 FROM sessions WHERE rider_id = $1 AND revoked_at IS NULL",
+        [rider.riderId],
+      );
+      assert.equal(live.rowCount, 0, "every session is revoked");
+    });
+
+    await t.test("the web deletion flow works by address alone, with no session", async () => {
+      // Arrange
+      const email = `web-delete-${Date.now()}@example.test`;
+      const nobody = `web-nobody-${Date.now()}@example.test`;
+      const rider = await resolveOrCreateRider(
+        deps,
+        identity({ email, emailVerified: true }),
+        ctx,
+      );
+
+      // Act: an address with no account gets no code at all
+      await requestDeletionCodeByEmail(deps, { email: nobody, ctx });
+      const noCode = await admin.query("SELECT 1 FROM email_otps WHERE email = $1", [nobody]);
+
+      // Act: the rider's address gets one, and it deletes the account
+      await requestDeletionCodeByEmail(deps, { email: email.toUpperCase(), ctx });
+      const code = await latestCodeFor(email);
+      const result = await deleteAccountByEmail(deps, { email, code, ctx });
+
+      // Assert
+      assert.equal(noCode.rowCount, 0);
+      assert.deepEqual(result, { deleted: true });
+      const row = await admin.query("SELECT deleted_at FROM riders WHERE id = $1", [rider.riderId]);
+      assert.ok(row.rows[0]?.deleted_at, "the rider is soft-deleted");
     });
   },
 );
