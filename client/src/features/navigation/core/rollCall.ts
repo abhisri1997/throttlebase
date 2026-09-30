@@ -82,3 +82,17 @@ export const summarizeRollCall = (entries: readonly RollCallEntry[]): RollCallSu
     hasAbsentees: enRoute.length > 0 || noLocation.length > 0,
   };
 };
+
+/**
+ * The rider's own phone knows where they are before the server echoes their
+ * position back to the room, so their row never reads "no location" while
+ * the phone has a fix.
+ */
+export const withOwnPosition = (
+  locations: RollCallInput["locations"],
+  riderId: string | undefined,
+  fix: LatLng | null,
+): RollCallInput["locations"] => {
+  if (!riderId || !fix || locations[riderId]) return locations;
+  return { ...locations, [riderId]: { lat: fix.latitude, lon: fix.longitude } };
+};

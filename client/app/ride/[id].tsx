@@ -56,8 +56,16 @@ import { buildTripPlan, rideRoadVia } from "../../src/features/navigation/core/t
 import {
   buildRollCall,
   summarizeRollCall,
+  withOwnPosition,
   type RollCallRider,
 } from "../../src/features/navigation/core/rollCall";
+import {
+  canLeaveRide,
+  isSoloRide,
+  participationHeadline,
+  rideRoleOf,
+  soloRideNote,
+} from "../../src/features/rides/core/rideParty";
 import { usePlannedRoute } from "../../src/features/navigation/hooks/usePlannedRoute";
 import { useRideTrack } from "../../src/features/navigation/hooks/useRideTrack";
 import {
@@ -616,6 +624,8 @@ export default function RideDetailScreen() {
   const isParticipantFromRide = Boolean(
     ride?.participants?.some((p: any) => p.rider_id === currentRider?.id),
   );
+  // Only the captain is on it: nobody to wait for at the start.
+  const soloRide = ride ? isSoloRide(ride.participants, ride.captain_id) : false;
 
   const {
     data: liveSession,
@@ -700,6 +710,10 @@ export default function RideDetailScreen() {
     [ride?.participants],
   );
   const [sampledLocation, setSampledLocation] = useState<LatLng | null>(null);
+  // Whether this phone may read its location. Checked on every return to the
+  // app; roll call asks for it (below), and granting starts sharing at once.
+  const [canUseLocation, setCanUseLocation] = useState(false);
+  const askedForLocationRef = useRef(false);
   const hasAutoFitLiveMarkersRef = useRef(false);
 
   const joinMutation = useMutation({
@@ -825,7 +839,12 @@ export default function RideDetailScreen() {
       }
       await refetchLiveSession();
       joinRoom(id!);
-      // Deliberately stays on this screen: starting opens the roll call so the
+      // A solo ride has nobody to wait for: straight into the ride.
+      if (soloRide) {
+        liveRollOutMutation.mutate();
+        return;
+      }
+      // Otherwise it stays on this screen: starting opens the roll call so the
       // captain can see who is still on their way before setting off.
     },
     onError: (err: any) => {
@@ -1022,7 +1041,44 @@ useEffect(() => {
         clearInterval(timer);
       }
     };
-  }, [appState, inRoom, upsertLocation]);
+  }, [appState, inRoom, upsertLocation, canUseLocation]);
+
+  useEffect(() => {
+    if (appState !== "active") return;
+    let cancelled = false;
+    void hasGrantedForegroundLocation().then((granted) => {
+      if (!cancelled) setCanUseLocation(granted);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [appState]);
+
+  const askForLocation = useCallback(async (explainIfRefused: boolean) => {
+    if (Platform.OS === "web") return;
+    try {
+      const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
+      setCanUseLocation(status === "granted");
+      if (status !== "granted" && explainIfRefused) {
+        Alert.alert(
+          "Location is off",
+          "Allow location for ThrottleBase in your phone's Settings so the group can see you at the start.",
+        );
+      }
+    } catch {
+      // The roll call shows the rider as having no location; nothing else depends on it.
+    }
+  }, []);
+
+  // Roll call is when the group needs to see who has arrived, so location is
+  // asked for here, once per visit, not only once the ride is under way.
+  // Already granted, this returns at once without a prompt.
+  useEffect(() => {
+    if (!inRoom || liveStatus !== "starting" || soloRide || canUseLocation || appState !== "active") return;
+    if (askedForLocationRef.current) return;
+    askedForLocationRef.current = true;
+    void askForLocation(false);
+  }, [inRoom, liveStatus, soloRide, canUseLocation, appState, askForLocation]);
 
   useEffect(() => {
     // One fix per visit is enough for the dashed approach line to the start.
@@ -1073,7 +1129,7 @@ useEffect(() => {
     return () => {
       cancelled = true;
     };
-  }, [appState, isFocused]);
+  }, [appState, isFocused, canUseLocation]);
 
   // Alert when session is ended remotely via socket fanout
   const prevSessionEndedRef = useRef<string | null>(null);
@@ -1156,8 +1212,14 @@ useEffect(() => {
 
     if (riders.length === 0) return null;
 
-    return summarizeRollCall(buildRollCall({ riders, locations, start: rideStartPoint }));
-  }, [locations, ride?.participants, rideStartPoint]);
+    return summarizeRollCall(
+      buildRollCall({
+        riders,
+        locations: withOwnPosition(locations, currentRider?.id, sampledLocation),
+        start: rideStartPoint,
+      }),
+    );
+  }, [locations, ride?.participants, rideStartPoint, currentRider?.id, sampledLocation]);
   const isRideUpcoming = ride?.status === "draft" || ride?.status === "scheduled";
 
   // A finished ride shows the road this rider actually rode, over the plan.
@@ -1369,6 +1431,7 @@ useEffect(() => {
   const endCoords = ride.end_point_geojson?.coordinates;
   const isParticipant = isParticipantFromRide;
   const isCaptain = ride.captain_id === currentRider?.id;
+  const myRideRole = rideRoleOf(ride.participants, ride.captain_id, currentRider?.id);
   const isCoCaptain = ride.participants?.some(
     (p: any) => p.rider_id === currentRider?.id && p.role === "co_captain",
   );
@@ -1488,9 +1551,11 @@ useEffect(() => {
         liveStatus === "paused");
 
     Alert.alert(
-      `${nextAction.label}?`,
+      shouldStartLiveWithRide && soloRide ? "Start your ride?" : `${nextAction.label}?`,
       shouldStartLiveWithRide
-        ? "This will start the ride and begin the live session."
+        ? soloRide
+          ? "This starts your ride and opens navigation."
+          : "This will start the ride and begin the live session."
         : shouldEndLiveWithRide
           ? "This will complete the ride and end the live session."
           : `Change ride status to ${nextAction.status}?`,
@@ -1700,7 +1765,8 @@ useEffect(() => {
           )}
 
           {/* Captain: Status Advance Button */}
-          {isLeader && nextAction && (
+          {/* During roll call the roll call's own button sets off. */}
+          {isLeader && nextAction && liveStatus !== "starting" && (
             <TouchableOpacity
               onPress={handleStatusChange}
               disabled={statusMutation.isPending || liveStartMutation.isPending}
@@ -1776,7 +1842,25 @@ useEffect(() => {
               />
             )}
 
-            {liveStatus === "starting" && isLeader && rollCall && (
+            {/* A solo ride opened before this change can still be in roll call. */}
+            {liveStatus === "starting" && isCaptain && soloRide && (
+              <TouchableOpacity
+                accessibilityRole='button'
+                onPress={() => liveRollOutMutation.mutate()}
+                disabled={liveRollOutMutation.isPending}
+                className='p-3 rounded-xl mb-3'
+                style={{
+                  backgroundColor: colors.primary,
+                  opacity: liveRollOutMutation.isPending ? 0.7 : 1,
+                }}
+              >
+                <Text className='font-bold text-center' style={{ color: "#ffffff" }}>
+                  {liveRollOutMutation.isPending ? "Starting…" : "Start riding"}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {liveStatus === "starting" && isLeader && !soloRide && rollCall && (
               <View
                 className='p-4 rounded-2xl mb-3'
                 style={{ backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border }}
@@ -1794,7 +1878,7 @@ useEffect(() => {
                 {rollCall.enRoute.map((entry) => (
                   <View key={entry.riderId} className='flex-row justify-between items-center mb-2'>
                     <Text style={{ color: colors.text }} numberOfLines={1}>
-                      {entry.displayName}
+                      {entry.riderId === currentRider?.id ? "You" : entry.displayName}
                     </Text>
                     <Text className='text-xs' style={{ color: colors.primary }}>
                       {formatDistance(entry.distanceMeters ?? 0)} away
@@ -1802,16 +1886,28 @@ useEffect(() => {
                   </View>
                 ))}
 
-                {rollCall.noLocation.map((entry) => (
-                  <View key={entry.riderId} className='flex-row justify-between items-center mb-2'>
-                    <Text style={{ color: colors.text }} numberOfLines={1}>
-                      {entry.displayName}
-                    </Text>
-                    <Text className='text-xs' style={{ color: colors.textMuted }}>
-                      No location — call them
-                    </Text>
-                  </View>
-                ))}
+                {rollCall.noLocation.map((entry) =>
+                  entry.riderId === currentRider?.id ? (
+                    // This phone isn't sharing: the fix is here, not a call.
+                    <View key={entry.riderId} className='flex-row justify-between items-center mb-2'>
+                      <Text style={{ color: colors.text }}>You</Text>
+                      <TouchableOpacity accessibilityRole='button' onPress={() => void askForLocation(true)}>
+                        <Text className='text-xs font-semibold' style={{ color: colors.primary }}>
+                          Location off — turn it on
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View key={entry.riderId} className='flex-row justify-between items-center mb-2'>
+                      <Text style={{ color: colors.text }} numberOfLines={1}>
+                        {entry.displayName}
+                      </Text>
+                      <Text className='text-xs' style={{ color: colors.textMuted }}>
+                        No location — call them
+                      </Text>
+                    </View>
+                  ),
+                )}
 
                 <TouchableOpacity
                   accessibilityRole='button'
@@ -2487,8 +2583,13 @@ useEffect(() => {
                 className='font-bold text-center text-lg'
                 style={{ color: colors.text }}
               >
-                You are participating in this ride! 🎉
+                {participationHeadline(myRideRole ?? "rider", soloRide)}
               </Text>
+              {myRideRole === "captain" && soloRide && soloRideNote(ride.visibility, isFull) ? (
+                <Text className='text-sm text-center mt-1' style={{ color: colors.textMuted }}>
+                  {soloRideNote(ride.visibility, isFull)}
+                </Text>
+              ) : null}
               {ride.start_point_auto && (
                 <View className='mt-3'>
                   {/* The meeting point is derived from where everyone rides
@@ -2534,8 +2635,9 @@ useEffect(() => {
                   )}
                 </View>
               )}
-              {/* Before the start only: once live, riders finish their ride instead. */}
-              {ride.status !== "active" && (
+              {/* Before the start only: once live, riders finish their ride
+                  instead. A solo captain has nobody to hand over to. */}
+              {canLeaveRide(myRideRole ?? "rider", soloRide, ride.status) && (
                 <TouchableOpacity
                   onPress={handleLeave}
                   disabled={leaveMutation.isPending}
