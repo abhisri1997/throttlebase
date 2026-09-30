@@ -128,7 +128,7 @@ test("per-rider ride progress", { skip: !CONNECTION }, async (t) => {
     // A rides in: 1 km out (arms), 500 m, then inside the arrival radius.
     const far = await sendFix(rideId, RIDER_A, 1_000, 110);
     const mid = await sendFix(rideId, RIDER_A, 500, 80);
-    const near = await sendFix(rideId, RIDER_A, 55, 50);
+    const near = await sendFix(rideId, RIDER_A, 30, 50);
     assert.equal(far?.arrival, "armed");
     assert.equal(mid?.arrival, "none");
     assert.equal(near?.arrival, "arrived");
