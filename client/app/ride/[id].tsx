@@ -81,6 +81,7 @@ import { useEndRideWithWarning } from "../../src/features/rides/hooks/useEndRide
 import { useGroupAlert } from "../../src/features/rides/hooks/useGroupAlert";
 import { GroupAlertSheet } from "../../src/features/rides/components/GroupAlertSheet";
 import { GroupAlertBanner } from "../../src/features/rides/components/GroupAlertBanner";
+import { useReport } from "../../src/features/moderation/hooks/useReport";
 import { RidePreviewView } from "../../src/features/rides/components/RidePreviewView";
 import { JoinRequestsCard } from "../../src/features/rides/components/JoinRequestsCard";
 import {
@@ -686,6 +687,7 @@ export default function RideDetailScreen() {
   const [reviewRating, setReviewRating] = useState<number>(0);
   const [reviewText, setReviewText] = useState("");
   const groupAlert = useGroupAlert(id);
+  const { openReport, reportSheet } = useReport();
   // Who raised a group alert, for the banner the rest of the ride sees.
   const riderNames = useMemo<Record<string, string>>(
     () =>
@@ -1631,6 +1633,16 @@ useEffect(() => {
             <Text className='font-bold' style={{ color: colors.text }}>
               {ride.captain_name}
             </Text>
+            {isCaptain ? null : (
+              <Text
+                accessibilityRole='button'
+                onPress={() =>
+                  openReport({ type: "ride", id: ride.id, ownerName: ride.captain_name ?? null })
+                }
+              >
+                {"  ·  "}Report
+              </Text>
+            )}
           </Text>
           <View className='flex-row items-center mb-3'>
             <Calendar color={colors.primary} size={20} />
@@ -2579,6 +2591,8 @@ useEffect(() => {
       {liveEnabled ? (
         <GroupAlertBanner currentRiderId={currentRider?.id} riderNames={riderNames} />
       ) : null}
+
+      {reportSheet}
 
       <GroupAlertSheet
         visible={groupAlert.isSheetOpen}

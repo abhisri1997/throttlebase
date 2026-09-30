@@ -8,6 +8,7 @@ import {
 import * as CommunityService from "../services/community.service.js";
 import { dispatchMentionNotifications } from "../services/mention.service.js";
 import { query } from "../config/db.js";
+import { ContentNotAllowedError } from "../services/contentFilter.js";
 
 interface RiderPayload {
   riderId: string;
@@ -26,6 +27,13 @@ const getRiderDisplayName = async (riderId: string): Promise<string> => {
     [riderId],
   );
   return (result.rows[0]?.display_name as string | undefined) ?? "A rider";
+};
+
+/** A post or comment the word filter refused: 422, with a message the app shows. */
+const sendIfContentRefused = (res: Response, error: unknown): boolean => {
+  if (!(error instanceof ContentNotAllowedError)) return false;
+  res.status(422).json({ error: error.message, code: error.code });
+  return true;
 };
 
 // ── Posts ────────────────────────────────────────────────────────────────────
@@ -55,6 +63,7 @@ export const createPost = async (
         console.error("[mention] post mention dispatch failed:", err),
       );
   } catch (error: any) {
+    if (sendIfContentRefused(res, error)) return;
     if (error.name === "ZodError") {
       res.status(400).json({ errors: error.issues });
       return;
@@ -112,6 +121,7 @@ export const updatePost = async (
     }
     res.json(post);
   } catch (error: any) {
+    if (sendIfContentRefused(res, error)) return;
     console.error("Error updating post:", error);
     res.status(500).json({ error: "Internal server error" });
   }
@@ -173,6 +183,7 @@ export const addComment = async (
         ),
       );
   } catch (error: any) {
+    if (sendIfContentRefused(res, error)) return;
     if (error.name === "ZodError") {
       res.status(400).json({ errors: error.issues });
       return;
@@ -242,6 +253,7 @@ export const updateComment = async (
 
     res.json(comment);
   } catch (error: any) {
+    if (sendIfContentRefused(res, error)) return;
     console.error("Error updating comment:", error);
     res.status(500).json({ error: "Internal server error" });
   }

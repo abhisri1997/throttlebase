@@ -120,6 +120,8 @@ The only path to Google. The client never calls `googleapis.com`. Rate-limited t
 - `POST /api/community/riders/:id/follow`, `DELETE /api/community/riders/:id/follow`
 - `GET /api/community/riders/:id/followers`, `GET /api/community/riders/:id/following`
 - `GET /api/community/rides/:rideId/reviews`, `POST /api/community/rides/:rideId/reviews` — 1–5 stars
+- Creating or editing a post or comment runs the word filter (`server/src/core/moderation/`): a blocked term is refused with `422 { code: "CONTENT_NOT_ALLOWED" }`
+- `POST /api/reports` — report a `post`, `comment`, `rider`, `ride`, `route` or `group` with a `reason`, optional `note`, optional `also_block`. `201`, or `200` with `already_reported` when the reporter's earlier report is still open. `400` for the rider's own content, `404` when it doesn't exist. 20 an hour per rider
 
 ### Groups (flagged: `FEATURE_GROUPS`)
 

@@ -40,6 +40,8 @@ interface PostCardProps {
   isOwner?: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
+  /** Shown on other riders' posts. */
+  onReport?: () => void;
 }
 
 export const PostCard = ({
@@ -51,6 +53,7 @@ export const PostCard = ({
   isOwner,
   onEdit,
   onDelete,
+  onReport,
 }: PostCardProps) => {
   const { colors } = useTheme();
   const timeAgo = new Date(post.created_at).toLocaleDateString();
@@ -166,6 +169,26 @@ export const PostCard = ({
             </Text>
           </View>
         </TouchableOpacity>
+
+        {!isOwner && onReport ? (
+          <TouchableOpacity
+            accessibilityRole='button'
+            accessibilityLabel='Post options'
+            onPress={() => {
+              if (Platform.OS === "web") {
+                onReport();
+                return;
+              }
+              Alert.alert("Post Options", "", [
+                { text: "Report post", style: "destructive", onPress: onReport },
+                { text: "Cancel", style: "cancel" },
+              ]);
+            }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <MoreHorizontal color={colors.textMuted} size={20} />
+          </TouchableOpacity>
+        ) : null}
 
         {isOwner && (
           <TouchableOpacity

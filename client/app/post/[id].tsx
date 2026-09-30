@@ -21,6 +21,8 @@ import { PostCard } from "../../src/components/PostCard";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { MentionSuggestions } from "../../src/components/MentionSuggestions";
 import { MentionText } from "../../src/components/MentionText";
+import { useReport } from "../../src/features/moderation/hooks/useReport";
+import { getApiErrorMessage } from "../../src/utils/apiError";
 import {
   applyMentionSuggestion,
   findActiveMention,
@@ -46,6 +48,7 @@ export default function PostScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { rider, isSignedIn: isAuthenticated } = useCurrentRider();
+  const { openReport, reportSheet } = useReport();
   const [commentText, setCommentText] = useState("");
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [selection, setSelection] = useState({ start: 0, end: 0 });
@@ -172,6 +175,9 @@ export default function PostScreen() {
       queryClient.invalidateQueries({ queryKey: ["post", id] });
       queryClient.invalidateQueries({ queryKey: ["feed"] });
     },
+    // The draft stays, so a comment the word filter refused can be edited.
+    onError: (error) =>
+      Alert.alert("Comment not posted", getApiErrorMessage(error, "Check your connection and try again.")),
   });
 
   const deleteMutation = useMutation({
@@ -287,6 +293,19 @@ export default function PostScreen() {
       }
     };
 
+    // Other riders' comments can be reported.
+    const handleOthersOptions = () => {
+      const report = () => openReport({ type: "comment", id: item.id, ownerName: item.author_name });
+      if (Platform.OS === "web") {
+        report();
+        return;
+      }
+      Alert.alert("Comment Options", "", [
+        { text: "Report comment", style: "destructive", onPress: report },
+        { text: "Cancel", style: "cancel" },
+      ]);
+    };
+
     const isHighlighted = item.id === activeHighlightCommentId;
 
     return (
@@ -297,7 +316,7 @@ export default function PostScreen() {
           borderBottomColor: colors.border,
           backgroundColor: isHighlighted ? `${colors.primary}12` : colors.bg,
         }}
-        onLongPress={isOwner ? handleOptions : undefined}
+        onLongPress={isOwner ? handleOptions : handleOthersOptions}
         activeOpacity={0.9}
       >
         <View
@@ -326,11 +345,14 @@ export default function PostScreen() {
                 </Text>
               )}
             </View>
-            {isOwner && (
-              <TouchableOpacity onPress={handleOptions} className='p-1'>
-                <MoreVertical color={colors.textMuted} size={16} />
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              accessibilityRole='button'
+              accessibilityLabel='Comment options'
+              onPress={isOwner ? handleOptions : handleOthersOptions}
+              className='p-1'
+            >
+              <MoreVertical color={colors.textMuted} size={16} />
+            </TouchableOpacity>
           </View>
           <MentionText
             content={item.content}
@@ -436,6 +458,7 @@ export default function PostScreen() {
                   } as any)
                 }
                 onDelete={() => deletePostMutation.mutate()}
+                onReport={() => openReport({ type: "post", id: post.id, ownerName: post.author_name })}
               />
               <Text
                 className='px-4 font-bold text-lg mb-2 mt-2'
@@ -530,6 +553,8 @@ export default function PostScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {reportSheet}
     </SafeAreaView>
   );
 }

@@ -13,7 +13,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
 import { FEATURES } from "../../src/core/features/features";
 import { goBackOr } from "../../src/utils/goBack";
-import { Ban, ChevronLeft, UserPlus, UserMinus } from "lucide-react-native";
+import { Ban, ChevronLeft, Flag, UserPlus, UserMinus } from "lucide-react-native";
+import { useReport } from "../../src/features/moderation/hooks/useReport";
 import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { useTheme } from "../../src/theme/ThemeContext";
 
@@ -42,6 +43,7 @@ export default function RiderProfileScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const currentRider = useCurrentRider().rider;
+  const { openReport, reportSheet } = useReport();
 
   const {
     data: rider,
@@ -213,17 +215,29 @@ export default function RiderProfileScreen() {
           )}
 
           {!isMe && (
-            <TouchableOpacity
-              accessibilityRole='button'
-              onPress={() => confirmBlock(rider.display_name || "this rider")}
-              disabled={blockMutation.isPending}
-              className='mt-3 px-4 py-2 flex-row items-center'
-            >
-              <Ban size={14} color={colors.textMuted} />
-              <Text className='text-sm ml-1' style={{ color: colors.textMuted }}>
-                {blockMutation.isPending ? "Blocking…" : "Block"}
-              </Text>
-            </TouchableOpacity>
+            <View className='mt-3 flex-row'>
+              <TouchableOpacity
+                accessibilityRole='button'
+                onPress={() => openReport({ type: "rider", id: rider.id, ownerName: rider.display_name || "this rider" })}
+                className='px-4 py-2 flex-row items-center'
+              >
+                <Flag size={14} color={colors.textMuted} />
+                <Text className='text-sm ml-1' style={{ color: colors.textMuted }}>
+                  Report
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityRole='button'
+                onPress={() => confirmBlock(rider.display_name || "this rider")}
+                disabled={blockMutation.isPending}
+                className='px-4 py-2 flex-row items-center'
+              >
+                <Ban size={14} color={colors.textMuted} />
+                <Text className='text-sm ml-1' style={{ color: colors.textMuted }}>
+                  {blockMutation.isPending ? "Blocking…" : "Block"}
+                </Text>
+              </TouchableOpacity>
+            </View>
           )}
 
           <View
@@ -373,6 +387,7 @@ export default function RiderProfileScreen() {
           </View>
         )}
       </ScrollView>
+      {reportSheet}
     </View>
   );
 }

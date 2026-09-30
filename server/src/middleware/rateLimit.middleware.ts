@@ -70,3 +70,19 @@ export const mapsProxyLimiter = rateLimit({
     code: "maps_quota",
   },
 });
+
+/**
+ * Reports are cheap to send and expensive to review, so a rider gets enough
+ * for any real situation and no more: 20 an hour.
+ */
+export const reportLimiter = rateLimit({
+  windowMs: HOUR_MS,
+  limit: 20,
+  keyGenerator: riderKey,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "You've sent a lot of reports. Try again later, or contact the Grievance Officer.",
+    code: "report_limit",
+  },
+});

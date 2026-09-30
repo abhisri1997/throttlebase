@@ -36,6 +36,7 @@ import { PlanRideSection } from "../../src/features/routes/components/PlanRideSe
 import { RouteOwnerActions } from "../../src/features/routes/components/RouteOwnerActions";
 import { isCommunityRoute, isRouteOwner, routeAuthor } from "../../src/features/routes/core/routeOwner";
 import { useCurrentRider } from "../../src/services/useCurrentRider";
+import { useReport } from "../../src/features/moderation/hooks/useReport";
 import { parseRideDirection, type RideDirection } from "../../src/features/routes/core/planRide";
 
 const fetchRouteDetails = async (id: string) => {
@@ -81,6 +82,7 @@ export default function RouteDetailScreen() {
   const [direction, setDirection] = useState<RideDirection>(() => parseRideDirection(directionParam));
   const queryClient = useQueryClient();
   const currentRider = useCurrentRider().rider;
+  const { openReport, reportSheet } = useReport();
   const mapRef = useRef<InstanceType<typeof MapView> | null>(null);
 
   const {
@@ -361,8 +363,29 @@ export default function RouteDetailScreen() {
                 ? `Recorded on ${route.creator_name}'s ride. Distances are measured along the road they rode.`
                 : `Saved by ${route.creator_name}.`}
           </Text>
+
+          {isRouteOwner(route, currentRider?.id) ? null : (
+            <TouchableOpacity
+              accessibilityRole='button'
+              onPress={() =>
+                openReport({
+                  type: "route",
+                  id: route.id,
+                  // A community route has nobody left to block.
+                  ownerName: isCommunity ? null : route.creator_name ?? null,
+                })
+              }
+              className='mt-4 py-2'
+            >
+              <Text className='text-sm font-semibold' style={{ color: colors.textMuted }}>
+                Report this route
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
+
+      {reportSheet}
     </View>
   );
 }
