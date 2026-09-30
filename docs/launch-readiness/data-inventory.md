@@ -47,8 +47,8 @@ Retention abbreviations:
 | `consent_events`, `consent_state` (mig 045): purpose, `granted`/`withdrawn`, notice version, `source`, `app_version`, `platform` | Consent record | Proof of per-purpose consent (DPDP s.6(10)); the gates features check | Owner (`GET /api/consents`) and server | Append-only. Kept after account deletion against the tombstone for the proof period (proposed 3 years ⚖️), then purged |
 | `rider_declarations` (mig 045): `age_18_plus` answer, `source`, `app_version` | Age attestation | 18+ gate at onboarding | Owner and server | Every answer kept; kept with the consent record after deletion |
 | `sessions` (mig 008, 025): `refresh_token_hash`, `family_id`, `ip_address`, `user_agent`, `last_used_at` | Device / network identifiers           | Rotating refresh tokens                                                                                       | Owner (`/api/security/sessions`, flag `FEATURE_ACCOUNT_SECURITY`, off in beta)                                                                | Revoked or expired rows are deleted hourly (`cleanup.processor.ts:14-21`, scheduled at `server/src/services/jobs.service.ts:202`) |
-| `login_activity` (mig 008): `ip_address`, `device_fingerprint`, `geo_location`, `logged_in_at`           | Network identifiers; security log      | Sign-in history (`server/src/core/auth/resolveOrCreateRider.ts:145`)                                          | Owner (`/api/security/login-activity`, flagged off)                                                                                           | account. **Forever** while the account exists (no security-log purge, §9 E11)                                                     |
-| `email_otps` (mig 026): `email`, `code_hash`, `ip`, `attempts`                                           | Contact; IP                            | Email codes for sign-in and for account deletion (`server/src/core/auth/emailCode.ts`)                        | Server                                                                                                                                        | **forever**. Nothing purges it, not even after the account is deleted or for accounts that never finish sign-up                  |
+| `login_activity` (mig 008): `ip_address`, `device_fingerprint`, `geo_location`, `logged_in_at`           | Network identifiers; security log      | Sign-in history (`server/src/core/auth/resolveOrCreateRider.ts:145`)                                          | Owner (`/api/security/login-activity`, flagged off)                                                                                           | 1 year (`SECURITY_LOG_RETENTION_DAYS`), or the account purge if sooner                                                     |
+| `email_otps` (mig 026): `email`, `code_hash`, `ip`, `attempts`                                           | Contact; IP                            | Email codes for sign-in and for account deletion (`server/src/core/auth/emailCode.ts`)                        | Server                                                                                                                                        | 30 days (`EMAIL_CODE_RETENTION_DAYS`), whether or not the address has an account                  |
 | `rate_limit_counters` (mig 026): `subject` (email or IP)                                                 | Identifier                             | Throttling OTP requests                                                                                       | Server                                                                                                                                        | Expired windows pruned (`server/src/adapters/postgres/rateLimiter.ts:58`)                                                         |
 | `rider_settings`, `rider_privacy_settings`, `notification_preferences` (mig 007)                         | Preferences                            | Settings                                                                                                      | Owner                                                                                                                                         | account                                                                                                                           |
 | `vehicles`, `gear` (mig 002)                                                                             | Possessions                            | Garage                                                                                                        | Owner                                                                                                                                         | account                                                                                                                           |
@@ -283,11 +283,11 @@ Renamed from "SOS" on 2026-09-29 (decision D8, [plans/safety-flow.md](plans/safe
 
 ## 8. Retention today
 
-No single retention config file exists (§9 E11). These purges run:
+Every retention period is in `server/src/core/retention/retentionPolicy.ts`. These purges run:
 
 | Purge                                        | Where                                                                                   | What                                                                                                                  |
 | -------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Hourly `cleanup.expired_sessions`            | `cleanup.processor.ts`                                                                  | Expired or revoked `sessions`; finished `jobs` after 7 days (failed after 30); moderator-removed posts, comments and routes after 180 days |
+| Hourly `cleanup.expired_sessions`            | `cleanup.processor.ts`                                                                  | Expired or revoked `sessions`; finished `jobs` after 7 days (failed after 30); moderator-removed posts, comments and routes after 180 days; `login_activity` and `security_events` after 1 year, `email_otps` after 30 days |
 | Hourly `account.purge`                       | `account-purge.processor.ts`                                                            | A deleted rider's own data, 30 days after deletion (below)                                                            |
 | Daily `registration_records.purge`           | `registration-records-purge.processor.ts`, via `sealed.purge_expired_registrations()`   | Sealed registration records 180 days after deletion, unless under a legal hold                                        |
 | Rate-limit pruning                           | `rateLimiter.ts:58`                                                                     | Expired `rate_limit_counters` windows                                                                                 |
@@ -314,14 +314,14 @@ What stays after the purge:
 - The `riders` row as a tombstone: `id`, `deleted_at`, `purged_at`, every personal field empty.
 - Rides they captained that are finished, shown with captain "Deleted rider", and other riders' records on shared rides (stops, live-session events, incidents), linked to the tombstone.
 - `rider_consents` rows, as proof of consent.
-- Reports they filed or that concern them, and `security_events` (the moderation audit trail).
+- Reports they filed or that concern them, and `security_events` (the audit trail), until their year is up.
 - The sealed registration record, until its 180 days are up.
-- `email_otps` rows for their address (no purge, §9 E11).
+- `email_otps` rows for their address, until their 30 days are up.
 
 Kept **forever** otherwise:
 
 - `ride_live_location_samples`, `ride_live_events`, `ride_live_incidents`, `notifications` of active accounts.
-- `login_activity`, `email_otps`, `gps_traces`.
+- `gps_traces`.
 - All UGC of active accounts.
 
 ---
@@ -344,7 +344,7 @@ Legend:
 - ✅ Public routes kept as anonymised Community routes (§8.1).
 - ✅ IT Rules 2021 Rule 3(1)(h): registration details sealed for 180 days, encrypted with an offline-held key, purged daily unless under a legal hold (mig 043). ⚖️ Counsel to confirm the field list.
 - ✅ The shadowed legacy `DELETE /me` handler is removed.
-- 🟡 Retention of security logs is not settled: `login_activity` has no purge while the account exists, and `email_otps` none at all (E11). The Privacy Policy and deletion page say `[SECURITY LOG RETENTION PERIOD]`.
+- ✅ Security logs are purged (E11, migration 046): `login_activity` and `security_events` after 1 year, `email_otps` after 30 days. The Privacy Policy and deletion page drafts say so. ⚖️ Counsel to confirm 1 year against the DPDP Rules and CERT-In.
 - ⏸ Sign in with Apple token revocation: with Apple sign-in, at the iOS release (D6).
 - ⚠️ "Push tokens" and "live-session data TTL" in the E1 list don't exist yet (D4).
 
@@ -446,8 +446,9 @@ Legend:
 - 🟡 Worker and recurring-job machinery exist (`jobs.service.ts` `enqueueRecurringJobIfDue`). The session and jobs cleanup, the 30-day account purge and the 180-day sealed-record purge run (§8).
 - ❌ No live-session data purge.
 - ✅ Content a moderator removed is purged after 180 days (`cleanup.processor.ts`). A deleted account's content goes with the account purge (§8.1).
-- ❌ No security-log purge (`login_activity`, `email_otps`, `jobs`, `notifications` grow forever).
-- ❌ No single retention config file.
+- ✅ Security logs are purged by the hourly cleanup: `login_activity` and `security_events` after 1 year, `email_otps` after 30 days (`cleanup.processor.ts`, 2026-09-30). Finished `jobs` go after 7 days (30 if failed).
+- ❌ `notifications` still grow forever.
+- ✅ One retention config file: `server/src/core/retention/retentionPolicy.ts`.
 
 ---
 

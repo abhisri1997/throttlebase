@@ -19,9 +19,6 @@ export type ModerationAction = "remove" | "dismiss" | "suspend" | "lift_suspensi
 /** Things that can be taken down on their own; the rest go through their maker. */
 export const REMOVABLE_TARGETS: ReadonlySet<ModerationTargetType> = new Set(["post", "comment", "route"]);
 
-/** Days removed content is kept before the purge deletes it. */
-export const REMOVED_CONTENT_RETENTION_DAYS = 180;
-
 export const MIN_REASON_LENGTH = 5;
 export const MAX_REASON_LENGTH = 500;
 

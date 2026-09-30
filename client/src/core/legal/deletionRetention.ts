@@ -16,8 +16,9 @@ export const PUBLIC_ROUTES_KEPT =
 export const SHARED_RIDES_KEPT =
   "Rides you took part in with other riders stay in their ride history; your own track, stats and participation are deleted.";
 
+/** The periods are server/src/core/retention/retentionPolicy.ts; change both together. */
 export const SECURITY_RECORDS_KEPT =
-  "Sign-in and security records are kept for [SECURITY LOG RETENTION PERIOD].";
+  "Sign-in records (when you signed in, from which IP address and on which device) are kept for 1 year, or until your data is deleted if you delete your account sooner. Email codes you ask for, with the IP address they were requested from, are kept for 30 days. Other security records, such as moderation decisions, are kept for 1 year.";
 
 export const LEGALLY_PRESERVED =
   "Content or records we are legally required to preserve, for example under a court order or after a complaint, are kept for 180 days or longer if the law requires.";
