@@ -2,6 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import pg from "pg";
 import { runMigrations } from "./migrate.js";
+import { createRegistrationSealer } from "../crypto/registrationSealer.js";
+import { generateSealingKeyPair } from "../crypto/sealedBox.js";
+
+/** Seals deleted accounts' registration records with a throwaway key. */
+const testSealer = createRegistrationSealer(generateSealingKeyPair().publicKeyPem);
 
 /**
  * When a captain deletes their account, each ride they still lead passes to
@@ -134,7 +139,7 @@ test("a deleting captain's open rides pass to the next leader", { skip: !CONNECT
     ).rows[0] as { role: string; status: string; left_at: Date | null };
 
   // ── Act: CAP deletes their account.
-  const deleted = await repository!.createRiderRepository(admin).softDeleteAndUnlink(CAP, new Date());
+  const deleted = await repository!.createRiderRepository(admin, testSealer).softDeleteAndUnlink(CAP, new Date());
   assert.equal(deleted, true);
 
   await t.test("a co-captain takes over before any rider", async () => {

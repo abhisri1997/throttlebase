@@ -80,6 +80,9 @@ export interface RiderRepository {
   withTransaction<T>(fn: (tx: RiderTransaction) => Promise<T>): Promise<T>;
   findByUsername(username: string): Promise<RiderRecord | null>;
   completeOnboarding(input: OnboardingInput): Promise<RiderRecord>;
-  /** Soft-deletes the rider and removes every linked identity. */
+  /**
+   * Seals the rider's registration record (core/riders/registrationRecord.ts),
+   * then soft-deletes the rider and removes every linked identity.
+   */
   softDeleteAndUnlink(riderId: string, at: Date): Promise<boolean>;
 }

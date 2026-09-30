@@ -15,6 +15,11 @@ import { nodeHasher } from "../system/nodeHasher.js";
 import { nodeRandomSource } from "../system/nodeRandomSource.js";
 import { systemClock } from "../system/systemClock.js";
 import { runMigrations } from "./migrate.js";
+import { createRegistrationSealer } from "../crypto/registrationSealer.js";
+import { generateSealingKeyPair } from "../crypto/sealedBox.js";
+
+/** Seals deleted accounts' registration records with a throwaway key. */
+const testSealer = createRegistrationSealer(generateSealingKeyPair().publicKeyPem);
 import { createOtpStore } from "./otpStore.js";
 import { createRateLimiter } from "./rateLimiter.js";
 import { createRiderRepository } from "./riderRepository.js";
@@ -98,7 +103,7 @@ test(
     const pool = new pg.Pool({ connectionString: url.toString() });
 
     const deps = {
-      riders: createRiderRepository(pool),
+      riders: createRiderRepository(pool, testSealer),
       sessions: createSessionRepository(pool),
       otps: createOtpStore(pool),
       rateLimiter: createRateLimiter(pool),

@@ -2,6 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import pg from "pg";
 import { runMigrations } from "./migrate.js";
+import { createRegistrationSealer } from "../crypto/registrationSealer.js";
+import { generateSealingKeyPair } from "../crypto/sealedBox.js";
+
+/** Seals deleted accounts' registration records with a throwaway key. */
+const testSealer = createRegistrationSealer(generateSealingKeyPair().publicKeyPem);
 
 /**
  * A group carries on when the rider who runs it leaves, as a WhatsApp group
@@ -112,7 +117,7 @@ test("a group carries on when the rider running it leaves", { skip: !CONNECTION 
   });
 
   // ── Act 1: OWN deletes their account.
-  assert.equal(await repository!.createRiderRepository(admin).softDeleteAndUnlink(OWN, new Date()), true);
+  assert.equal(await repository!.createRiderRepository(admin, testSealer).softDeleteAndUnlink(OWN, new Date()), true);
 
   await t.test("another admin takes over before any member", async () => {
     assert.equal(await ownerOf(g1), ADM2);

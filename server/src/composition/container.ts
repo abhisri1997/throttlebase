@@ -1,3 +1,5 @@
+import { createRegistrationSealer } from "../adapters/crypto/registrationSealer.js";
+import { generateSealingKeyPair } from "../adapters/crypto/sealedBox.js";
 import { createAppleIdentityVerifier } from "../adapters/identity/appleIdentityVerifier.js";
 import { createGoogleIdentityVerifier } from "../adapters/identity/googleIdentityVerifier.js";
 import { createOtpStore } from "../adapters/postgres/otpStore.js";
@@ -29,6 +31,19 @@ import { readAuthConfig, type Env } from "./env.js";
 
 export type AuthContainer = Awaited<ReturnType<typeof buildAuthContainer>>;
 
+/**
+ * The key that seals registration records at account deletion. Production
+ * refuses to start without one (env.ts); anywhere else a throwaway key keeps
+ * deletion working, and what it seals can never be opened.
+ */
+const sealingPublicKey = (configured: string | null): string => {
+  if (configured) return configured;
+  console.warn(
+    "[sealing] SEALED_RECORD_PUBLIC_KEY is not set: registration records sealed now use a throwaway key and can never be opened. Set it before production.",
+  );
+  return generateSealingKeyPair().publicKeyPem;
+};
+
 export const buildAuthContainer = async (env: Env) => {
   const config = readAuthConfig(env);
 
@@ -50,7 +65,7 @@ export const buildAuthContainer = async (env: Env) => {
   return {
     config,
     jwks,
-    riders: createRiderRepository(pool),
+    riders: createRiderRepository(pool, createRegistrationSealer(sealingPublicKey(config.sealing.publicKeyPem))),
     sessions: createSessionRepository(pool),
     otps: createOtpStore(pool),
     rateLimiter: createRateLimiter(pool),
