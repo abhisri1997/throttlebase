@@ -23,11 +23,27 @@ const STATUS_BY_CODE: Record<AuthErrorCode, number> = {
   USERNAME_TAKEN: 409,
   RIDER_NOT_FOUND: 404,
   ACCOUNT_SUSPENDED: 403,
+  REAUTH_REQUIRED: 403,
+  NO_EMAIL_ON_FILE: 409,
 };
 
-export const sendAuthError = (res: Response, error: unknown): void => {
+/**
+ * For routes already behind a valid access token. A code refused there says
+ * nothing about the token, and a 401 would make the app refresh it and resend
+ * the same code, spending a second attempt.
+ */
+export const SIGNED_IN_CODE_STATUS: Partial<Record<AuthErrorCode, number>> = {
+  OTP_INVALID: 403,
+  OTP_EXPIRED: 403,
+};
+
+export const sendAuthError = (
+  res: Response,
+  error: unknown,
+  overrides: Partial<Record<AuthErrorCode, number>> = {},
+): void => {
   if (isAuthError(error)) {
-    const status = STATUS_BY_CODE[error.code];
+    const status = overrides[error.code] ?? STATUS_BY_CODE[error.code];
 
     if (error.retryAfterSeconds !== undefined) {
       res.setHeader("Retry-After", String(error.retryAfterSeconds));

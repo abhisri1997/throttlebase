@@ -74,22 +74,6 @@ router.patch('/me', RiderController.updateMyProfile);
 
 /**
  * @swagger
- * /api/riders/me:
- *   delete:
- *     summary: Soft-delete your account (30-day recovery window)
- *     tags: [Riders]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Account soft-deleted
- *       401:
- *         description: Unauthorized
- */
-router.delete('/me', RiderController.deleteMyAccount);
-
-/**
- * @swagger
  * /api/riders/search:
  *   get:
  *     summary: Search riders by username prefix for mention suggestions

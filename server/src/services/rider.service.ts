@@ -10,8 +10,6 @@ import { visibleToViewerSql } from "./blocks.js";
  * - update: Builds a dynamic SQL SET clause from only the provided fields.
  *   This is a common pattern for PATCH endpoints in raw SQL — it's more
  *   complex than an ORM but teaches you exactly what's happening.
- * - softDelete: Sets deleted_at instead of removing the row. The 30-day
- *   grace period is enforced by a scheduled job (not yet implemented).
  */
 
 /**
@@ -153,21 +151,6 @@ export const update = async (
   }
 
   return result.rows[0] as RiderProfile;
-};
-
-/**
- * Soft-delete a rider's account.
- * Sets deleted_at to now() — the account can be recovered within 30 days.
- */
-export const softDelete = async (id: string): Promise<boolean> => {
-  const result = await query(
-    `UPDATE riders
-     SET deleted_at = now()
-     WHERE id = $1 AND deleted_at IS NULL`,
-    [id],
-  );
-
-  return (result.rowCount ?? 0) > 0;
 };
 
 export const searchMentionSuggestions = async (

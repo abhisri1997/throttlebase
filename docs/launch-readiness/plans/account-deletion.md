@@ -10,7 +10,7 @@
   - anonymises the `riders` row;
   - keeps everything else.
 - Thirty days later the hourly cleanup job runs `DELETE FROM riders` (`server/src/workers/processors/cleanup.processor.ts:23-32`). Every `ON DELETE CASCADE` foreign key fires, including `rides.captain_id` (mig 003 line 6). Every ride the rider captained disappears, together with **other riders'** participation, location samples, presence and stats.
-- A legacy handler (`server/src/controllers/rider.controller.ts:153-172`) promises "30 days to recover". It is shadowed and never runs.
+- A legacy handler (`server/src/controllers/rider.controller.ts:153-172`) promises "30 days to recover". It is shadowed and never runs. ✅ Removed (slice 5, step 10).
 
 ## Target behaviour
 
@@ -95,10 +95,15 @@ Like a WhatsApp group whose admin leaves: the ride or group carries on under som
    - record `account.deleted` in `security_events`.
 6. **Grace period.** Thirty days, during which the account is inaccessible and its content hidden. State the period in the in-app confirmation and on the deletion page.
    - Recovery during the grace period is optional. Identities are already unlinked, so recovery would need a support request. Decide before building it; the default is no self-service recovery.
-7. **Re-authentication.** Require a sign-in within the last 5 minutes (`auth_time` claim) or a fresh email code before `DELETE /me` succeeds.
+7. **Re-authentication.** ✅ Slice 5 (2026-09-30). `DELETE /me` needs a code emailed to the rider's address on file.
+   - `POST /api/riders/me/deletion-code` sends it; `DELETE /api/riders/me` with `{ code }` checks it and deletes in the same request. With no code the answer is 403 `REAUTH_REQUIRED`; a rider with no address on file gets 409 `NO_EMAIL_ON_FILE` and is sent to support.
+   - **Email code only, no "recent sign-in" path (user's choice).** Access tokens carry no `auth_time` and are re-minted on every refresh, so honouring a recent sign-in would need a new `sessions` column and token claim. On Android a Google re-sign-in often happens without the rider choosing anything, so it would prove little beyond an unlocked phone.
+   - **Shares `email_otps` with sign-in (user's choice).** No migration. Both kinds of code prove control of the inbox, so either passes the other's check, and issuing one retires the other. The per-address send limits count both. The email names what the code does (`core/riders/deletionCodeEmail.ts`).
+   - A refused code on this signed-in route is a 403, not a 401: the app treats 401 as an expired token, and would refresh and resend the same code, spending a second attempt.
+   - The web page (step 8) reuses the same check: `redeemEmailCode` in `core/auth/emailCode.ts`.
 8. **Web deletion request** (`https://throttlebase.in/delete-account`). The rider enters an email, confirms via a one-time code, then the same `deleteAccount` runs. This works without the app installed. Play requires it.
 9. **Sign in with Apple token revocation.** Add it when Apple sign-in ships (E2 is deferred to iOS launch).
-10. **Remove the dead legacy handler** and its route.
+10. **Remove the dead legacy handler** and its route. ✅ Slice 5: `deleteMyAccount`, its route and `RiderService.softDelete` are gone.
 
 ## Test
 
@@ -108,7 +113,7 @@ Like a WhatsApp group whose admin leaves: the ride or group carries on under som
   - B's samples, stats, posts and both rides still exist;
   - the completed ride shows captain "Deleted rider".
 - An open ride captained by A passes to the next leader by the rule below, and everyone on it is notified; with nobody left it is cancelled (`ride-handoff.integration.test.ts`).
-- A request without recent authentication is refused.
+- A request without recent authentication is refused. ✅ `deleteAccount.test.ts`, `riderAccountRoutes.test.ts`, and the end-to-end case in `auth.integration.test.ts`.
 - Running the purge job twice is harmless.
 - Deleting an account writes exactly one sealed registration record holding only registration fields. `throttlebase_app` cannot select it. The purge job removes it after 180 days, and a record under legal hold survives the purge.
 

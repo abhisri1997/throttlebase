@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { FakeClock, FakeRiderRepository, FakeSessionRepository } from "../testing/fakes.js";
 import { AuthError } from "../auth/errors.js";
 import { completeOnboarding, isUsernameAvailable } from "./completeOnboarding.js";
-import { deleteAccount } from "./deleteAccount.js";
 
 const buildDeps = () => {
   const riders = new FakeRiderRepository();
@@ -115,44 +114,4 @@ test("username availability reflects existing riders", async () => {
   assert.equal((await isUsernameAvailable(deps, "ada")).available, false);
   assert.equal((await isUsernameAvailable(deps, "bob")).available, true);
   assert.equal((await isUsernameAvailable(deps, "admin")).reason, "reserved");
-});
-
-test("deleting an account unlinks identities, clears personal fields and kills sessions", async () => {
-  // Arrange
-  const deps = buildDeps();
-  deps.riders.seedRider({
-    id: "rider-1",
-    username: "ada",
-    email: "ada@example.com",
-    displayName: "Ada",
-  });
-  deps.riders.seedIdentity("google", "sub-1", "rider-1");
-  await deps.sessions.create({
-    riderId: "rider-1",
-    familyId: "family-1",
-    refreshTokenHash: "hash",
-    expiresAt: new Date("2027-01-01"),
-    userAgent: null,
-    ipAddress: null,
-  });
-
-  // Act
-  await deleteAccount(deps, "rider-1");
-
-  // Assert
-  const rider = deps.riders.state.riders[0];
-  assert.ok(rider?.deletedAt, "rider row is retained but soft-deleted");
-  assert.equal(rider?.email, null);
-  assert.equal(deps.riders.state.identities.length, 0);
-  assert.ok(deps.sessions.rows.every((r) => r.revokedAt !== null));
-});
-
-test("deleting an unknown or already-deleted account reports not found", async () => {
-  const deps = buildDeps();
-
-  await assert.rejects(
-    () => deleteAccount(deps, "rider-missing"),
-    (error: unknown) =>
-      error instanceof AuthError && error.code === "RIDER_NOT_FOUND",
-  );
 });

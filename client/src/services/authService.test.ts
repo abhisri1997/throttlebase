@@ -377,3 +377,72 @@ test("signing up accepts the version of the Terms the app shows", async () => {
   const body = calls[0]?.body as { acceptedTermsVersion?: string };
   assert.equal(body.acceptedTermsVersion, TERMS.version);
 });
+
+test("asking to delete emails a code and keeps the rider signed in", async () => {
+  // Arrange
+  const { service, calls, storage } = buildService(
+    () => Promise.resolve({ expiresInSeconds: 600 }),
+    storedSession(),
+  );
+
+  // Act
+  await service.requestDeletionCode();
+
+  // Assert
+  assert.equal(calls[0]?.path, "/api/riders/me/deletion-code");
+  assert.equal(calls[0]?.method, "POST");
+  assert.equal(storage.items.size > 0, true);
+});
+
+test("deleting sends the emailed code, then signs the rider out", async () => {
+  // Arrange
+  const { service, calls, storage } = buildService(
+    () => Promise.resolve(undefined),
+    storedSession(),
+  );
+  await service.getValidSession();
+
+  // Act
+  await service.deleteAccount("123456");
+
+  // Assert
+  assert.equal(calls[0]?.path, "/api/riders/me");
+  assert.equal(calls[0]?.method, "DELETE");
+  assert.deepEqual(calls[0]?.body, { code: "123456" });
+  assert.equal(storage.items.size, 0);
+  assert.equal(service.getState().status, "signed-out");
+});
+
+test("a refused deletion code keeps the rider signed in", async () => {
+  // Arrange
+  const { service, storage } = buildService(
+    () => Promise.reject(new ApiError(401, "That code is not valid.")),
+    storedSession(),
+  );
+  await service.getValidSession();
+
+  // Act + Assert
+  await assert.rejects(() => service.deleteAccount("000000"), ApiError);
+  assert.equal(service.getState().status, "signed-in");
+  assert.equal(storage.items.size > 0, true);
+});
+
+test("a deleted account is signed out here even if the Google sign-out fails", async () => {
+  // Arrange: the server deletes, then the Google SDK throws
+  const storage = new MemoryStorage();
+  storage.items.set("throttlebase.session.v1", JSON.stringify(storedSession()));
+  const service = createAuthService({
+    storage,
+    apiClient: { request: <T>() => Promise.resolve(undefined as T) },
+    providers: { ...noProviders, googleSignOut: () => Promise.reject(new Error("sdk")) },
+    now: () => NOW,
+  });
+  await service.getValidSession();
+
+  // Act
+  await service.deleteAccount("123456");
+
+  // Assert
+  assert.equal(storage.items.size, 0);
+  assert.equal(service.getState().status, "signed-out");
+});

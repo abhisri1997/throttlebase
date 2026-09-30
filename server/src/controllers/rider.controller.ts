@@ -147,28 +147,3 @@ export const updateMyProfile = async (
     res.status(500).json({ error: "Internal server error" });
   }
 };
-
-/**
- * DELETE /api/riders/me
- * Soft-delete the authenticated rider's account.
- */
-export const deleteMyAccount = async (
-  req: Request,
-  res: Response,
-): Promise<void> => {
-  try {
-    const deleted = await RiderService.softDelete(req.rider!.riderId);
-
-    if (!deleted) {
-      res.status(404).json({ error: "Rider not found" });
-      return;
-    }
-
-    res.json({
-      message: "Account deleted. You have 30 days to recover it.",
-    });
-  } catch (error: any) {
-    console.error("Delete account error:", error.message);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};

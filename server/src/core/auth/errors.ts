@@ -15,7 +15,9 @@ export type AuthErrorCode =
   | "USERNAME_INVALID"
   | "USERNAME_TAKEN"
   | "RIDER_NOT_FOUND"
-  | "ACCOUNT_SUSPENDED";
+  | "ACCOUNT_SUSPENDED"
+  | "REAUTH_REQUIRED"
+  | "NO_EMAIL_ON_FILE";
 
 export class AuthError extends Error {
   readonly code: AuthErrorCode;

@@ -46,7 +46,10 @@ export interface AuthService {
   /** Availability check behind the onboarding form. */
   checkUsername(candidate: string): Promise<{ available: boolean; reason: string }>;
   completeOnboarding(details: OnboardingDetails): Promise<void>;
-  deleteAccount(): Promise<void>;
+  /** Emails the rider the code that confirms deleting their account. */
+  requestDeletionCode(): Promise<void>;
+  /** Deletes the account with that code, then signs out on this device. */
+  deleteAccount(code: string): Promise<void>;
   signOut(): Promise<void>;
   signOutEverywhere(): Promise<void>;
 

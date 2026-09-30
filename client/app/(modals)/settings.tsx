@@ -15,7 +15,6 @@ import { apiClient } from "../../src/api/client";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { useCurrentRider } from "../../src/services/useCurrentRider";
 import { isAdmin } from "../../src/core/auth/roles";
-import { authService } from "../../src/services/auth";
 import { FEATURES } from "../../src/core/features/features";
 import type { ReactNode } from "react";
 import { Bell, ChevronLeft, FileText, LifeBuoy, Lock, Settings as SettingsIcon, Shield, Trash2, User, UserX } from "lucide-react-native";
@@ -174,7 +173,8 @@ export default function SettingsModal() {
   /**
    * Account deletion, which the app stores require to be reachable in-app.
    *
-   * Two steps on purpose: this revokes every session and unlinks every
+   * Two confirmations on purpose, then a code emailed to the rider
+   * (delete-account.tsx): this revokes every session and unlinks every
    * sign-in method, and there is no undo from the rider's side.
    */
   const handleDeleteAccount = (): void => {
@@ -189,25 +189,13 @@ export default function SettingsModal() {
           onPress: () => {
             Alert.alert(
               "This cannot be undone",
-              "Delete your ThrottleBase account permanently?",
+              "Delete your ThrottleBase account permanently? We'll email you a code to confirm.",
               [
                 { text: "Cancel", style: "cancel" },
                 {
-                  text: "Delete permanently",
+                  text: "Continue",
                   style: "destructive",
-                  onPress: () => {
-                    void (async () => {
-                      try {
-                        await authService.deleteAccount();
-                        router.replace("/(auth)/sign-in");
-                      } catch (error) {
-                        Alert.alert(
-                          "Couldn't delete account",
-                          (error as Error)?.message ?? "Please try again.",
-                        );
-                      }
-                    })();
-                  },
+                  onPress: () => router.push("/(modals)/delete-account"),
                 },
               ],
             );

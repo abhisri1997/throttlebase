@@ -191,9 +191,8 @@ const authContainer = await buildAuthContainer(process.env);
 initAuthentication(authContainer.tokenVerifier);
 initSocketAuthentication(authContainer.tokenVerifier);
 
-// Auth routes are mounted before the rider router so the passwordless
-// DELETE /api/riders/me wins over the older profile handler, which does not
-// unlink identities or revoke sessions.
+// Account routes are mounted before the rider router, whose GET /:id would
+// otherwise swallow /api/riders/username-available.
 app.use("/auth", createAuthRoutes(authContainer));
 app.use("/api/riders", createRiderAccountRoutes(authContainer));
 app.use("/.well-known", createJwksRoute(authContainer));
