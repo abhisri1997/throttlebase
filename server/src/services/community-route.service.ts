@@ -6,73 +6,27 @@
  * riders' bookmarks and other riders' road feedback stay. Everything else
  * of theirs, private and shared routes included, the purge deletes.
  *
- * Planned before the purge's transaction, because it asks Google what is at
- * each end, and no lookup should hold a database connection. A lookup that
- * fails counts as "nothing public here": that end is trimmed.
+ * A route keeps the ends riders already saw it with: what was found at them
+ * when it was made public (routes.public_ends). A route made public before
+ * that was kept is looked at now. Planned before the purge's transaction,
+ * so no lookup holds a database connection. A lookup that fails counts as
+ * "nothing public here": that end is trimmed.
  */
 import type { PoolClient } from "pg";
 import { query } from "../config/db.js";
-import {
-  communityRouteTitle,
-  HOME_LIKE_PLACE_TYPES,
-  planCommunityRoute,
-  PUBLIC_PLACE_RADIUS_METERS,
-  PUBLIC_PLACE_TYPES,
-  type CommunityRoutePlan,
-  type PublicPlace,
-} from "../core/routes/communityRoute.js";
+import { communityRouteTitle, planPublicRoute, type PublicRoutePlan } from "../core/routes/communityRoute.js";
 import { routeLine } from "../core/routes/roadVia.js";
-import { resolveMapsProvider } from "./maps/resolveProvider.js";
-import { nameAreaWithGoogle } from "./route-from-ride.service.js";
+import { orNull, type RoutePlaceLookups } from "./route-place-lookups.js";
+import type { PublicEnds } from "./route-public-view.js";
+
+export { GOOGLE_LOOKUPS, NO_LOOKUPS } from "./route-place-lookups.js";
+export type CommunityRouteLookups = RoutePlaceLookups;
 
 type Point = { lat: number; lng: number };
 
-export interface CommunityRouteLookups {
-  /** A clearly public place at a point, or null. */
-  findPublicPlace: (point: Point) => Promise<PublicPlace | null>;
-  /** The area a point is in ("HSR Layout, Bengaluru"), or null. */
-  nameArea: (point: Point) => Promise<string | null>;
-}
-
-const findPublicPlaceWithGoogle = async (point: Point): Promise<PublicPlace | null> => {
-  const provider = resolveMapsProvider();
-  if (!provider) return null;
-  const [place] = await provider.searchNearby({
-    lat: point.lat,
-    lng: point.lng,
-    radiusMeters: PUBLIC_PLACE_RADIUS_METERS,
-    includedTypes: [...PUBLIC_PLACE_TYPES],
-    excludedTypes: [...HOME_LIKE_PLACE_TYPES],
-    rankByDistance: true,
-    maxResultCount: 1,
-  });
-  return place ? { name: place.name, lat: place.lat, lng: place.lng } : null;
-};
-
-export const GOOGLE_LOOKUPS: CommunityRouteLookups = {
-  findPublicPlace: findPublicPlaceWithGoogle,
-  nameArea: nameAreaWithGoogle,
-};
-
-/** For tests and for running without Google: every end is trimmed and nothing is named. */
-export const NO_LOOKUPS: CommunityRouteLookups = {
-  findPublicPlace: async () => null,
-  nameArea: async () => null,
-};
-
-/** A lookup that fails, for an outage or a spent quota, finds nothing. */
-const orNull = async <T>(lookup: () => Promise<T | null>): Promise<T | null> => {
-  try {
-    return await lookup();
-  } catch (error) {
-    console.warn("[purge] a place lookup failed; treating it as none:", error instanceof Error ? error.message : error);
-    return null;
-  }
-};
-
 export interface CommunityRouteChange {
   routeId: string;
-  plan: CommunityRoutePlan;
+  plan: PublicRoutePlan;
   title: string;
   startName: string | null;
   endName: string | null;
@@ -96,25 +50,29 @@ export const planCommunityRoutesOf = async (
   lookups: CommunityRouteLookups,
 ): Promise<CommunityRouteChange[]> => {
   const routes = await query(
-    `SELECT id::text AS id, geojson FROM routes WHERE creator_id = $1 AND visibility = 'public' ORDER BY created_at`,
+    `SELECT id::text AS id, geojson, public_ends FROM routes
+      WHERE creator_id = $1 AND visibility = 'public' ORDER BY created_at`,
     [riderId],
   );
 
   const changes: CommunityRouteChange[] = [];
-  for (const route of routes.rows as Array<{ id: string; geojson: unknown }>) {
+  for (const route of routes.rows as Array<{ id: string; geojson: unknown; public_ends: PublicEnds | null }>) {
     const line = routeLine(route.geojson);
     if (line.length < 2) continue;
 
-    const [startPlace, endPlace] = await Promise.all([
-      orNull(() => lookups.findPublicPlace(toPoint(line[0]!))),
-      orNull(() => lookups.findPublicPlace(toPoint(line[line.length - 1]!))),
-    ]);
-    const plan = planCommunityRoute({ line, stops: await loadStops(route.id), startPlace, endPlace });
+    const known = route.public_ends;
+    const [startPlace, endPlace] = known
+      ? [known.startPlace, known.endPlace]
+      : await Promise.all([
+          orNull(() => lookups.findPublicPlace(toPoint(line[0]!))),
+          orNull(() => lookups.findPublicPlace(toPoint(line[line.length - 1]!))),
+        ]);
+    const plan = planPublicRoute({ line, stops: await loadStops(route.id), startPlace, endPlace });
     if (!plan) continue;
 
     const [startName, endName, ...stopNames] = await Promise.all([
-      plan.startName ?? orNull(() => lookups.nameArea(plan.start)),
-      plan.endName ?? orNull(() => lookups.nameArea(plan.end)),
+      plan.startName ?? known?.startName ?? orNull(() => lookups.nameArea(plan.start)),
+      plan.endName ?? known?.endName ?? orNull(() => lookups.nameArea(plan.end)),
       ...plan.stops.map((stop) => orNull(() => lookups.nameArea(stop))),
     ]);
     changes.push({

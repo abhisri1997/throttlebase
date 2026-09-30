@@ -10,6 +10,8 @@ import { roadViaPoints, routeLine } from "../core/routes/roadVia.js";
 import { enqueueRideStatsRecompute } from "./jobs.service.js";
 import { getRouteRoadFeedback, type RouteRoadFeedback } from "./road-feedback.service.js";
 import { blockedBetweenSql } from "./blocks.js";
+import { NO_LOOKUPS, type RoutePlaceLookups } from "./route-place-lookups.js";
+import { findPublicEnds, viewRoute, type PublicEnds } from "./route-public-view.js";
 import type {
   CreateRouteInput,
   GpsTraceBatchInput,
@@ -77,6 +79,24 @@ export type RouteWithStops = Route & {
  * For queries that LEFT JOIN riders as `rd` on the creator.
  */
 const LIVE_OR_COMMUNITY = "(r.creator_id IS NULL OR rd.deleted_at IS NULL)";
+
+/**
+ * What reads need to work out a route's public view (route-public-view.ts):
+ * every stop's point in order, and what was found at its ends. Never sent
+ * as they are: viewRoute drops them.
+ */
+const STOP_POINTS_SQL = `COALESCE((
+    SELECT json_agg(json_build_object(
+             'name', rs.name, 'lat', ST_Y(rs.location::geometry), 'lng', ST_X(rs.location::geometry)
+           ) ORDER BY rs.position)
+      FROM route_stops rs WHERE rs.route_id = r.id
+  ), '[]'::json)`;
+const VIEW_COLUMNS = `r.public_ends, ${STOP_POINTS_SQL} AS via_points`;
+
+interface ViewInternals {
+  via_points: { name: string | null; lat: number; lng: number }[];
+  public_ends: PublicEnds | null;
+}
 
 /** Every route read uses these, so points come back as numbers, not PostGIS hex. */
 export const ROUTE_COLUMNS = `
@@ -152,7 +172,7 @@ export const getRouteById = async (
 ): Promise<RouteWithStops | null> => {
   // Fetch route with creator name, respecting visibility.
   const result = await query(
-    `SELECT ${ROUTE_COLUMNS}, rd.display_name AS creator_name
+    `SELECT ${ROUTE_COLUMNS}, ${VIEW_COLUMNS}, rd.display_name AS creator_name
      FROM routes r
      LEFT JOIN riders rd ON r.creator_id = rd.id
      WHERE r.id = $1
@@ -175,20 +195,32 @@ export const getRouteById = async (
        )`,
     [routeId, viewerId],
   );
-  const route = result.rows[0] as Route | undefined;
-  if (!route) return null;
+  const row = result.rows[0] as (Route & ViewInternals) | undefined;
+  if (!row) return null;
+  // Anyone but its owner sees it without its personal ends.
+  const view = viewRoute(row, viewerId);
+  if (!view) return null;
+
+  const allStops = await listRouteStops(routeId);
+  const stops = view.plan
+    ? view.plan.stops.map((kept) => ({
+        ...allStops[kept.sourceIndex]!,
+        position: kept.position,
+        distance_from_start_km: kept.distanceFromStartKm,
+      }))
+    : allStops;
   return {
-    ...route,
+    ...view.route,
     road_feedback: await getRouteRoadFeedback(routeId),
-    stops: await listRouteStops(routeId),
-    road_via: roadViaPoints(routeLine(route.geojson)),
+    stops,
+    road_via: roadViaPoints(routeLine(view.route.geojson)),
   };
 };
 
 /** Public routes, plus the viewer's own private ones so "only me" stays findable. */
 export const listVisibleRoutes = async (viewerId: string): Promise<Route[]> => {
   const result = await query(
-    `SELECT ${ROUTE_COLUMNS}, rd.display_name AS creator_name
+    `SELECT ${ROUTE_COLUMNS}, ${VIEW_COLUMNS}, rd.display_name AS creator_name
      FROM routes r
      LEFT JOIN riders rd ON r.creator_id = rd.id
      WHERE (r.visibility = 'public' OR r.creator_id = $1) AND ${LIVE_OR_COMMUNITY}
@@ -197,8 +229,15 @@ export const listVisibleRoutes = async (viewerId: string): Promise<Route[]> => {
      LIMIT 50`,
     [viewerId],
   );
-  return result.rows as Route[];
+  return asSeenBy(result.rows as (Route & ViewInternals)[], viewerId);
 };
+
+/** Each route as the viewer may see it, leaving out any too short to show them. */
+const asSeenBy = (rows: readonly (Route & ViewInternals)[], viewerId: string): Route[] =>
+  rows.flatMap((row) => {
+    const view = viewRoute(row, viewerId);
+    return view ? [view.route as Route] : [];
+  });
 
 // ---------------------------------------------------------------------------
 // The owner's control over their routes
@@ -217,17 +256,37 @@ export const deleteRoute = async (routeId: string, ownerId: string): Promise<boo
 
 /**
  * The owner changes who can see their route. Made private, it leaves search,
- * the Routes list and other riders' bookmarks at once. Null when there is no
- * such route of theirs.
+ * the Routes list and other riders' bookmarks at once. Shown to others, it is
+ * shown without its personal ends. Null when there is no such route of theirs.
  */
 export const setRouteVisibility = async (
   routeId: string,
   ownerId: string,
   visibility: RouteVisibility,
+  lookups: RoutePlaceLookups = NO_LOOKUPS,
 ): Promise<{ id: string; visibility: RouteVisibility } | null> => {
+  if (visibility === "private") {
+    const result = await query(
+      `UPDATE routes SET visibility = $3, public_ends = NULL WHERE id = $1 AND creator_id = $2 RETURNING id, visibility`,
+      [routeId, ownerId, visibility],
+    );
+    return (result.rows[0] as { id: string; visibility: RouteVisibility } | undefined) ?? null;
+  }
+
+  // Shown to others: look at its ends first. Too short to show without its
+  // personal ends, it is refused (RouteTooShortError) and stays as it was.
+  const loaded = await query(
+    `SELECT r.geojson, ${STOP_POINTS_SQL} AS via_points FROM routes r WHERE r.id = $1 AND r.creator_id = $2`,
+    [routeId, ownerId],
+  );
+  const route = loaded.rows[0] as { geojson: unknown; via_points: ViewInternals["via_points"] } | undefined;
+  if (!route) return null;
+  const ends = await findPublicEnds(routeLine(route.geojson), route.via_points, lookups);
+
   const result = await query(
-    `UPDATE routes SET visibility = $3 WHERE id = $1 AND creator_id = $2 RETURNING id, visibility`,
-    [routeId, ownerId, visibility],
+    `UPDATE routes SET visibility = $3, public_ends = $4::jsonb
+      WHERE id = $1 AND creator_id = $2 RETURNING id, visibility`,
+    [routeId, ownerId, visibility, JSON.stringify(ends)],
   );
   return (result.rows[0] as { id: string; visibility: RouteVisibility } | undefined) ?? null;
 };
@@ -420,7 +479,7 @@ export const searchRoutes = async (viewerId: string, search: RouteSearchQuery): 
     });
 
   const result = await query(
-    `SELECT ${ROUTE_COLUMNS}, rd.display_name AS creator_name
+    `SELECT ${ROUTE_COLUMNS}, ${VIEW_COLUMNS}, rd.display_name AS creator_name
      FROM routes r
      LEFT JOIN riders rd ON r.creator_id = rd.id
      WHERE (r.visibility = 'public' OR r.creator_id = $1)
@@ -431,7 +490,8 @@ export const searchRoutes = async (viewerId: string, search: RouteSearchQuery): 
      LIMIT ${MAX_SEARCH_CANDIDATES}`,
     params,
   );
-  const routes = result.rows as Route[];
+  // Matched on what the searcher can see: a hidden end matches nothing.
+  const routes = asSeenBy(result.rows as (Route & ViewInternals)[], viewerId);
 
   const matches = rankRouteMatches(
     routes.map((route) => ({

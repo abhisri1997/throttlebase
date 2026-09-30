@@ -218,7 +218,9 @@ router.get('/search', routeController.searchRoutes);
  *     description: >
  *       Made private, the route leaves search, the Routes list and other
  *       riders' bookmarks at once. Shares grant access only while the route
- *       is set to specific_riders.
+ *       is set to specific_riders. Shown to others, the route is shown
+ *       without its first and last ~500 m, unless an end is at a public place
+ *       such as a hotel or fuel station; the owner still sees it whole.
  *     tags: [Routes]
  *     security:
  *       - bearerAuth: []
@@ -247,6 +249,8 @@ router.get('/search', routeController.searchRoutes);
  *         description: Invalid input
  *       404:
  *         description: Not your route, or no such route
+ *       422:
+ *         description: Too short to show others once its personal ends are hidden (code ROUTE_TOO_SHORT)
  *   delete:
  *     summary: Delete your route for good (owner only)
  *     description: >

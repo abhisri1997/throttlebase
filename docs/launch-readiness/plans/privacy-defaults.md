@@ -37,6 +37,8 @@
    - Never return contributors' points; the API already exposes only `has_start_override`.
 6. **Privacy zones for shared views:**
    - Anything shown to riders other than the owner hides the first and last ~500 m of a recorded track.
+     - ✅ **Routes** (2026-09-30): others see a public or shared route without its first and last ~500 m, in the route page, the Routes list, search, and rides planned on it; the owner sees it whole. An end within 50 m of a clearly public place (hotel, fuel station, café, viewpoint, station…; homestays, guest houses, PGs, hostels and apartments never count) stays, moved onto the place and named after it. What is at each end is looked up once, when the route is made public, and kept in `routes.public_ends` (migration 042); the view is worked out on read (`services/route-public-view.ts`), so a route made public earlier just has both ends trimmed. A route with under 5 km left once trimmed can't be made public (user's choice). Stops in hidden ends are hidden too.
+     - Still open: ride tracks and live positions shown to other riders.
    - Rider-configurable home and work zones: a circle of 200 m to 1 km, stored privately.
    - Planned ride start and end points chosen by the captain are meeting places, not homes, so they are shown as entered.
 7. **`location_coords` stays** because it feeds the meeting point. Settings must explain it ("Used only to suggest fair meeting points; never shown to anyone"), and it is cleared on deletion (already).

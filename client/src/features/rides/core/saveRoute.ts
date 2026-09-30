@@ -38,8 +38,14 @@ const MESSAGES_BY_STATUS: Record<number, string> = {
   422: "Not enough of this ride was recorded to make a route.",
 };
 
+/** Saved public, others would see it without its personal ends, and too little would be left. */
+export const ROUTE_TOO_SHORT_MESSAGE =
+  "This route is too short to share publicly without showing where it starts or ends. Save it as Only me.";
+
 export const saveRouteErrorMessage = (error: unknown): string => {
-  const status = (error as { response?: { status?: number } } | null)?.response?.status;
+  const response = (error as { response?: { status?: number; data?: { code?: unknown } } } | null)?.response;
+  if (response?.data?.code === "ROUTE_TOO_SHORT") return ROUTE_TOO_SHORT_MESSAGE;
+  const status = response?.status;
   return (
     (status !== undefined ? MESSAGES_BY_STATUS[status] : undefined) ??
     "Couldn't save the route. Check your connection and try again."

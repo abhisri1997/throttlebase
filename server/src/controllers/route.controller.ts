@@ -8,6 +8,8 @@ import {
   UpdateRouteVisibilitySchema,
 } from '../schemas/route.schemas.js';
 import * as RouteService from '../services/route.service.js';
+import { GOOGLE_LOOKUPS } from '../services/route-place-lookups.js';
+import { RouteTooShortError } from '../services/route-public-view.js';
 
 interface RiderPayload {
   riderId: string;
@@ -125,7 +127,7 @@ export const updateRouteVisibility = async (req: Request, res: Response): Promis
     const routeId = RouteIdSchema.parse(req.params.id);
     const { visibility } = UpdateRouteVisibilitySchema.parse(req.body ?? {});
 
-    const route = await RouteService.setRouteVisibility(routeId, ownerId, visibility);
+    const route = await RouteService.setRouteVisibility(routeId, ownerId, visibility, GOOGLE_LOOKUPS);
     if (!route) {
       res.status(404).json(NOT_YOURS);
       return;
@@ -134,6 +136,10 @@ export const updateRouteVisibility = async (req: Request, res: Response): Promis
   } catch (error: unknown) {
     if (isZodError(error)) {
       res.status(400).json({ error: 'Validation failed', details: error.issues });
+      return;
+    }
+    if (error instanceof RouteTooShortError) {
+      res.status(422).json({ error: error.message, code: 'ROUTE_TOO_SHORT' });
       return;
     }
     console.error('Error changing route visibility:', error);

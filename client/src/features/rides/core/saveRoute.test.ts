@@ -34,6 +34,12 @@ test("a ride with too little recorded says so", () => {
   assert.match(saveRouteErrorMessage(httpError(422)), /not enough of this ride was recorded/i);
 });
 
+test("a route too short to share publicly suggests keeping it to yourself", () => {
+  const error = { response: { status: 422, data: { code: "ROUTE_TOO_SHORT" } } };
+  assert.match(saveRouteErrorMessage(error), /too short to share publicly/i);
+  assert.match(saveRouteErrorMessage(error), /Only me/);
+});
+
 test("a ride that is not completed yet says when it can be saved", () => {
   assert.match(saveRouteErrorMessage(httpError(409)), /once the ride is completed/i);
 });

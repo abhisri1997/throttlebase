@@ -140,7 +140,9 @@ test("searching routes by place", { skip: !CONNECTION }, async (t) => {
         [reverse, "reverse"],
       ],
     );
-    assert.ok(Math.abs(results[0]!.match.start_gap_km! - 7.8) < 0.3, `gap ${results[0]!.match.start_gap_km}`);
+    // Measured to the start the searcher sees: ~500 m along the road from the
+    // saver's own start, which only the saver sees.
+    assert.ok(Math.abs(results[0]!.match.start_gap_km! - 7.4) < 0.2, `gap ${results[0]!.match.start_gap_km}`);
     assert.ok(!results.some((route) => route.id === cityHop), "the city hop starts 15 km out: beyond its 5 km radius");
   });
 

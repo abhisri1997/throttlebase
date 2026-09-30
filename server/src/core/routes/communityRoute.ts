@@ -1,18 +1,19 @@
 /**
- * A deleted rider's public route, kept for the community without anything
- * that leads back to them (docs/launch-readiness/plans/account-deletion.md,
- * decision B). A route that starts or ends at someone's home identifies them
- * without a name, so for each end:
+ * A public route as riders other than its owner see it: while its rider is
+ * active (plans/privacy-defaults.md, step 6), and once they have left, when
+ * it is kept for the community (plans/account-deletion.md, decision B). A
+ * route that starts or ends at someone's home identifies them without a
+ * name, so for each end:
  *
  *   * at a clearly public place (a hotel, fuel station, café, viewpoint…),
  *     the end is kept, moved onto that place and named after it: many
  *     people start there, so it points at nobody;
  *   * anywhere else, about 500 m comes off it, and it moves to the new line.
  *
- * With an end trimmed, a route with under 5 km left isn't kept at all: a
- * short loop is mostly its ends. Stops in trimmed ends go and the rest are
- * renumbered. The title is made from the ends' names, so none of the rider's
- * own words survive.
+ * With an end trimmed, a route with under 5 km left can't be shown at all:
+ * a short loop is mostly its ends. Stops in trimmed ends go and the rest are
+ * renumbered. A community route's title is made from the ends' names, so
+ * none of the rider's own words survive.
  *
  * Pure: the caller finds the places, looks up area names and writes.
  */
@@ -95,6 +96,8 @@ export interface TrimmedLine {
 }
 
 export interface KeptStop {
+  /** Which of the stops passed in this is. */
+  sourceIndex: number;
   position: number;
   lat: number;
   lng: number;
@@ -172,10 +175,11 @@ export const keptStops = (line: readonly LngLat[], stops: readonly LatLng[], tri
   const sums = cumulativeMeters(line);
   const total = sums[sums.length - 1]!;
   return stops
-    .map((stop) => ({ stop, along: metersAlong(line, sums, stop) }))
+    .map((stop, sourceIndex) => ({ stop, sourceIndex, along: metersAlong(line, sums, stop) }))
     .filter(({ along }) => along > trim.start && along < total - trim.end)
     .sort((a, b) => a.along - b.along)
-    .map(({ stop, along }, index) => ({
+    .map(({ stop, sourceIndex, along }, index) => ({
+      sourceIndex,
       position: index + 1,
       lat: stop.lat,
       lng: stop.lng,
@@ -183,7 +187,7 @@ export const keptStops = (line: readonly LngLat[], stops: readonly LatLng[], tri
     }));
 };
 
-export interface CommunityRouteInput {
+export interface PublicRouteInput {
   line: readonly LngLat[];
   stops: readonly LatLng[];
   /** A public place within PUBLIC_PLACE_RADIUS_METERS of each end; null when none was found. */
@@ -191,15 +195,15 @@ export interface CommunityRouteInput {
   endPlace: PublicPlace | null;
 }
 
-export interface CommunityRoutePlan extends TrimmedLine {
+export interface PublicRoutePlan extends TrimmedLine {
   /** The public place's name for a kept end; null for a trimmed one, to be named by area. */
   startName: string | null;
   endName: string | null;
   stops: KeptStop[];
 }
 
-/** What the route becomes; null when it isn't kept. */
-export const planCommunityRoute = ({ line, stops, startPlace, endPlace }: CommunityRouteInput): CommunityRoutePlan | null => {
+/** The route as others see it; null when too little would be left to show. */
+export const planPublicRoute = ({ line, stops, startPlace, endPlace }: PublicRouteInput): PublicRoutePlan | null => {
   if (line.length < 2) return null;
   // A kept end sits on its place, not on the rider's own GPS fix.
   const snapped = line.map((point, index): LngLat => {

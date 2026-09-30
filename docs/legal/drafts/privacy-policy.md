@@ -48,7 +48,7 @@ We do not record audio, access your contacts, or collect photos from your device
 - Your profile (name, username, photo, bio, city, experience and ride totals) and your follower counts are visible to other signed-in riders. Your email address and phone number never are.
 - Posts, comments, likes, ride reviews and road feedback are visible to other signed-in riders.
 - Rides are public by default: signed-in riders can see the ride, its plan and who has joined. For a ride that needs approval, other signed-in riders see only its title, date, length, captain and number of riders; its meeting point, route and who has joined are shown only to riders the captain or a co-captain accepts. When you ask to join such a ride, its captain and co-captains see your name.
-- Routes are private by default. You can share a route with specific riders or make it public, which lets every signed-in rider see and follow it.
+- Routes are private by default. You can share a route with specific riders or make it public, which lets every signed-in rider see and follow it. Other riders see it without its first and last 500 m or so, unless it starts or ends at a public place such as a hotel, café or fuel station, so it doesn't show where you set off from or arrive; a route too short to show that way can't be made public. You always see your own route whole.
 - Your ride history is shown on your profile according to the privacy setting you choose in Settings.
 
 ## Who we share data with
