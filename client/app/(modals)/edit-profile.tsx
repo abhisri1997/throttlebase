@@ -148,9 +148,9 @@ export default function EditProfileModal() {
   }, [seedRider, hydratedFromProfile]);
 
   // Single vehicle tracking for simplicity in the prototype
-  const [bikeMake, setBikeMake] = useState("Royal Enfield");
-  const [bikeModel, setBikeModel] = useState("Himalayan 450");
-  const [bikeYear, setBikeYear] = useState("2024");
+  const [bikeMake, setBikeMake] = useState("");
+  const [bikeModel, setBikeModel] = useState("");
+  const [bikeYear, setBikeYear] = useState("");
 
   const closeModal = () => {
     if (router.canGoBack()) {
@@ -167,14 +167,6 @@ export default function EditProfileModal() {
         bio,
         experience_level: experienceLevel,
         location_coords: homeLocationCoords,
-        vehicles: [
-          {
-            make: bikeMake,
-            model: bikeModel,
-            year: parseInt(bikeYear) || new Date().getFullYear(),
-            type: "Adventure/Touring",
-          },
-        ],
       }),
     onSuccess: (data) => {
       // The server's response is the source of truth; invalidating makes the
@@ -351,6 +343,7 @@ export default function EditProfileModal() {
                 style={{ color: colors.text }}
                 value={bikeMake}
                 onChangeText={setBikeMake}
+                placeholder='Royal Enfield'
               />
             </View>
             <View className='flex-1 ml-2'>
@@ -365,6 +358,7 @@ export default function EditProfileModal() {
                 style={{ color: colors.text }}
                 value={bikeModel}
                 onChangeText={setBikeModel}
+                placeholder='Himalayan 450'
               />
             </View>
           </View>
@@ -378,6 +372,7 @@ export default function EditProfileModal() {
               keyboardType='number-pad'
               value={bikeYear}
               onChangeText={setBikeYear}
+              placeholder={`${new Date().getFullYear()}`}
             />
           </View>
         </View>

@@ -10,6 +10,7 @@ import {
   Platform,
   Keyboard,
   Alert,
+  Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -258,8 +259,8 @@ export default function PostScreen() {
     const isEdited =
       item.updated_at &&
       new Date(item.updated_at).getTime() -
-        new Date(item.created_at).getTime() >
-        1000;
+      new Date(item.created_at).getTime() >
+      1000;
 
     const handleOptions = () => {
       if (Platform.OS === "web") {
@@ -309,51 +310,67 @@ export default function PostScreen() {
     const isHighlighted = item.id === activeHighlightCommentId;
 
     return (
-      <TouchableOpacity
-        className='px-4 py-3 flex-row'
+      <Pressable
+        className="px-4 py-3 flex-row"
         style={{
           borderBottomWidth: 1,
           borderBottomColor: colors.border,
-          backgroundColor: isHighlighted ? `${colors.primary}12` : colors.bg,
+          backgroundColor: isHighlighted
+            ? `${colors.primary}12`
+            : colors.bg,
         }}
         onLongPress={isOwner ? handleOptions : handleOthersOptions}
-        activeOpacity={0.9}
+        android_ripple={{ color: colors.surface }}
       >
-        <View
-          className='w-8 h-8 rounded-full items-center justify-center mr-3 mt-1'
-          style={{ backgroundColor: colors.surface }}
-        >
-          <Text className='font-bold' style={{ color: colors.text }}>
-            {item.author_name?.charAt(0).toUpperCase() || "?"}
-          </Text>
-        </View>
-        <View className='flex-1'>
-          <View className='flex-row items-center justify-between mb-1'>
-            <View className='flex-row items-center'>
-              <Text className='font-bold mr-2' style={{ color: colors.text }}>
-                {item.author_name}
-              </Text>
-              <Text className='text-xs' style={{ color: colors.textMuted }}>
+        <Pressable onPress={() => router.push(`/rider/${item.rider_id}` as any)} accessibilityRole="button" accessibilityLabel={`View ${item.author_name}'s profile`} hitSlop={4} className="mr-3 mt-1">
+          <View
+            className="w-8 h-8 rounded-full items-center justify-center mr-3 mt-1"
+            style={{ backgroundColor: colors.surface }}
+          >
+            <Text className="font-bold" style={{ color: colors.text }}>
+              {item.author_name?.charAt(0).toUpperCase() || "?"}
+            </Text>
+          </View>
+        </Pressable>
+
+        <View className="flex-1">
+          <View className="flex-row items-center justify-between mb-1">
+            <View className="flex-row items-center">
+              <Pressable
+                onPress={() => router.push(`/rider/${item.rider_id}` as any)}
+                accessibilityRole="link"
+                hitSlop={4}
+              >
+                <Text className="font-bold mr-2" style={{ color: colors.text }}>
+                  {item.author_name}
+                </Text>
+              </Pressable>
+
+              <Text className="text-xs" style={{ color: colors.textMuted }}>
                 {new Date(item.created_at).toLocaleDateString()}
               </Text>
+
               {isEdited && (
                 <Text
-                  className='text-[10px] ml-1 italic'
+                  className="text-[10px] ml-1 italic"
                   style={{ color: colors.textMuted }}
                 >
                   (edited)
                 </Text>
               )}
             </View>
-            <TouchableOpacity
-              accessibilityRole='button'
-              accessibilityLabel='Comment options'
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Comment options"
               onPress={isOwner ? handleOptions : handleOthersOptions}
-              className='p-1'
+              hitSlop={8}
+              className="p-1"
             >
               <MoreVertical color={colors.textMuted} size={16} />
-            </TouchableOpacity>
+            </Pressable>
           </View>
+
           <MentionText
             content={item.content}
             mentionedRiders={item.mentioned_riders}
@@ -362,7 +379,7 @@ export default function PostScreen() {
             onMentionPress={(riderId) => router.push(`/rider/${riderId}` as any)}
           />
         </View>
-      </TouchableOpacity>
+      </Pressable>
     );
   };
 
