@@ -30,7 +30,9 @@ export const getMyProfile = async (
       return;
     }
 
-    res.json({ rider });
+    const riderVehicles = await RiderService.getRiderVehicles(rider.id);
+
+    res.json({ rider: { ...rider, vehicles: riderVehicles || [] } });
   } catch (error: any) {
     console.error("Get profile error:", error.message);
     res.status(500).json({ error: "Internal server error" });

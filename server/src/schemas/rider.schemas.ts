@@ -28,10 +28,12 @@ export const UpdateRiderSchema = z.object({
   location_region: z
     .string()
     .max(100)
+    .nullable()
     .optional(),
   phone_number: z
     .string()
     .max(20)
+    .nullable()
     .optional(),
   weight_kg: z
     .number()
