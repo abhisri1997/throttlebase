@@ -35,6 +35,7 @@ import {
   requireSwaggerBasicAuth,
 } from "./config/security.js";
 import { featureFlags, requireFeature } from "./config/features.js";
+import garageSuggestionRoutes from "./routes/garageSuggestion.routes.js";
 
 const app = express();
 
@@ -220,6 +221,8 @@ app.use("/api/maps", mapsRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/consents", consentRoutes);
 app.use("/api/admin/moderation", moderationRoutes);
+// Vehicle suggestions
+app.use("/api/garage-suggestion", garageSuggestionRoutes);
 
 // Database health check route
 app.get("/db-test", async (req, res) => {

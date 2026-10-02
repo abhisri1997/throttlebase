@@ -72,6 +72,7 @@ export default function CreateRideModal() {
   const routeId = typeof params.routeId === "string" && !params.editRide ? params.routeId : null;
 
   if (!routeId) return <CreateRideForm plan={null} />;
+
   return <CreateRideOnRoute routeId={routeId} direction={parseRideDirection(params.direction)} />;
 }
 
@@ -522,10 +523,10 @@ function CreateRideForm({ plan }: { plan: RoutePlan | null }) {
             onFollowRoadChange={setFollowRoad}
             {...(plan
               ? {
-                  stops: plan.stops,
-                  isStopKept: (stop) => isRouteStopKept(stops, stop),
-                  onStopKeptChange: (stop, keep) => setStops((current) => keepRouteStop(current, stop, keep)),
-                }
+                stops: plan.stops,
+                isStopKept: (stop) => isRouteStopKept(stops, stop),
+                onStopKeptChange: (stop, keep) => setStops((current) => keepRouteStop(current, stop, keep)),
+              }
               : {})}
           />
         ) : null}
