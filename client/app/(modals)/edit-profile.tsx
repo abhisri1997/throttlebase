@@ -126,6 +126,7 @@ export default function EditProfileModal() {
     [number, number] | null
   >(null);
   const [homeLocationName, setHomeLocationName] = useState("");
+  const [locationDirty, setLocationDirty] = useState(false);
   const [hydratedFromProfile, setHydratedFromProfile] = useState(false);
 
   useEffect(() => {
@@ -160,7 +161,7 @@ export default function EditProfileModal() {
         phone_number: phoneNumber.trim() ? `+91${phoneNumber.trim()}` : null,
         experience_level: experienceLevel,
         location_coords: homeLocationCoords,
-        location_city: homeLocationName,
+        ...(locationDirty ? { location_city: homeLocationName, location_region: null } : {}),
       }),
     onSuccess: (data) => {
       // The server's response is the source of truth; invalidating makes the
@@ -305,6 +306,7 @@ export default function EditProfileModal() {
             onSelect={(result) => {
               setHomeLocationCoords(result.coords);
               setHomeLocationName(result.name);
+              setLocationDirty(true);
             }}
             placeholder='Search city or neighborhood...'
           />
