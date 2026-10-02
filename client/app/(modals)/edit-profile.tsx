@@ -72,9 +72,6 @@ const extractHomeCoords = (rider: any): [number, number] | null => {
 };
 
 const extractHomeName = (rider: any): string => {
-  if (rider?.home_location_name) {
-    return rider.home_location_name;
-  }
 
   const sanitizePart = (value: unknown): string => {
     if (typeof value !== "string") {
@@ -98,6 +95,7 @@ const extractHomeName = (rider: any): string => {
     sanitizePart(rider?.location_city),
     sanitizePart(rider?.location_region),
   ].filter(Boolean);
+
   return parts.join(", ");
 };
 
@@ -116,15 +114,11 @@ export default function EditProfileModal() {
     initialData: () => queryClient.getQueryData(["rider", "me"]) as any,
   });
 
-  const seedRider = profileObj
-    ? {
-      ...profileObj,
-      home_location_name: currentRider?.home_location_name,
-    }
-    : currentRider;
+  const seedRider = profileObj ?? currentRider;
 
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [experienceLevel, setExperienceLevel] = useState<
     "beginner" | "intermediate" | "expert"
   >("beginner");
@@ -141,16 +135,14 @@ export default function EditProfileModal() {
 
     setDisplayName(seedRider.display_name || "");
     setBio(seedRider.bio || "");
+    setPhoneNumber((seedRider.phone_number || "").replace(/^\+91/, ""));
     setExperienceLevel(seedRider.experience_level || "beginner");
     setHomeLocationCoords(extractHomeCoords(seedRider));
     setHomeLocationName(extractHomeName(seedRider));
     setHydratedFromProfile(true);
   }, [seedRider, hydratedFromProfile]);
 
-  // Single vehicle tracking for simplicity in the prototype
-  const [bikeMake, setBikeMake] = useState("");
-  const [bikeModel, setBikeModel] = useState("");
-  const [bikeYear, setBikeYear] = useState("");
+
 
   const closeModal = () => {
     if (router.canGoBack()) {
@@ -165,8 +157,10 @@ export default function EditProfileModal() {
       updateProfile({
         display_name: displayName,
         bio,
+        phone_number: phoneNumber.trim() ? `+91${phoneNumber.trim()}` : null,
         experience_level: experienceLevel,
         location_coords: homeLocationCoords,
+        location_city: homeLocationName,
       }),
     onSuccess: (data) => {
       // The server's response is the source of truth; invalidating makes the
@@ -190,6 +184,8 @@ export default function EditProfileModal() {
   const handleSave = () => {
     if (!displayName.trim())
       return Alert.alert("Validation", "Display name is required");
+    if (phoneNumber.trim() && !/^[6-9]\d{9}$/.test(phoneNumber.trim()))
+      return Alert.alert("Validation", "Enter a valid 10-digit Indian mobile number");
     mutation.mutate();
   };
 
@@ -232,13 +228,13 @@ export default function EditProfileModal() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView className='flex-1 px-4 pt-6' keyboardShouldPersistTaps='always'>
+      <ScrollView className='flex-1 px-4 pt-6' keyboardShouldPersistTaps='handled'>
         {/* Core Identity */}
         <Text
           className='text-sm font-bold uppercase mb-2'
           style={{ color: colors.textMuted }}
         >
-          Public Identity
+          Display Name
         </Text>
         <TextInput
           className='p-4 rounded-xl mb-4'
@@ -253,6 +249,33 @@ export default function EditProfileModal() {
           value={displayName}
           onChangeText={setDisplayName}
         />
+        <Text
+          className='text-sm font-bold uppercase mb-2'
+          style={{ color: colors.textMuted }}
+        >
+          Phone
+        </Text>
+        <TextInput
+          className='p-4 rounded-xl mb-4'
+          style={{
+            backgroundColor: colors.inputBg,
+            borderWidth: 1,
+            borderColor: colors.border,
+            color: colors.text,
+          }}
+          placeholder='10-digit mobile number'
+          placeholderTextColor={colors.textMuted}
+          keyboardType='phone-pad'
+          maxLength={10}
+          value={phoneNumber}
+          onChangeText={(text) => setPhoneNumber(text.replace(/[^0-9]/g, ''))}
+        />
+        <Text
+          className='text-sm font-bold uppercase mb-2'
+          style={{ color: colors.textMuted }}
+        >
+          Bio
+        </Text>
         <TextInput
           className='p-4 rounded-xl mb-6 h-28'
           style={{
@@ -268,7 +291,12 @@ export default function EditProfileModal() {
           onChangeText={setBio}
           textAlignVertical='top'
         />
-
+        <Text
+          className='text-sm font-bold uppercase mb-2'
+          style={{ color: colors.textMuted }}
+        >
+          Hometown
+        </Text>
         <View className='mb-6'>
           <LocationPicker
             label='Home Location (Used for Auto-Start Rides)'
@@ -316,66 +344,7 @@ export default function EditProfileModal() {
           ))}
         </View>
 
-        {/* Virtual Garage */}
-        <Text
-          className='text-sm font-bold uppercase mb-2'
-          style={{ color: colors.textMuted }}
-        >
-          Primary Motorcycle
-        </Text>
-        <View
-          className='p-4 rounded-2xl mb-12'
-          style={{ borderWidth: 1, borderColor: colors.border }}
-        >
-          <View
-            className='flex-row pb-3 mb-3'
-            style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
-          >
-            <View className='flex-1 mr-2'>
-              <Text
-                className='text-xs mb-1'
-                style={{ color: colors.textMuted }}
-              >
-                Make
-              </Text>
-              <TextInput
-                className='text-lg font-bold'
-                style={{ color: colors.text }}
-                value={bikeMake}
-                onChangeText={setBikeMake}
-                placeholder='Royal Enfield'
-              />
-            </View>
-            <View className='flex-1 ml-2'>
-              <Text
-                className='text-xs mb-1'
-                style={{ color: colors.textMuted }}
-              >
-                Model
-              </Text>
-              <TextInput
-                className='text-lg font-bold'
-                style={{ color: colors.text }}
-                value={bikeModel}
-                onChangeText={setBikeModel}
-                placeholder='Himalayan 450'
-              />
-            </View>
-          </View>
-          <View>
-            <Text className='text-xs mb-1' style={{ color: colors.textMuted }}>
-              Year
-            </Text>
-            <TextInput
-              className='text-lg font-bold'
-              style={{ color: colors.text }}
-              keyboardType='number-pad'
-              value={bikeYear}
-              onChangeText={setBikeYear}
-              placeholder={`${new Date().getFullYear()}`}
-            />
-          </View>
-        </View>
+
       </ScrollView>
     </SafeAreaView>
   );
