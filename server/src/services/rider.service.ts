@@ -42,6 +42,16 @@ export interface RiderProfile {
   };
 }
 
+export interface VehicleProfile {
+  id: string;
+  rider_id: string;
+  make: string;
+  model: string;
+  year: number;
+  engine_capacity_cc: number | null;
+}
+
+
 export interface MentionSuggestion {
   id: string;
   username: string;
@@ -68,6 +78,15 @@ const PROFILE_COLUMNS = `
     WHERE f.follower_id = riders.id AND fr.deleted_at IS NULL)::int AS following_count
 `;
 
+const VEHICLE_COLUMNS = `
+  id,
+  rider_id,
+  make,
+  model,
+  year,
+  engine_capacity_cc
+`;
+
 /**
  * Get a rider's full profile by ID.
  * Returns null if rider is not found or has been soft-deleted.
@@ -85,6 +104,21 @@ export const getById = async (id: string): Promise<RiderProfile | null> => {
   }
 
   return result.rows[0] as RiderProfile;
+};
+
+export const getRiderVehicles = async (riderId: string): Promise<VehicleProfile[]> => {
+  const result = await query(
+    `SELECT ${VEHICLE_COLUMNS}
+     FROM vehicles
+     WHERE rider_id = $1`,
+    [riderId],
+  );
+
+  if (result.rows.length === 0) {
+    return [];
+  }
+
+  return result.rows as VehicleProfile[];
 };
 
 /**
