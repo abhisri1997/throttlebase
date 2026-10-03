@@ -1,4 +1,4 @@
-import db, { query } from "../config/db.js";
+import { query } from "../config/db.js";
 import { getById } from "./rider.service.js";
 
 export interface GarageVehicleDetails {

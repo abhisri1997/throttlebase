@@ -17,9 +17,7 @@ import {
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:5001";
 const TERMS_VERSION = process.env.TERMS_VERSION || "2026-01-01";
 
-type LoginResponse = {
-  token?: string;
-};
+
 
 type RiderProfileResponse = {
   rider?: {
@@ -278,7 +276,7 @@ const run = async () => {
 
   const captain = await getMyProfile(captainToken);
   const participant = await getMyProfile(participantToken);
-  const mutedParticipant = await getMyProfile(mutedToken);
+  const _mutedParticipant = await getMyProfile(mutedToken);
 
   const healthRes = await authedRequest(captainToken, "/api/live/health");
   assert(
