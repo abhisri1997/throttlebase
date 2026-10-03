@@ -1,17 +1,19 @@
 import React, { useRef, useEffect } from "react";
 import { View, Text, TouchableOpacity, useWindowDimensions, Animated } from "react-native";
-import { Calendar, Gauge, Camera, ChevronRight, Plus } from "lucide-react-native";
+import { Calendar, Gauge, Camera, ChevronRight, Plus, MoreVertical } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useTheme } from "../theme/ThemeContext";
 
 export default function BikeCard({
   vehicle,
   onAddPhoto,
-  isAddHovered
+  isAddHovered,
+  onMenuPress
 }: {
   vehicle: any;
   onAddPhoto?: () => void;
   isAddHovered?: boolean;
+  onMenuPress?: () => void;
 }) {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
@@ -124,7 +126,19 @@ export default function BikeCard({
     >
       {/* Top section with bike info and image */}
       <View className="p-5 pb-3">
-        <View className="flex-row justify-between">
+        <View className="flex-row justify-between relative">
+          
+          {/* Action Menu (Top Right) */}
+          {onMenuPress && (
+            <TouchableOpacity
+              onPress={onMenuPress}
+              className="absolute top-0 right-0 p-1 z-10"
+              hitSlop={{ top: 15, right: 15, bottom: 15, left: 15 }}
+            >
+              <MoreVertical size={20} color={colors.textMuted} />
+            </TouchableOpacity>
+          )}
+
           {/* Left: text content */}
           <View className="flex-1">
             {/* Brand */}
