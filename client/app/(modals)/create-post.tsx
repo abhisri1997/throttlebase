@@ -10,10 +10,11 @@ import {
   Platform,
   Keyboard,
   Pressable,
+  Image,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Camera, X } from "lucide-react-native";
+import { Camera, X, Trash2 } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
 import { useTheme } from "../../src/theme/ThemeContext";
@@ -25,16 +26,20 @@ import {
   type MentionSuggestion,
 } from "../../src/utils/mentions";
 import { ModalHeader } from "../../src/components/ModalHeader";
-const submitPost = async (content: string, editId?: string) => {
+import { pickImage, uploadImage } from "../../src/services/imageUpload";
+
+const submitPost = async (content: string, media_urls?: string[], editId?: string) => {
   if (editId) {
     const { data } = await apiClient.patch(`/api/community/posts/${editId}`, {
       content,
+      media_urls,
     });
 
     return data;
   }
   const { data } = await apiClient.post("/api/community/posts", {
     content,
+    media_urls,
     visibility: "public",
   });
 
@@ -50,6 +55,8 @@ export default function CreatePostModal() {
     defaultContent?: string;
   }>();
   const [content, setContent] = useState(params.defaultContent || "");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [selection, setSelection] = useState({
     start: (params.defaultContent || "").length,
     end: (params.defaultContent || "").length,
@@ -91,8 +98,24 @@ export default function CreatePostModal() {
       router.replace("/(tabs)/feed");
     }
   };
+
+  const handlePickImage = async () => {
+    try {
+      const uri = await pickImage();
+      if (!uri) return;
+
+      setIsUploadingImage(true);
+      const url = await uploadImage(uri);
+      setImageUrl(url);
+    } catch (err) {
+      Alert.alert("Error", "Failed to upload image. Please try again.");
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
   const mutation = useMutation({
-    mutationFn: () => submitPost(content, params.editId),
+    mutationFn: () => submitPost(content, imageUrl ? [imageUrl] : undefined, params.editId),
     onSuccess: () => {
       // Refresh the feed and individual post cache queryClient.invalidateQueries({ queryKey: ['feed'] });
 
@@ -107,7 +130,7 @@ export default function CreatePostModal() {
   });
 
   const handlePost = () => {
-    if (!content.trim()) return;
+    if (!content.trim() && !imageUrl) return;
     mutation.mutate();
   };
 
@@ -150,15 +173,15 @@ export default function CreatePostModal() {
             rightAction={{
               label: params.editId ? "Save" : "Post",
               onPress: handlePost,
-              disabled: !content.trim(),
-              loading: mutation.isPending,
+              disabled: !content.trim() && !imageUrl,
+              loading: mutation.isPending || isUploadingImage,
               variant: "pill"
             }}
           />
           {/* Text Input */}
           <TextInput
-            className='text-xl flex-1 leading-8 px-4 pt-4'
-            style={{ color: colors.text }}
+            className='text-xl px-4 pt-4'
+            style={{ color: colors.text, minHeight: 120 }}
             placeholder="What's on your mind? Got a route to share?"
             placeholderTextColor='#64748b'
             multiline
@@ -171,6 +194,30 @@ export default function CreatePostModal() {
             }
             textAlignVertical='top'
           />
+          
+          {imageUrl && (
+            <View className="px-4 mt-2 mb-4 relative">
+              <Image 
+                source={{ uri: imageUrl }} 
+                className="w-full h-64 rounded-xl" 
+                resizeMode="cover"
+              />
+              <TouchableOpacity 
+                className="absolute top-2 right-6 w-8 h-8 rounded-full items-center justify-center bg-black/50"
+                onPress={() => setImageUrl(null)}
+              >
+                <Trash2 color="white" size={16} />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {isUploadingImage && (
+            <View className="px-4 mt-2 mb-4 items-center justify-center h-64 rounded-xl" style={{ backgroundColor: colors.inputBg }}>
+                <ActivityIndicator color={colors.primary} size="large" />
+                <Text style={{ color: colors.textMuted, marginTop: 12 }}>Uploading photo...</Text>
+            </View>
+          )}
+
           {showMentionSuggestions ? (
             <View className='mb-4'>
               <MentionSuggestions
@@ -182,16 +229,12 @@ export default function CreatePostModal() {
             </View>
           ) : null}
           {/* Toolbar */}
-          <View className='border-t py-4 flex-row items-center' style={{ borderTopColor: colors.border }}>
+          <View className='border-t py-4 px-4 flex-row items-center' style={{ borderTopColor: colors.border }}>
             <TouchableOpacity
               className='w-12 h-12 rounded-full items-center justify-center mr-3 border'
               style={{ borderColor: colors.border }}
-              onPress={() =>
-                Alert.alert(
-                  "Notice",
-                  "Photo uploads require an S3 storage bucket configuration which is currently not implemented.",
-                )
-              }
+              onPress={handlePickImage}
+              disabled={isUploadingImage}
             >
               <Camera color='#22c55e' size={24} />
             </TouchableOpacity>

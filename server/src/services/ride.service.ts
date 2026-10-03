@@ -241,11 +241,8 @@ export const createRide = async (
       options.kind ?? "planned",
     ];
 
-    let paramIndex = values.length;
-
     // Optionally add start_point
     if (data.start_point_coords) {
-      paramIndex++;
       columns.push("start_point");
       values.push(
         `SRID=4326;POINT(${data.start_point_coords[0]} ${data.start_point_coords[1]})`,
@@ -254,14 +251,12 @@ export const createRide = async (
 
     // Optionally add start_point_name
     if (data.start_point_name) {
-      paramIndex++;
       columns.push("start_point_name");
       values.push(data.start_point_name);
     }
 
     // Optionally add end_point
     if (data.end_point_coords) {
-      paramIndex++;
       columns.push("end_point");
       values.push(
         `SRID=4326;POINT(${data.end_point_coords[0]} ${data.end_point_coords[1]})`,
@@ -270,14 +265,12 @@ export const createRide = async (
 
     // Optionally add end_point_name
     if (data.end_point_name) {
-      paramIndex++;
       columns.push("end_point_name");
       values.push(data.end_point_name);
     }
 
     // Store auto-start flag
     if (data.start_point_auto) {
-      paramIndex++;
       columns.push("start_point_auto");
       values.push(true);
     }

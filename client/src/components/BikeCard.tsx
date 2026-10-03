@@ -1,8 +1,12 @@
-import React, { useRef, useEffect } from "react";
-import { View, Text, TouchableOpacity, useWindowDimensions, Animated } from "react-native";
+import React, { useRef, useEffect, useState } from "react";
+import { View, Text, TouchableOpacity, useWindowDimensions, Animated, Image, ActivityIndicator, Alert } from "react-native";
 import { Calendar, Gauge, Camera, ChevronRight, Plus, MoreVertical } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useTheme } from "../theme/ThemeContext";
+import { pickImage, uploadImage } from "../services/imageUpload";
+import { apiClient } from "../api/client";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { CURRENT_RIDER_KEY } from "../services/useCurrentRider";
 
 export default function BikeCard({
   vehicle,
@@ -20,6 +24,8 @@ export default function BikeCard({
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const [isUploading, setIsUploading] = useState(false);
   
   const cardWidth = variant === "carousel" ? width * 0.85 : "100%";
   const cardMargin = variant === "carousel" ? 12 : 0;
@@ -48,6 +54,48 @@ export default function BikeCard({
       duration: 250,
       useNativeDriver: true,
     }).start();
+  };
+
+  const updateVehicleMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const { data } = await apiClient.put(`/api/garage/vehicle/${vehicle.id}`, payload);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: CURRENT_RIDER_KEY });
+    },
+    onError: (err) => {
+      Alert.alert("Error", "Failed to update vehicle photo.");
+    }
+  });
+
+  const handlePickPhoto = async () => {
+    if (onAddPhoto) {
+      onAddPhoto();
+      return;
+    }
+
+    try {
+      const uri = await pickImage();
+      if (!uri) return;
+
+      setIsUploading(true);
+      const url = await uploadImage(uri);
+      
+      const payload = {
+        make: vehicle.make,
+        model: vehicle.model,
+        year: vehicle.year,
+        engine_capacity_cc: vehicle.engine_capacity_cc,
+        image_url: url,
+      };
+
+      updateVehicleMutation.mutate(payload);
+    } catch (err) {
+      Alert.alert("Error", "Failed to upload photo.");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const noVehicleCard =
@@ -198,21 +246,31 @@ export default function BikeCard({
             </View>
           </View>
 
-          {/* Right: bike silhouette */}
+          {/* Right: bike silhouette or image */}
           <View
-            className="items-center justify-center"
+            className="items-center justify-center rounded-xl overflow-hidden relative"
             style={{ width: 130, height: 110 }}
           >
-            <Text style={{ fontSize: 64, opacity: 0.6 }}>🏍️</Text>
+            {vehicle.image_url ? (
+              <Image source={{ uri: vehicle.image_url }} className="w-full h-full" resizeMode="cover" />
+            ) : (
+              <Text style={{ fontSize: 64, opacity: 0.6 }}>🏍️</Text>
+            )}
+            {isUploading && (
+              <View className="absolute inset-0 bg-black/50 items-center justify-center">
+                <ActivityIndicator color={colors.primary} />
+              </View>
+            )}
           </View>
         </View>
       </View>
 
-      {/* Add Photo button */}
+      {/* Add Photo / Edit Photo button */}
       <TouchableOpacity
         className="flex-row items-center px-5 py-3"
         style={{ borderTopWidth: 1, borderTopColor: colors.border }}
-        onPress={onAddPhoto}
+        onPress={handlePickPhoto}
+        disabled={isUploading || updateVehicleMutation.isPending}
         activeOpacity={0.7}
       >
         <Camera color={colors.textMuted} size={16} />
@@ -220,7 +278,7 @@ export default function BikeCard({
           className="text-sm ml-2"
           style={{ color: colors.textMuted }}
         >
-          Add Photo
+          {vehicle.image_url ? "Edit Photo" : "Add Photo"}
         </Text>
         <ChevronRight
           color={colors.textMuted}

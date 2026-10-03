@@ -25,6 +25,8 @@ import { createRiderAccountRoutes } from "./adapters/http/riderAccountRoutes.js"
 import { createAccountDeletionRoutes } from "./adapters/http/accountDeletionRoutes.js";
 import { initAuthentication } from "./middleware/auth.middleware.js";
 import { initSocketAuthentication } from "./realtime/auth.js";
+import uploadRoutes from "./routes/upload.routes.js";
+import { setupCloudinary } from "./services/cloudinary.service.js";
 import cors from "cors";
 import helmet from "helmet";
 import {
@@ -227,6 +229,9 @@ app.use("/api/garage-suggestion", garageSuggestionRoutes);
 // Garage management
 app.use("/api/garage", manageGarageRoutes);
 
+// Uploads
+app.use("/api/upload", uploadRoutes);
+
 // Database health check route
 app.get("/db-test", async (req, res) => {
   try {
@@ -259,6 +264,9 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 });
 
 const startServer = async () => {
+  // Configure Cloudinary
+  setupCloudinary();
+
   // Test DB connection before starting the server
   await testConnection();
 

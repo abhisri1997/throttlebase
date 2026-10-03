@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import {
   CreatePostSchema,
+  EditPostSchema,
   CreateCommentSchema,
   CreateGroupSchema,
   CreateReviewSchema,
@@ -104,16 +105,12 @@ export const updatePost = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const { content } = req.body;
-    if (!content) {
-      res.status(400).json({ error: "Content is required" });
-      return;
-    }
+    const data = EditPostSchema.parse(req.body);
 
     const post = await CommunityService.updatePost(
       req.params.id as string,
       rid(req),
-      content,
+      data,
     );
     if (!post) {
       res.status(404).json({ error: "Post not found or not yours" });

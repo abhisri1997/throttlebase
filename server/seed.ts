@@ -65,7 +65,7 @@ async function seed() {
 
     // 2. Create Routes in Bangalore
     console.log('Creating routes...');
-    const nandiRouteRes = await vikram.post('/api/routes', {
+    const _nandiRouteRes = await vikram.post('/api/routes', {
       title: 'Bangalore to Nandi Hills Morning Dash',
       visibility: 'public',
       geojson: {
@@ -143,7 +143,7 @@ async function seed() {
     });
     const p2Id = post2.post?.id || post2.id;
 
-    const post3 = await priya.post('/api/community/posts', {
+    const _post3 = await priya.post('/api/community/posts', {
       content: 'Route mapped successfully for the Kolar ride. Check it out and join the pack!',
       visibility: 'public',
       route_id: kolarRouteId

@@ -145,7 +145,7 @@ test("reports and the word filter", { skip: !CONNECTION }, async (t) => {
     const before = (await admin.query(`SELECT count(*)::int AS n FROM posts WHERE rider_id = $1`, [DEVI])).rows[0].n;
 
     await assert.rejects(community!.createPost(DEVI, { content: "You absolute b1tch" }), /isn't allowed/);
-    await assert.rejects(community!.updatePost(deviPost, DEVI, "go die"), /isn't allowed/);
+    await assert.rejects(community!.updatePost(deviPost, DEVI, { content: "go die" }), /isn't allowed/);
     await assert.rejects(community!.addComment(deviPost, DEVI, { content: "F U C K this" }), /isn't allowed/);
 
     const after = (await admin.query(`SELECT count(*)::int AS n FROM posts WHERE rider_id = $1`, [DEVI])).rows[0].n;
