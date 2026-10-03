@@ -17,6 +17,7 @@ import { Button } from "../../src/components/Button";
 import { Input } from "../../src/components/Input";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { getApiErrorMessage } from "../../src/utils/apiError";
+import { ModalHeader } from "../../src/components/ModalHeader";
 
 const supportCategories = [
   { value: "bug", label: "Bug" },
@@ -162,7 +163,6 @@ export default function SupportModal() {
     return (
       <View className='flex-1' style={{ backgroundColor: colors.bg }}>
         <SafeAreaView
-          className='px-4 py-3 flex-row items-center'
           style={{
             backgroundColor: colors.surface,
             borderBottomWidth: 1,
@@ -170,18 +170,13 @@ export default function SupportModal() {
           }}
           edges={["top"]}
         >
-          <TouchableOpacity
-            onPress={() => setSelectedTicket(null)}
-            className='p-2 mr-2'
-          >
-            <ChevronLeft color={colors.text} size={24} />
-          </TouchableOpacity>
-          <Text
-            className='text-xl font-bold flex-1'
-            style={{ color: colors.text }}
-          >
-            Ticket Detail
-          </Text>
+          <ModalHeader
+            title="Ticket Detail"
+            leftAlignTitle
+            noBorder
+            leftAction="back"
+            onLeftPress={() => setSelectedTicket(null)}
+          />
         </SafeAreaView>
 
         <ScrollView
@@ -363,7 +358,6 @@ export default function SupportModal() {
   return (
     <View className='flex-1' style={{ backgroundColor: colors.bg }}>
       <SafeAreaView
-        className='px-4 py-3 flex-row items-center'
         style={{
           backgroundColor: colors.surface,
           borderBottomWidth: 1,
@@ -371,15 +365,13 @@ export default function SupportModal() {
         }}
         edges={["top"]}
       >
-        <TouchableOpacity onPress={() => router.back()} className='p-2 mr-2'>
-          <ChevronLeft color={colors.text} size={24} />
-        </TouchableOpacity>
-        <Text
-          className='text-xl font-bold flex-1'
-          style={{ color: colors.text }}
-        >
-          Support Center
-        </Text>
+        <ModalHeader
+          title="Support Center"
+          leftAlignTitle
+          noBorder
+          leftAction="back"
+          onLeftPress={() => router.back()}
+        />
       </SafeAreaView>
 
       <ScrollView

@@ -19,6 +19,7 @@ import {
 import { apiClient } from "../../src/api/client";
 import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
 import { useTheme } from "../../src/theme/ThemeContext";
+import { ModalHeader } from "../../src/components/ModalHeader";
 
 interface NotificationItem {
   id: string;
@@ -175,7 +176,7 @@ export default function NotificationsModal() {
   return (
     <View className='flex-1' style={{ backgroundColor: colors.bg }}>
       <SafeAreaView
-        className='px-4 py-3'
+        className='pt-3'
         style={{
           backgroundColor: colors.surface,
           borderBottomWidth: 1,
@@ -183,28 +184,24 @@ export default function NotificationsModal() {
         }}
         edges={["top"]}
       >
-        <View className='flex-row items-center'>
-          <TouchableOpacity onPress={() => router.back()} className='p-2 mr-2'>
-            <ChevronLeft color={colors.text} size={24} />
-          </TouchableOpacity>
-          <View className='flex-1'>
-            <Text className='text-xl font-bold' style={{ color: colors.text }}>
-              Notifications
-            </Text>
-            <Text style={{ color: colors.textMuted }}>
-              {unreadCount} unread
-            </Text>
-          </View>
-          <TouchableOpacity
-            onPress={() => router.push("/(modals)/settings")}
-            className='w-10 h-10 rounded-full items-center justify-center'
-            style={{ backgroundColor: colors.inputBg }}
-          >
-            <SlidersHorizontal color={colors.textMuted} size={18} />
-          </TouchableOpacity>
-        </View>
-
-        <View className='flex-row mt-3'>
+        <ModalHeader
+          title="Notifications"
+          subtitle={`${unreadCount} unread`}
+          leftAlignTitle
+          noBorder
+          leftAction="back"
+          onLeftPress={() => router.back()}
+          rightActionContent={
+            <TouchableOpacity
+              onPress={() => router.push("/(modals)/settings")}
+              className='w-10 h-10 rounded-full items-center justify-center'
+              style={{ backgroundColor: colors.inputBg }}
+            >
+              <SlidersHorizontal color={colors.textMuted} size={18} />
+            </TouchableOpacity>
+          }
+        />
+        <View className='flex-row mt-3 px-4 pb-3'>
           <TouchableOpacity
             onPress={() => setUnreadOnly(false)}
             className='px-4 py-2 rounded-full mr-2'

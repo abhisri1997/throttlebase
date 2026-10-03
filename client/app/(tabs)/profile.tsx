@@ -60,7 +60,7 @@ export default function ProfileScreen() {
 
   const handleLogout = async () => {
     await logout();
-    router.replace("/(auth)/login");
+    router.replace("/(auth)/sign-in");
   };
 
   if (profileLoading) {
@@ -303,7 +303,7 @@ export default function ProfileScreen() {
               </Pressable>
             </View>
           </View>
-          
+
           {!displayRider?.vehicles || displayRider.vehicles.length === 0 ? (
             <View className="px-5">
               <BikeCard vehicle={null} isAddHovered={isAddingHovered} />

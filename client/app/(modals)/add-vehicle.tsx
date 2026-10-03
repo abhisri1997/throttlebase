@@ -16,6 +16,7 @@ import { apiClient } from "../../src/api/client";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { CURRENT_RIDER_KEY } from "../../src/services/useCurrentRider";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
+import { ModalHeader } from "../../src/components/ModalHeader";
 
 interface Brand {
     id: string;
@@ -183,34 +184,16 @@ export default function AddVehicleModal() {
                 behavior={Platform.OS === "ios" ? "padding" : "height"}
                 className="flex-1"
             >
-                <View
-                    className="flex-row items-center justify-between p-4 border-b"
-                    style={{
-                        borderBottomColor: colors.border,
-                        backgroundColor: colors.surface,
+                <ModalHeader
+                    title={editMode ? "Edit Vehicle" : "Add Vehicle"}
+                    leftAction="cancel"
+                    rightAction={{
+                        label: "Save",
+                        onPress: handleSave,
+                        disabled: isSaveDisabled,
+                        loading: saveVehicleMutation.isPending,
                     }}
-                >
-                    <TouchableOpacity onPress={() => router.back()} hitSlop={20}>
-                        <Text className="font-bold text-lg" style={{ color: colors.textMuted }}>
-                            Cancel
-                        </Text>
-                    </TouchableOpacity>
-                    <Text className="font-bold text-lg" style={{ color: colors.text }}>
-                        {editMode ? "Edit Vehicle" : "Add Vehicle"}
-                    </Text>
-                    <TouchableOpacity onPress={handleSave} disabled={isSaveDisabled || saveVehicleMutation.isPending}>
-                        {saveVehicleMutation.isPending ? (
-                            <ActivityIndicator size="small" color={colors.primary} />
-                        ) : (
-                            <Text
-                                className="font-bold text-lg"
-                                style={{ color: isSaveDisabled ? colors.textMuted : colors.primary }}
-                            >
-                                Save
-                            </Text>
-                        )}
-                    </TouchableOpacity>
-                </View>
+                />
 
                 <ScrollView className="flex-1 px-4 pt-6" keyboardShouldPersistTaps="handled">
 

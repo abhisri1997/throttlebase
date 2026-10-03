@@ -19,6 +19,7 @@ import {
 import { getApiErrorMessage } from "../../src/utils/apiError";
 import { useTheme } from "../../src/theme/ThemeContext";
 import LocationPicker from "../../src/components/LocationPicker";
+import { ModalHeader } from "../../src/components/ModalHeader";
 
 const updateProfile = async (payload: any) => {
   const { data } = await apiClient.patch("/api/riders/me", payload);
@@ -192,42 +193,16 @@ export default function EditProfileModal() {
 
   return (
     <SafeAreaView className='flex-1' style={{ backgroundColor: colors.bg }}>
-      {/* Header */}
-      <View
-        className='px-4 pt-4 pb-2 flex-row justify-between items-center'
-        style={{
-          borderBottomWidth: 1,
-          borderBottomColor: colors.border,
-          backgroundColor: colors.surface,
+      <ModalHeader
+        title="Edit Profile"
+        leftAction="cancel"
+        onLeftPress={closeModal}
+        rightAction={{
+          label: "Save",
+          onPress: handleSave,
+          loading: mutation.isPending,
         }}
-      >
-        <TouchableOpacity
-          onPress={closeModal}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Text
-            className='font-bold text-lg'
-            style={{ color: colors.textMuted }}
-          >
-            Cancel
-          </Text>
-        </TouchableOpacity>
-        <Text className='font-bold text-lg' style={{ color: colors.text }}>
-          Edit Profile
-        </Text>
-        <TouchableOpacity onPress={handleSave} disabled={mutation.isPending}>
-          {mutation.isPending ? (
-            <ActivityIndicator color={colors.primary} />
-          ) : (
-            <Text
-              className='font-bold text-lg'
-              style={{ color: colors.primary }}
-            >
-              Save
-            </Text>
-          )}
-        </TouchableOpacity>
-      </View>
+      />
 
       <ScrollView className='flex-1 px-4 pt-6' keyboardShouldPersistTaps='handled'>
         {/* Core Identity */}

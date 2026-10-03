@@ -17,6 +17,7 @@ import { isAdmin } from "../../src/core/auth/roles";
 import { FEATURES } from "../../src/core/features/features";
 import type { ReactNode } from "react";
 import { Bell, ChevronLeft, FileText, LifeBuoy, Lock, Settings as SettingsIcon, Shield, Trash2, User, UserX } from "lucide-react-native";
+import { ModalHeader } from "../../src/components/ModalHeader";
 
 const LEGAL_LINKS = [
   { path: "/privacy", label: "Privacy Policy" },
@@ -181,7 +182,6 @@ export default function SettingsModal() {
   return (
     <View className='flex-1' style={{ backgroundColor: colors.bg }}>
       <SafeAreaView
-        className='px-4 py-3 flex-row items-center'
         style={{
           backgroundColor: colors.surface,
           borderBottomWidth: 1,
@@ -189,15 +189,13 @@ export default function SettingsModal() {
         }}
         edges={["top"]}
       >
-        <TouchableOpacity onPress={() => router.back()} className='p-2 mr-2'>
-          <ChevronLeft color={colors.text} size={24} />
-        </TouchableOpacity>
-        <Text
-          className='text-xl font-bold flex-1'
-          style={{ color: colors.text }}
-        >
-          App Settings
-        </Text>
+        <ModalHeader
+          title="App Settings"
+          leftAlignTitle
+          noBorder
+          leftAction="back"
+          onLeftPress={() => router.back()}
+        />
       </SafeAreaView>
 
       <ScrollView className='flex-1' style={{ backgroundColor: colors.bg }}>
