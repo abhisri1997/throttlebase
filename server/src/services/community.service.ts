@@ -1,6 +1,7 @@
 import { query } from "../config/db.js";
 import type {
   CreatePostInput,
+  EditPostInput,
   CreateCommentInput,
   CreateGroupInput,
   CreateReviewInput,
@@ -101,12 +102,14 @@ export const getPostById = async (postId: string, viewerId: string | null = null
 export const updatePost = async (
   postId: string,
   riderId: string,
-  content: string,
+  data: EditPostInput,
 ) => {
-  assertContentAllowed(content);
+  if (data.content) {
+    assertContentAllowed(data.content);
+  }
   const result = await query(
-    `UPDATE posts SET content = $1 WHERE id = $2 AND rider_id = $3 AND removed_at IS NULL RETURNING *`,
-    [content, postId, riderId],
+    `UPDATE posts SET content = $1, media_urls = COALESCE($2, media_urls) WHERE id = $3 AND rider_id = $4 AND removed_at IS NULL RETURNING *`,
+    [data.content || "", data.media_urls || null, postId, riderId],
   );
   return result.rows[0] || null;
 };

@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Pressable,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useCurrentRider } from "../../src/services/useCurrentRider";
@@ -143,14 +144,23 @@ export default function ProfileScreen() {
               backgroundColor: colors.surface,
               borderWidth: 2,
               borderColor: colors.primary,
+              overflow: 'hidden'
             }}
           >
-            <Text
-              className='text-4xl font-bold uppercase'
-              style={{ color: colors.text }}
-            >
-              {initial}
-            </Text>
+            {displayRider?.profile_picture_url ? (
+              <Image 
+                source={{ uri: displayRider.profile_picture_url }} 
+                className="w-full h-full" 
+                resizeMode="cover" 
+              />
+            ) : (
+              <Text
+                className='text-4xl font-bold uppercase'
+                style={{ color: colors.text }}
+              >
+                {initial}
+              </Text>
+            )}
           </View>
           <Text className='text-2xl font-bold' style={{ color: colors.text }}>
             {displayRider?.display_name || displayRider?.username}

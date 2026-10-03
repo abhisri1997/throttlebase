@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
+  Image,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -163,14 +164,23 @@ export default function RiderProfileScreen() {
               backgroundColor: colors.surface,
               borderWidth: 2,
               borderColor: colors.primary,
+              overflow: 'hidden'
             }}
           >
-            <Text
-              className='text-4xl font-bold uppercase'
-              style={{ color: colors.text }}
-            >
-              {initial}
-            </Text>
+            {rider.profile_picture_url ? (
+              <Image 
+                source={{ uri: rider.profile_picture_url }} 
+                className="w-full h-full" 
+                resizeMode="cover" 
+              />
+            ) : (
+              <Text
+                className='text-4xl font-bold uppercase'
+                style={{ color: colors.text }}
+              >
+                {initial}
+              </Text>
+            )}
           </View>
           <Text className='text-2xl font-bold' style={{ color: colors.text }}>
             {rider.display_name}

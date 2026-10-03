@@ -41,7 +41,7 @@ export async function pickImage(): Promise<string | null> {
   }
 
   const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    mediaTypes: ['images'],
     allowsEditing: true,
     aspect: [1, 1], // Default square aspect ratio, can be overridden
     quality: 0.8, // Slight compression
