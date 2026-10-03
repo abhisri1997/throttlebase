@@ -4,6 +4,7 @@ import * as RiderService from "../services/rider.service.js";
 import { toPublicRider } from "../services/publicRider.js";
 import { query } from "../config/db.js";
 import { isHiddenFrom } from "../services/blocks.js";
+import * as GarageService from "../services/manage-garage.service.js";
 
 /**
  * RiderController — Handles HTTP request/response for rider profile endpoints.
@@ -30,7 +31,7 @@ export const getMyProfile = async (
       return;
     }
 
-    const riderVehicles = await RiderService.getRiderVehicles(rider.id);
+    const riderVehicles = await GarageService.getGarageVehicles(rider.id);
 
     res.json({ rider: { ...rider, vehicles: riderVehicles || [] } });
   } catch (error: any) {

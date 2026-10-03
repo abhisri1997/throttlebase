@@ -1,5 +1,4 @@
 import type { Request, Response } from "express";
-import type { VehicleBrand, VehicleModel } from "../services/garageSuggestion.service.js";
 import * as garageSuggestionService from "../services/garageSuggestion.service.js";
 
 export const getVehicleBrands = async (req: Request, res: Response) => {

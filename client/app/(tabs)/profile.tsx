@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useCurrentRider } from "../../src/services/useCurrentRider";
@@ -14,13 +15,15 @@ import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
 import { FEATURES } from "../../src/core/features/features";
-import { LogOut, Edit2, Settings } from "lucide-react-native";
+import { LogOut, Edit2, Settings, Plus } from "lucide-react-native";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { NotificationBell } from "../../src/components/NotificationBell";
 import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
+import BikeCard from "../../src/components/BikeCard";
 
 export default function ProfileScreen() {
   const { colors } = useTheme();
+  const [isAddingHovered, setIsAddingHovered] = useState(false);
   const logout = () => authService.signOut();
   const authRider = useCurrentRider().rider;
 
@@ -275,41 +278,45 @@ export default function ProfileScreen() {
           className='p-5'
           style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
         >
-          <Text
-            className='text-xl font-bold mb-4'
-            style={{ color: colors.text }}
-          >
-            Garage
-          </Text>
-          {displayRider?.vehicles && displayRider.vehicles.length > 0 ? (
-            displayRider.vehicles.map((v: any, i: number) => (
-              <View
-                key={i}
-                className='flex-row items-center p-4 rounded-2xl mb-3'
-                style={{
-                  backgroundColor: colors.surface,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                }}
-              >
-                <View className='w-12 h-12 rounded-full items-center justify-center mr-4'>
-                  <Text className='text-2xl'>🏍️</Text>
-                </View>
-                <View>
-                  <Text
-                    className='font-bold text-lg'
-                    style={{ color: colors.text }}
-                  >
-                    {v.make} {v.model}
-                  </Text>
-                  <Text style={{ color: colors.textMuted }}>{v.year}</Text>
-                </View>
-              </View>
-            ))
-          ) : (
-            <Text className='italic' style={{ color: colors.textMuted }}>
-              No vehicles added yet
+          <View className='flex-row items-center justify-between mb-4'>
+            <Text
+              className='text-xl font-bold'
+              style={{ color: colors.text }}
+            >
+              Garage
             </Text>
+            <View className='flex-row items-center'>
+              <Pressable
+                onPress={() => router.push("/(modals)/add-vehicle" as any)}
+                onPressIn={() => setIsAddingHovered(true)}
+                onPressOut={() => setIsAddingHovered(false)}
+                className='p-2 rounded-full'
+                style={{ backgroundColor: colors.surface }}
+              >
+                <Plus color={colors.text} size={24} />
+              </Pressable>
+              <Pressable
+                onPress={() => router.push("/(modals)/manage-garage")}
+                className='p-2'
+              >
+                <Settings color={colors.textMuted} size={24} />
+              </Pressable>
+            </View>
+          </View>
+          {displayRider?.vehicles && displayRider.vehicles.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              decelerationRate="fast"
+              snapToAlignment="start"
+              contentContainerStyle={{ paddingRight: 20 }}
+            >
+              {displayRider.vehicles.map((v: any, i: number) => (
+                <BikeCard key={i} vehicle={v} isAddHovered={isAddingHovered} />
+              ))}
+            </ScrollView>
+          ) : (
+            <BikeCard vehicle={null} isAddHovered={isAddingHovered} />
           )}
         </View>
 
