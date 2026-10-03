@@ -32,6 +32,7 @@ const submitPost = async (content: string, media_urls?: string[], editId?: strin
   if (editId) {
     const { data } = await apiClient.patch(`/api/community/posts/${editId}`, {
       content,
+      media_urls,
     });
 
     return data;
@@ -129,7 +130,7 @@ export default function CreatePostModal() {
   });
 
   const handlePost = () => {
-    if (!content.trim()) return;
+    if (!content.trim() && !imageUrl) return;
     mutation.mutate();
   };
 

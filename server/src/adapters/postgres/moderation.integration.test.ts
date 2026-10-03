@@ -155,7 +155,7 @@ test("the moderation queue, removals and suspensions", { skip: !CONNECTION }, as
     assert.equal(await community!.getPostById(badPost, CHITRA), null);
     assert.deepEqual(await community!.getComments(badPost, CHITRA), []);
     await assert.rejects(community!.likePost(badPost, CHITRA), /Post not found/);
-    assert.equal(await community!.updatePost(badPost, BALA, "edited"), null);
+    assert.equal(await community!.updatePost(badPost, BALA, { content: "edited" }), null);
     assert.equal(await community!.deletePost(badPost, BALA), false);
 
     const statuses = await admin.query(`SELECT DISTINCT status FROM reports WHERE target_id = $1`, [badPost]);
