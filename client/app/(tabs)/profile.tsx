@@ -275,10 +275,10 @@ export default function ProfileScreen() {
 
         {/* Garage Section */}
         <View
-          className='p-5'
+          className='py-5'
           style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
         >
-          <View className='flex-row items-center justify-between mb-4'>
+          <View className='flex-row items-center justify-between mb-4 px-5'>
             <Text
               className='text-xl font-bold'
               style={{ color: colors.text }}
@@ -303,20 +303,27 @@ export default function ProfileScreen() {
               </Pressable>
             </View>
           </View>
-          {displayRider?.vehicles && displayRider.vehicles.length > 0 ? (
+          
+          {!displayRider?.vehicles || displayRider.vehicles.length === 0 ? (
+            <View className="px-5">
+              <BikeCard vehicle={null} isAddHovered={isAddingHovered} />
+            </View>
+          ) : displayRider.vehicles.length === 1 ? (
+            <View className="px-5">
+              <BikeCard vehicle={displayRider.vehicles[0]} isAddHovered={isAddingHovered} />
+            </View>
+          ) : (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               decelerationRate="fast"
               snapToAlignment="start"
-              contentContainerStyle={{ paddingRight: 20 }}
+              contentContainerStyle={{ paddingHorizontal: 20 }}
             >
               {displayRider.vehicles.map((v: any, i: number) => (
-                <BikeCard key={i} vehicle={v} isAddHovered={isAddingHovered} />
+                <BikeCard key={i} vehicle={v} isAddHovered={isAddingHovered} variant="carousel" />
               ))}
             </ScrollView>
-          ) : (
-            <BikeCard vehicle={null} isAddHovered={isAddingHovered} />
           )}
         </View>
 

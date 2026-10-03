@@ -8,17 +8,21 @@ export default function BikeCard({
   vehicle,
   onAddPhoto,
   isAddHovered,
-  onMenuPress
+  onMenuPress,
+  variant = "full"
 }: {
   vehicle: any;
   onAddPhoto?: () => void;
   isAddHovered?: boolean;
   onMenuPress?: () => void;
+  variant?: "full" | "carousel";
 }) {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const router = useRouter();
-  const cardWidth = width * 0.9;
+  
+  const cardWidth = variant === "carousel" ? width * 0.85 : "100%";
+  const cardMargin = variant === "carousel" ? 12 : 0;
 
   const ghostOpacity = useRef(new Animated.Value(0.15)).current;
 
@@ -55,7 +59,7 @@ export default function BikeCard({
         className="rounded-2xl mb-4 overflow-hidden"
         style={{
           width: cardWidth,
-          marginRight: 12,
+          marginRight: cardMargin,
           backgroundColor: colors.surface,
           borderWidth: 1,
           borderColor: colors.border,
@@ -118,7 +122,7 @@ export default function BikeCard({
       className="rounded-2xl overflow-hidden mb-4"
       style={{
         width: cardWidth,
-        marginRight: 12,
+        marginRight: cardMargin,
         backgroundColor: colors.surface,
         borderWidth: 1,
         borderColor: colors.border,

@@ -2,8 +2,10 @@ import React, { useState } from "react";
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useCurrentRider } from "../../src/services/useCurrentRider";
+import { useCurrentRider, CURRENT_RIDER_KEY } from "../../src/services/useCurrentRider";
 import { useTheme } from "../../src/theme/ThemeContext";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiClient } from "../../src/api/client";
 import BikeCard from "../../src/components/BikeCard";
 import ActionSheet, { ActionSheetItem } from "../../src/components/ActionSheet";
 import { Plus, Edit2, Trash2 } from "lucide-react-native";
@@ -15,16 +17,32 @@ export default function ManageGarageModal() {
 
     const [selectedVehicle, setSelectedVehicle] = useState<any | null>(null);
 
+    const queryClient = useQueryClient();
+
+    const deleteMutation = useMutation({
+        mutationFn: async (vehicleId: string) => {
+            const { data } = await apiClient.delete(`/api/garage/vehicle/${vehicleId}`);
+            return data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: CURRENT_RIDER_KEY });
+            setSelectedVehicle(null);
+        }
+    });
+
     const handleEdit = () => {
-        console.log("Edit vehicle:", selectedVehicle);
+        if (!selectedVehicle) return;
+        router.push({
+            pathname: "/(modals)/add-vehicle",
+            params: { editVehicle: JSON.stringify(selectedVehicle) }
+        });
         setSelectedVehicle(null);
-        // TODO: Navigate to Edit screen or pre-fill Add screen
     };
 
     const handleDelete = () => {
-        console.log("Delete vehicle:", selectedVehicle);
-        setSelectedVehicle(null);
-        // TODO: Trigger mutation to delete
+        if (selectedVehicle?.id) {
+            deleteMutation.mutate(selectedVehicle.id);
+        }
     };
 
     return (
