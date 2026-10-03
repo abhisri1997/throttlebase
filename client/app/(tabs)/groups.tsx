@@ -17,6 +17,7 @@ import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
 import { getApiErrorMessage } from "../../src/utils/apiError";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { NotificationBell } from "../../src/components/NotificationBell";
+import { TabHeader } from "../../src/components/TabHeader";
 
 type GroupItem = {
   id: string;
@@ -135,38 +136,30 @@ export default function GroupsScreen() {
       style={{ backgroundColor: colors.bg }}
       edges={["top"]}
     >
-      <View
-        className='px-4 py-3 flex-row items-center'
-        style={{
-          backgroundColor: colors.surface,
-          borderBottomWidth: 1,
-          borderBottomColor: colors.border,
-        }}
-      >
-        <Text
-          className='text-2xl font-bold flex-1'
-          style={{ color: colors.text }}
-        >
-          Groups
-        </Text>
-        <TouchableOpacity
-          onPress={openScopePicker}
-          className='px-3 py-2 rounded-full mr-2'
-          style={{
-            backgroundColor: colors.inputBg,
-            borderWidth: 1,
-            borderColor: colors.border,
-          }}
-        >
-          <Text
-            className='text-xs font-semibold'
-            style={{ color: colors.textMuted }}
-          >
-            {scopeText}
-          </Text>
-        </TouchableOpacity>
-        <NotificationBell />
-      </View>
+      <TabHeader
+        title="Groups"
+        rightContent={
+          <>
+            <TouchableOpacity
+              onPress={openScopePicker}
+              className='px-4 h-11 justify-center rounded-full mr-2'
+              style={{
+                backgroundColor: colors.inputBg,
+                borderWidth: 1,
+                borderColor: colors.border,
+              }}
+            >
+              <Text
+                className='text-xs font-semibold'
+                style={{ color: colors.textMuted }}
+              >
+                {scopeText}
+              </Text>
+            </TouchableOpacity>
+            <NotificationBell />
+          </>
+        }
+      />
 
       <FlatList
         data={groups || []}

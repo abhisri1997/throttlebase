@@ -17,6 +17,7 @@ import { apiClient } from "../../src/api/client";
 import { getApiErrorMessage } from "../../src/utils/apiError";
 import { Input } from "../../src/components/Input";
 import { useTheme } from "../../src/theme/ThemeContext";
+import { ModalHeader } from "../../src/components/ModalHeader";
 
 type Visibility = "public" | "private";
 
@@ -68,36 +69,23 @@ export default function CreateGroupModal() {
       style={{ flex: 1, backgroundColor: colors.bg }}
     >
       <SafeAreaView
-        className='flex-1 px-4 pt-4'
+        className='flex-1'
         style={{ backgroundColor: colors.bg }}
       >
-        <View className='flex-row justify-between items-center mb-5'>
-          <TouchableOpacity
-            onPress={closeModal}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <X color={colors.textMuted} size={24} />
-          </TouchableOpacity>
-          <Text className='text-lg font-bold' style={{ color: colors.text }}>
-            Create Group
-          </Text>
-          <TouchableOpacity
-            onPress={() => createMutation.mutate()}
-            disabled={!canSubmit}
-            className='px-4 py-2 rounded-full'
-            style={{
-              backgroundColor: canSubmit ? colors.primary : colors.border,
-            }}
-          >
-            {createMutation.isPending ? (
-              <ActivityIndicator size='small' color='white' />
-            ) : (
-              <Text className='font-bold text-white'>Create</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+        <ModalHeader
+          title="Create Group"
+          leftAction="close"
+          onLeftPress={closeModal}
+          rightAction={{
+            label: "Create",
+            onPress: () => createMutation.mutate(),
+            disabled: !canSubmit,
+            loading: createMutation.isPending,
+            variant: "pill",
+          }}
+        />
 
-        <ScrollView className='flex-1'>
+        <ScrollView className='flex-1 px-4 pt-4'>
           <Input
             label='Group Name'
             value={name}

@@ -9,6 +9,7 @@ import { apiClient } from "../../src/api/client";
 import BikeCard from "../../src/components/BikeCard";
 import ActionSheet, { ActionSheetItem } from "../../src/components/ActionSheet";
 import { Plus, Edit2, Trash2 } from "lucide-react-native";
+import { ModalHeader } from "../../src/components/ModalHeader";
 
 export default function ManageGarageModal() {
     const { colors } = useTheme();
@@ -47,23 +48,10 @@ export default function ManageGarageModal() {
 
     return (
         <SafeAreaView className="flex-1" style={{ backgroundColor: colors.bg }}>
-            <View
-                className="flex-row items-center justify-between p-4 border-b"
-                style={{
-                    borderBottomColor: colors.border,
-                    backgroundColor: colors.surface,
-                }}
-            >
-                <TouchableOpacity onPress={() => router.back()} hitSlop={20}>
-                    <Text className="font-bold text-lg" style={{ color: colors.textMuted }}>
-                        Done
-                    </Text>
-                </TouchableOpacity>
-                <Text className="font-bold text-lg" style={{ color: colors.text }}>
-                    Manage Garage
-                </Text>
-                <View style={{ width: 40 }} />
-            </View>
+            <ModalHeader
+                title="Manage Garage"
+                leftAction={{ label: "Done", onPress: () => router.back() }}
+            />
 
             {isLoading ? (
                 <View className="flex-1 items-center justify-center">

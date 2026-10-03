@@ -24,6 +24,7 @@ import {
   findActiveMention,
   type MentionSuggestion,
 } from "../../src/utils/mentions";
+import { ModalHeader } from "../../src/components/ModalHeader";
 const submitPost = async (content: string, editId?: string) => {
   if (editId) {
     const { data } = await apiClient.patch(`/api/community/posts/${editId}`, {
@@ -139,35 +140,24 @@ export default function CreatePostModal() {
     >
       <Pressable onPress={Keyboard.dismiss} style={{ flex: 1 }}>
         <SafeAreaView
-          className='flex-1 px-4 pt-4'
+          className='flex-1'
           style={{ backgroundColor: colors.bg }}
           edges={["top"]}
         >
-          {/* Header */}
-          <View className='flex-row justify-between items-center mb-6'>
-            <TouchableOpacity
-              onPress={closeModal}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <X color='#64748b' size={24} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handlePost}
-              disabled={!content.trim() || mutation.isPending}
-              className={`px-5 py-2 rounded-full ${content.trim() && !mutation.isPending ? "bg-primary-500" : "bg-slate-700"}`}
-            >
-              {mutation.isPending ? (
-                <ActivityIndicator color='white' size='small' />
-              ) : (
-                <Text className={`font-bold ${content.trim() ? "" : ""}`}>
-                  {params.editId ? "Save" : "Post"}{" "}
-                </Text>
-              )}
-            </TouchableOpacity>
-          </View>
+          <ModalHeader
+            leftAction="close"
+            onLeftPress={closeModal}
+            rightAction={{
+              label: params.editId ? "Save" : "Post",
+              onPress: handlePost,
+              disabled: !content.trim(),
+              loading: mutation.isPending,
+              variant: "pill"
+            }}
+          />
           {/* Text Input */}
           <TextInput
-            className='text-xl flex-1 leading-8'
+            className='text-xl flex-1 leading-8 px-4 pt-4'
             style={{ color: colors.text }}
             placeholder="What's on your mind? Got a route to share?"
             placeholderTextColor='#64748b'

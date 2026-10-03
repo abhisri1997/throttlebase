@@ -18,6 +18,7 @@ import { Plus } from "lucide-react-native";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { NotificationBell } from "../../src/components/NotificationBell";
 import { useReport } from "../../src/features/moderation/hooks/useReport";
+import { TabHeader } from "../../src/components/TabHeader";
 
 const fetchFeed = async () => {
   const { data } = await apiClient.get("/api/community/posts");
@@ -139,22 +140,10 @@ export default function FeedScreen() {
       style={{ backgroundColor: colors.bg }}
       edges={["top"]}
     >
-      <View
-        className='px-4 py-3 flex-row items-center'
-        style={{
-          backgroundColor: colors.surface,
-          borderBottomWidth: 1,
-          borderBottomColor: colors.border,
-        }}
-      >
-        <Text
-          className='text-2xl font-bold tracking-tight flex-1'
-          style={{ color: colors.text }}
-        >
-          Community Feed
-        </Text>
-        <NotificationBell />
-      </View>
+      <TabHeader
+        title="Community Feed"
+        rightContent={<NotificationBell />}
+      />
       {renderContent()}
 
       {/* Floating Action Button */}

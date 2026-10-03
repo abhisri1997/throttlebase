@@ -23,6 +23,7 @@ import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
 import { useRouter } from "expo-router";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { NotificationBell } from "../../src/components/NotificationBell";
+import { TabHeader } from "../../src/components/TabHeader";
 
 const EMPTY_SEARCH: RouteSearchState = { from: null, to: null, lengthId: "any", highlights: [] };
 
@@ -135,22 +136,10 @@ export default function ExploreRoutesScreen() {
       style={{ backgroundColor: colors.bg }}
       edges={["top"]}
     >
-      <View
-        className='flex-row justify-between items-center px-4 py-3'
-        style={{
-          backgroundColor: colors.surface,
-          borderBottomWidth: 1,
-          borderBottomColor: colors.border,
-        }}
-      >
-        <Text
-          className='text-2xl font-bold tracking-tight'
-          style={{ color: colors.text }}
-        >
-          Explore Routes
-        </Text>
-        <NotificationBell />
-      </View>
+      <TabHeader
+        title="Explore Routes"
+        rightContent={<NotificationBell />}
+      />
       <RouteSearchPanel state={search} onChange={setSearch} />
       {renderContent()}
       <TouchableOpacity

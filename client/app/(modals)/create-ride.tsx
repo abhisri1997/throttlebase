@@ -12,6 +12,7 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { X, Check, Plus, MapPin } from "lucide-react-native";
+import { ModalHeader } from "../../src/components/ModalHeader";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { apiClient } from "../../src/api/client";
@@ -358,32 +359,16 @@ function CreateRideForm({ plan }: { plan: RoutePlan | null }) {
 
   return (
     <SafeAreaView className='flex-1' style={{ backgroundColor: colors.bg }}>
-      {/* Header */}
-      <View
-        className='px-4 pt-4 pb-2 flex-row justify-between items-center'
-        style={{
-          borderBottomWidth: 1,
-          borderBottomColor: colors.border,
-          backgroundColor: colors.surface,
+      <ModalHeader
+        title="Host a Ride"
+        leftAction="close"
+        onLeftPress={closeModal}
+        rightAction={{
+          label: "Publish",
+          onPress: handlePublish,
+          loading: mutation.isPending,
         }}
-      >
-        <TouchableOpacity
-          onPress={closeModal}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <X color={colors.textMuted} size={24} />
-        </TouchableOpacity>
-        <Text className='font-bold text-lg' style={{ color: colors.text }}>
-          Host a Ride
-        </Text>
-        {mutation.isPending ? (
-          <ActivityIndicator color={colors.primary} />
-        ) : (
-          <TouchableOpacity onPress={handlePublish}>
-            <Check color={colors.primary} size={28} />
-          </TouchableOpacity>
-        )}
-      </View>
+      />
 
       <ScrollView
         className='flex-1 px-4 pt-6'

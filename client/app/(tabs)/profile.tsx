@@ -20,6 +20,7 @@ import { useTheme } from "../../src/theme/ThemeContext";
 import { NotificationBell } from "../../src/components/NotificationBell";
 import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
 import BikeCard from "../../src/components/BikeCard";
+import { TabHeader } from "../../src/components/TabHeader";
 
 export default function ProfileScreen() {
   const { colors } = useTheme();
@@ -60,7 +61,7 @@ export default function ProfileScreen() {
 
   const handleLogout = async () => {
     await logout();
-    router.replace("/(auth)/login");
+    router.replace("/(auth)/sign-in");
   };
 
   if (profileLoading) {
@@ -90,34 +91,35 @@ export default function ProfileScreen() {
     "rider";
 
   return (
-    <View className='flex-1' style={{ backgroundColor: colors.bg }}>
-      <SafeAreaView
-        className='px-4 pt-2 pb-4 flex-row items-center justify-between'
-        style={{
-          borderBottomWidth: 1,
-          borderBottomColor: colors.border,
-          backgroundColor: colors.surface,
-        }}
-        edges={["top"]}
-      >
-        <Text className='text-xl font-bold' style={{ color: colors.text }}>
-          My Profile
-        </Text>
-        <View className='flex-row items-center'>
-          <View className='mr-2'>
-            <NotificationBell />
-          </View>
-          <TouchableOpacity
-            onPress={() => router.push("/(modals)/settings")}
-            className='p-2 mr-2'
-          >
-            <Settings color={colors.textMuted} size={24} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleLogout} className='p-2'>
-            <LogOut color={colors.danger} size={24} />
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+    <SafeAreaView 
+      className='flex-1' 
+      style={{ backgroundColor: colors.bg }}
+      edges={["top"]}
+    >
+      <TabHeader
+        title="My Profile"
+        rightContent={
+          <>
+            <View className="mr-2">
+              <NotificationBell />
+            </View>
+            <TouchableOpacity
+              onPress={() => router.push("/(modals)/settings")}
+              className='w-11 h-11 rounded-full items-center justify-center mr-2'
+              style={{ backgroundColor: colors.inputBg }}
+            >
+              <Settings color={colors.textMuted} size={20} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleLogout}
+              className='w-11 h-11 rounded-full items-center justify-center'
+              style={{ backgroundColor: colors.inputBg }}
+            >
+              <LogOut color={colors.danger} size={20} />
+            </TouchableOpacity>
+          </>
+        }
+      />
 
       <ScrollView
         className='flex-1'
@@ -303,7 +305,7 @@ export default function ProfileScreen() {
               </Pressable>
             </View>
           </View>
-          
+
           {!displayRider?.vehicles || displayRider.vehicles.length === 0 ? (
             <View className="px-5">
               <BikeCard vehicle={null} isAddHovered={isAddingHovered} />
@@ -364,6 +366,6 @@ export default function ProfileScreen() {
           </View>
         )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
