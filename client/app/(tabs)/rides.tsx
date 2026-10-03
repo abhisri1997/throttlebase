@@ -18,6 +18,7 @@ import { useRouter } from "expo-router";
 import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { NotificationBell } from "../../src/components/NotificationBell";
+import { TabHeader } from "../../src/components/TabHeader";
 import { StartRideSheet } from "../../src/features/rideNow/components/StartRideSheet";
 
 type RideStatusFilter = "all" | "draft" | "scheduled" | "active";
@@ -152,38 +153,30 @@ export default function DiscoverRidesScreen() {
       style={{ backgroundColor: colors.bg }}
       edges={["top"]}
     >
-      <View
-        className='px-4 py-3 flex-row items-center'
-        style={{
-          backgroundColor: colors.surface,
-          borderBottomWidth: 1,
-          borderBottomColor: colors.border,
-        }}
-      >
-        <Text
-          className='text-2xl font-bold tracking-tight flex-1'
-          style={{ color: colors.text }}
-        >
-          Discover Rides
-        </Text>
-        <TouchableOpacity
-          onPress={openFilterPicker}
-          className='px-3 py-2 rounded-full mr-2'
-          style={{
-            backgroundColor: colors.inputBg,
-            borderWidth: 1,
-            borderColor: colors.border,
-          }}
-        >
-          <Text
-            className='text-xs font-semibold'
-            style={{ color: colors.textMuted }}
-          >
-            {statusLabel}
-          </Text>
-        </TouchableOpacity>
-        <NotificationBell />
-      </View>
+      <TabHeader
+        title="Discover Rides"
+        rightContent={
+          <>
+            <TouchableOpacity
+              onPress={openFilterPicker}
+              className='px-4 h-11 justify-center rounded-full mr-2'
+              style={{
+                backgroundColor: colors.inputBg,
+                borderWidth: 1,
+                borderColor: colors.border,
+              }}
+            >
+              <Text
+                className='text-xs font-semibold'
+                style={{ color: colors.textMuted }}
+              >
+                {statusLabel}
+              </Text>
+            </TouchableOpacity>
+            <NotificationBell />
+          </>
+        }
+      />
       {renderContent()}
       <StartRideSheet
         visible={isStartSheetOpen}

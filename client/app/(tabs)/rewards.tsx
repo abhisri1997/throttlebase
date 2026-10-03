@@ -14,6 +14,7 @@ import { Trophy, Medal, MapPin, Activity } from "lucide-react-native";
 import { useTheme } from "../../src/theme/ThemeContext";
 import { usePullToRefresh } from "../../src/hooks/usePullToRefresh";
 import { NotificationBell } from "../../src/components/NotificationBell";
+import { TabHeader } from "../../src/components/TabHeader";
 
 const metricByLeaderboardType = {
   distance: "total_distance_km",
@@ -160,22 +161,10 @@ export default function RewardsScreen() {
       style={{ backgroundColor: colors.bg }}
       edges={["top"]}
     >
-      <View
-        className='px-4 py-3 flex-row items-center'
-        style={{
-          backgroundColor: colors.surface,
-          borderBottomWidth: 1,
-          borderBottomColor: colors.border,
-        }}
-      >
-        <Text
-          className='text-2xl font-bold flex-1'
-          style={{ color: colors.text }}
-        >
-          Rewards & Ranking
-        </Text>
-        <NotificationBell />
-      </View>
+      <TabHeader
+        title="Rewards & Ranking"
+        rightContent={<NotificationBell />}
+      />
 
       <ScrollView
         className='flex-1'
