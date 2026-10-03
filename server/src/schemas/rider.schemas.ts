@@ -45,6 +45,11 @@ export const UpdateRiderSchema = z.object({
     .length(2, 'Must be an array of [lng, lat]')
     .nullable()
     .optional(),
+  profile_picture_url: z
+    .string()
+    .url()
+    .nullable()
+    .optional(),
 });
 
 export type UpdateRiderInput = z.infer<typeof UpdateRiderSchema>;

@@ -7,7 +7,9 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Image,
 } from "react-native";
+import { Camera } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -20,6 +22,7 @@ import { getApiErrorMessage } from "../../src/utils/apiError";
 import { useTheme } from "../../src/theme/ThemeContext";
 import LocationPicker from "../../src/components/LocationPicker";
 import { ModalHeader } from "../../src/components/ModalHeader";
+import { pickImage, uploadImage } from "../../src/services/imageUpload";
 
 const updateProfile = async (payload: any) => {
   const { data } = await apiClient.patch("/api/riders/me", payload);
@@ -117,6 +120,8 @@ export default function EditProfileModal() {
 
   const seedRider = profileObj ?? currentRider;
 
+  const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -137,6 +142,7 @@ export default function EditProfileModal() {
 
     setDisplayName(seedRider.display_name || "");
     setBio(seedRider.bio || "");
+    setProfilePictureUrl(seedRider.profile_picture_url || null);
     setPhoneNumber((seedRider.phone_number || "").replace(/^\+91/, ""));
     setExperienceLevel(seedRider.experience_level || "beginner");
     setHomeLocationCoords(extractHomeCoords(seedRider));
@@ -159,6 +165,7 @@ export default function EditProfileModal() {
       updateProfile({
         display_name: displayName,
         bio,
+        profile_picture_url: profilePictureUrl,
         phone_number: phoneNumber.trim() ? `+91${phoneNumber.trim()}` : null,
         experience_level: experienceLevel,
         location_coords: homeLocationCoords,
@@ -191,6 +198,21 @@ export default function EditProfileModal() {
     mutation.mutate();
   };
 
+  const handlePickImage = async () => {
+    try {
+      const uri = await pickImage();
+      if (!uri) return;
+
+      setIsUploadingImage(true);
+      const url = await uploadImage(uri);
+      setProfilePictureUrl(url);
+    } catch (err) {
+      Alert.alert("Error", "Failed to upload image. Please try again.");
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
   return (
     <SafeAreaView className='flex-1' style={{ backgroundColor: colors.bg }}>
       <ModalHeader
@@ -200,11 +222,44 @@ export default function EditProfileModal() {
         rightAction={{
           label: "Save",
           onPress: handleSave,
-          loading: mutation.isPending,
+          loading: mutation.isPending || isUploadingImage,
         }}
       />
 
       <ScrollView className='flex-1 px-4 pt-6' keyboardShouldPersistTaps='handled'>
+        {/* Profile Picture */}
+        <View className="items-center mb-6">
+          <TouchableOpacity
+            onPress={handlePickImage}
+            disabled={isUploadingImage}
+            className="w-24 h-24 rounded-full items-center justify-center relative"
+            style={{
+              backgroundColor: colors.inputBg,
+              borderWidth: 1,
+              borderColor: colors.border,
+            }}
+          >
+            {profilePictureUrl ? (
+              <Image source={{ uri: profilePictureUrl }} className="w-full h-full rounded-full" />
+            ) : (
+              <Camera color={colors.textMuted} size={32} />
+            )}
+            
+            {isUploadingImage && (
+              <View className="absolute inset-0 items-center justify-center rounded-full" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                <ActivityIndicator color={colors.primary} />
+              </View>
+            )}
+
+            <View 
+              className="absolute bottom-0 right-0 w-8 h-8 rounded-full items-center justify-center shadow-sm"
+              style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
+            >
+              <Camera color={colors.text} size={14} />
+            </View>
+          </TouchableOpacity>
+        </View>
+
         {/* Core Identity */}
         <Text
           className='text-sm font-bold uppercase mb-2'

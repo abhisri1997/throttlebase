@@ -6,6 +6,7 @@ export interface GarageVehicleDetails {
     model: string;
     year: number;
     engine_capacity_cc: number;
+    image_url?: string;
 }
 
 export async function getGarageVehicles(riderId: string): Promise<GarageVehicleDetails[]> {
@@ -22,7 +23,7 @@ export async function addVehicleToGarage(riderId: string, vehicle: GarageVehicle
     const rider = await getById(riderId);
     if (!rider) throw new Error("Rider not found");
 
-    const insertResult = await query(`INSERT INTO vehicles (rider_id, make, model, year, engine_capacity_cc) VALUES ($1, $2, $3, $4, $5) RETURNING *`, [riderId, vehicle.make, vehicle.model, vehicle.year, vehicle.engine_capacity_cc]);
+    const insertResult = await query(`INSERT INTO vehicles (rider_id, make, model, year, engine_capacity_cc, image_url) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`, [riderId, vehicle.make, vehicle.model, vehicle.year, vehicle.engine_capacity_cc, vehicle.image_url || null]);
 
     if (insertResult.rows.length === 0) {
         return [] as unknown as GarageVehicleDetails;
@@ -32,7 +33,7 @@ export async function addVehicleToGarage(riderId: string, vehicle: GarageVehicle
 }
 
 export async function updateVehicleInGarage(vehicleId: string, vehicle: GarageVehicleDetails): Promise<GarageVehicleDetails> {
-    const updateResult = await query(`UPDATE vehicles SET make = $1, model = $2, year = $3, engine_capacity_cc = $4 WHERE id = $5 RETURNING *`, [vehicle.make, vehicle.model, vehicle.year, vehicle.engine_capacity_cc, vehicleId]);
+    const updateResult = await query(`UPDATE vehicles SET make = $1, model = $2, year = $3, engine_capacity_cc = $4, image_url = $5 WHERE id = $6 RETURNING *`, [vehicle.make, vehicle.model, vehicle.year, vehicle.engine_capacity_cc, vehicle.image_url || null, vehicleId]);
 
     if (updateResult.rows.length === 0) {
         return [] as unknown as GarageVehicleDetails;

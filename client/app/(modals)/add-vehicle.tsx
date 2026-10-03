@@ -8,7 +8,10 @@ import {
     ScrollView,
     KeyboardAvoidingView,
     Platform,
+    Image,
+    Alert,
 } from "react-native";
+import { Camera } from "lucide-react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -17,6 +20,7 @@ import { useTheme } from "../../src/theme/ThemeContext";
 import { CURRENT_RIDER_KEY } from "../../src/services/useCurrentRider";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 import { ModalHeader } from "../../src/components/ModalHeader";
+import { pickImage, uploadImage } from "../../src/services/imageUpload";
 
 interface Brand {
     id: string;
@@ -49,6 +53,9 @@ export default function AddVehicleModal() {
 
     const [engineCc, setEngineCc] = useState("");
     const [year, setYear] = useState("");
+    
+    const [imageUrl, setImageUrl] = useState<string | null>(null);
+    const [isUploadingImage, setIsUploadingImage] = useState(false);
 
     // Dropdown states
     const [isBrandOpen, setIsBrandOpen] = useState(false);
@@ -102,6 +109,7 @@ export default function AddVehicleModal() {
                 
                 if (v.year) setYear(v.year.toString());
                 if (v.engine_capacity_cc) setEngineCc(v.engine_capacity_cc.toString());
+                if (v.image_url) setImageUrl(v.image_url);
                 
                 hasInitializedBrand.current = true;
             } catch (e) {
@@ -169,6 +177,7 @@ export default function AddVehicleModal() {
             model: isOtherModel ? customModel : selectedModel?.name,
             year: year ? parseInt(year) : undefined,
             engine_capacity_cc: engineCc ? parseInt(engineCc) : undefined,
+            image_url: imageUrl,
         };
 
         saveVehicleMutation.mutate(payload);
@@ -176,7 +185,22 @@ export default function AddVehicleModal() {
 
     const isSaveDisabled =
         (isOtherBrand ? !customBrand : !selectedBrand) ||
-        (isOtherModel ? !customModel : !selectedModel);
+        (isOtherModel ? !customModel : !selectedModel) || isUploadingImage;
+
+    const handlePickImage = async () => {
+        try {
+            const uri = await pickImage();
+            if (!uri) return;
+
+            setIsUploadingImage(true);
+            const url = await uploadImage(uri);
+            setImageUrl(url);
+        } catch (err) {
+            Alert.alert("Error", "Failed to upload image. Please try again.");
+        } finally {
+            setIsUploadingImage(false);
+        }
+    };
 
     return (
         <SafeAreaView className="flex-1" style={{ backgroundColor: colors.bg }}>
@@ -191,11 +215,40 @@ export default function AddVehicleModal() {
                         label: "Save",
                         onPress: handleSave,
                         disabled: isSaveDisabled,
-                        loading: saveVehicleMutation.isPending,
+                        loading: saveVehicleMutation.isPending || isUploadingImage,
                     }}
                 />
 
                 <ScrollView className="flex-1 px-4 pt-6" keyboardShouldPersistTaps="handled">
+
+                    {/* Vehicle Image Picker */}
+                    <View className="items-center mb-6">
+                        <TouchableOpacity
+                            onPress={handlePickImage}
+                            disabled={isUploadingImage}
+                            className="w-full h-48 rounded-xl items-center justify-center relative overflow-hidden"
+                            style={{
+                                backgroundColor: colors.inputBg,
+                                borderWidth: 1,
+                                borderColor: colors.border,
+                            }}
+                        >
+                            {imageUrl ? (
+                                <Image source={{ uri: imageUrl }} className="w-full h-full" resizeMode="cover" />
+                            ) : (
+                                <View className="items-center">
+                                    <Camera color={colors.textMuted} size={40} className="mb-2" />
+                                    <Text style={{ color: colors.textMuted }}>Add a photo of your ride</Text>
+                                </View>
+                            )}
+                            
+                            {isUploadingImage && (
+                                <View className="absolute inset-0 items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                                    <ActivityIndicator color={colors.primary} />
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                    </View>
 
                     <View className="mb-4">
                         <Text className="text-sm font-bold uppercase mb-2" style={{ color: colors.textMuted }}>
