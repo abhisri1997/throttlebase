@@ -14,7 +14,7 @@ const uploadLimiter = rateLimit({
   message: { message: "Too many image uploads from this account, please try again after an hour" },
   keyGenerator: (req) => {
     // We can assume req.rider exists because authenticate middleware is used before uploadLimiter.
-    return (req as any).rider?.riderId || req.ip;
+    return (req as any).rider?.riderId || "unauthenticated";
   },
 });
 
