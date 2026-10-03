@@ -1,16 +1,49 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useCurrentRider } from "../../src/services/useCurrentRider";
+import { useCurrentRider, CURRENT_RIDER_KEY } from "../../src/services/useCurrentRider";
 import { useTheme } from "../../src/theme/ThemeContext";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiClient } from "../../src/api/client";
 import BikeCard from "../../src/components/BikeCard";
-import { Plus } from "lucide-react-native";
+import ActionSheet, { ActionSheetItem } from "../../src/components/ActionSheet";
+import { Plus, Edit2, Trash2 } from "lucide-react-native";
 
 export default function ManageGarageModal() {
     const { colors } = useTheme();
     const router = useRouter();
     const { rider, isLoading } = useCurrentRider();
+
+    const [selectedVehicle, setSelectedVehicle] = useState<any | null>(null);
+
+    const queryClient = useQueryClient();
+
+    const deleteMutation = useMutation({
+        mutationFn: async (vehicleId: string) => {
+            const { data } = await apiClient.delete(`/api/garage/vehicle/${vehicleId}`);
+            return data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: CURRENT_RIDER_KEY });
+            setSelectedVehicle(null);
+        }
+    });
+
+    const handleEdit = () => {
+        if (!selectedVehicle) return;
+        router.push({
+            pathname: "/(modals)/add-vehicle",
+            params: { editVehicle: JSON.stringify(selectedVehicle) }
+        });
+        setSelectedVehicle(null);
+    };
+
+    const handleDelete = () => {
+        if (selectedVehicle?.id) {
+            deleteMutation.mutate(selectedVehicle.id);
+        }
+    };
 
     return (
         <SafeAreaView className="flex-1" style={{ backgroundColor: colors.bg }}>
@@ -48,21 +81,10 @@ export default function ManageGarageModal() {
                     {Array.isArray(rider?.vehicles) && rider.vehicles.length > 0 ? (
                         rider.vehicles.map((v: any, i: number) => (
                             <View key={i} className="mb-6 relative">
-                                <BikeCard vehicle={v} />
-
-                                <View className="flex-row justify-end mt-2">
-                                    <TouchableOpacity>
-                                        <Text style={{ color: colors.primary, fontWeight: 'bold' }}>
-                                            Edit
-                                        </Text>
-                                    </TouchableOpacity>
-                                    <Text style={{ color: colors.textMuted, marginHorizontal: 10 }}>|</Text>
-                                    <TouchableOpacity>
-                                        <Text style={{ color: "#ef4444", fontWeight: 'bold' }}>
-                                            Remove
-                                        </Text>
-                                    </TouchableOpacity>
-                                </View>
+                                <BikeCard 
+                                    vehicle={v} 
+                                    onMenuPress={() => setSelectedVehicle(v)} 
+                                />
                             </View>
                         ))
                     ) : (
@@ -83,6 +105,40 @@ export default function ManageGarageModal() {
                     </TouchableOpacity>
                 </ScrollView>
             )}
+
+            {/* Bottom Sheet Modal */}
+            <ActionSheet
+                visible={!!selectedVehicle}
+                onClose={() => setSelectedVehicle(null)}
+                title={
+                    <View className="items-center">
+                        <Text 
+                            className="text-xs font-bold uppercase tracking-widest mb-1" 
+                            style={{ color: colors.textMuted, letterSpacing: 2 }}
+                        >
+                            {selectedVehicle?.make}
+                        </Text>
+                        <Text className="font-bold text-2xl" style={{ color: colors.text }}>
+                            {selectedVehicle?.model}
+                        </Text>
+                    </View>
+                }
+            >
+                <ActionSheetItem 
+                    icon={Edit2}
+                    iconColor={colors.primary}
+                    title="Edit Vehicle"
+                    onPress={handleEdit}
+                />
+                <ActionSheetItem 
+                    icon={Trash2}
+                    iconColor={colors.danger}
+                    title="Remove Vehicle"
+                    onPress={handleDelete}
+                    danger
+                    isLast
+                />
+            </ActionSheet>
         </SafeAreaView>
     );
 }

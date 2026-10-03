@@ -1,22 +1,28 @@
 import React, { useRef, useEffect } from "react";
 import { View, Text, TouchableOpacity, useWindowDimensions, Animated } from "react-native";
-import { Calendar, Gauge, Camera, ChevronRight, Plus } from "lucide-react-native";
+import { Calendar, Gauge, Camera, ChevronRight, Plus, MoreVertical } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useTheme } from "../theme/ThemeContext";
 
 export default function BikeCard({
   vehicle,
   onAddPhoto,
-  isAddHovered
+  isAddHovered,
+  onMenuPress,
+  variant = "full"
 }: {
   vehicle: any;
   onAddPhoto?: () => void;
   isAddHovered?: boolean;
+  onMenuPress?: () => void;
+  variant?: "full" | "carousel";
 }) {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const router = useRouter();
-  const cardWidth = width * 0.9;
+  
+  const cardWidth = variant === "carousel" ? width * 0.85 : "100%";
+  const cardMargin = variant === "carousel" ? 12 : 0;
 
   const ghostOpacity = useRef(new Animated.Value(0.15)).current;
 
@@ -53,7 +59,7 @@ export default function BikeCard({
         className="rounded-2xl mb-4 overflow-hidden"
         style={{
           width: cardWidth,
-          marginRight: 12,
+          marginRight: cardMargin,
           backgroundColor: colors.surface,
           borderWidth: 1,
           borderColor: colors.border,
@@ -116,7 +122,7 @@ export default function BikeCard({
       className="rounded-2xl overflow-hidden mb-4"
       style={{
         width: cardWidth,
-        marginRight: 12,
+        marginRight: cardMargin,
         backgroundColor: colors.surface,
         borderWidth: 1,
         borderColor: colors.border,
@@ -124,7 +130,19 @@ export default function BikeCard({
     >
       {/* Top section with bike info and image */}
       <View className="p-5 pb-3">
-        <View className="flex-row justify-between">
+        <View className="flex-row justify-between relative">
+          
+          {/* Action Menu (Top Right) */}
+          {onMenuPress && (
+            <TouchableOpacity
+              onPress={onMenuPress}
+              className="absolute top-0 right-0 p-1 z-10"
+              hitSlop={{ top: 15, right: 15, bottom: 15, left: 15 }}
+            >
+              <MoreVertical size={20} color={colors.textMuted} />
+            </TouchableOpacity>
+          )}
+
           {/* Left: text content */}
           <View className="flex-1">
             {/* Brand */}

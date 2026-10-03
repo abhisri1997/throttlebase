@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
     View,
     Text,
@@ -9,7 +9,7 @@ import {
     KeyboardAvoidingView,
     Platform,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../src/api/client";
@@ -33,6 +33,9 @@ interface Model {
 export default function AddVehicleModal() {
     const { colors } = useTheme();
     const router = useRouter();
+    const { editVehicle } = useLocalSearchParams<{ editVehicle?: string }>();
+    const [editMode, setEditMode] = useState(false);
+    const [vehicleId, setVehicleId] = useState<string | null>(null);
 
     // Selections & Manual Entries
     const [selectedBrand, setSelectedBrand] = useState<Brand | null>(null);
@@ -52,22 +55,6 @@ export default function AddVehicleModal() {
 
     const queryClient = useQueryClient();
 
-    // Add Vehicle Mutation
-    const addVehicleMutation = useMutation({
-        mutationFn: async (payload: any) => {
-            const { data } = await apiClient.post("/api/garage/vehicle", payload);
-            return data;
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: CURRENT_RIDER_KEY });
-            router.back();
-        },
-        onError: (error) => {
-            console.error("Failed to add vehicle:", error);
-            // Optionally, we could show an Alert or Toast here
-        }
-    });
-
     // Fetch Brands
     const { data: brands = [], isLoading: brandsLoading } = useQuery({
         queryKey: ["vehicleBrands"],
@@ -78,7 +65,7 @@ export default function AddVehicleModal() {
     });
 
     // Fetch Models based on selected brand
-    const { data: models = [], isLoading: modelsLoading, isFetching: modelsFetching } = useQuery({
+    const { data: models = [], isLoading: modelsLoading, isFetching: modelsFetching, isSuccess: modelsSuccess } = useQuery({
         queryKey: ["vehicleModels", selectedBrand?.id],
         queryFn: async () => {
             if (!selectedBrand || isOtherBrand) return [];
@@ -87,6 +74,82 @@ export default function AddVehicleModal() {
         },
         enabled: !!selectedBrand && !isOtherBrand,
     });
+
+    const hasInitializedBrand = useRef(false);
+    const hasInitializedModel = useRef(false);
+
+    // Populate Edit Mode - Phase 1 (Brand)
+    useEffect(() => {
+        if (editVehicle && brands.length > 0 && !hasInitializedBrand.current) {
+            try {
+                const v = JSON.parse(editVehicle);
+                setEditMode(true);
+                setVehicleId(v.id);
+                
+                const matchingBrand = brands.find(b => b.name.toLowerCase() === v.make?.toLowerCase());
+                if (matchingBrand) {
+                    setSelectedBrand(matchingBrand);
+                    setIsOtherBrand(false);
+                } else {
+                    setCustomBrand(v.make || "");
+                    setIsOtherBrand(true);
+                    // If it's a custom brand, we can just set custom model immediately
+                    setCustomModel(v.model || "");
+                    setIsOtherModel(true);
+                    hasInitializedModel.current = true;
+                }
+                
+                if (v.year) setYear(v.year.toString());
+                if (v.engine_capacity_cc) setEngineCc(v.engine_capacity_cc.toString());
+                
+                hasInitializedBrand.current = true;
+            } catch (e) {
+                console.error("Failed to parse editVehicle", e);
+            }
+        }
+    }, [editVehicle, brands]);
+
+    // Populate Edit Mode - Phase 2 (Model)
+    useEffect(() => {
+        if (editVehicle && modelsSuccess && !hasInitializedModel.current) {
+            try {
+                const v = JSON.parse(editVehicle as string);
+                const matchingModel = models.find(m => m.name.toLowerCase() === v.model?.toLowerCase());
+                if (matchingModel) {
+                    setSelectedModel(matchingModel);
+                    setIsOtherModel(false);
+                } else {
+                    setCustomModel(v.model || "");
+                    setIsOtherModel(true);
+                }
+                hasInitializedModel.current = true;
+            } catch (e) {
+                console.error("Failed to parse editVehicle model phase", e);
+            }
+        }
+    }, [editVehicle, models, modelsSuccess]);
+
+    // Save Vehicle Mutation (Create or Update)
+    const saveVehicleMutation = useMutation({
+        mutationFn: async (payload: any) => {
+            if (editMode && vehicleId) {
+                const { data } = await apiClient.put(`/api/garage/vehicle/${vehicleId}`, payload);
+                return data;
+            } else {
+                const { data } = await apiClient.post("/api/garage/vehicle", payload);
+                return data;
+            }
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: CURRENT_RIDER_KEY });
+            router.back();
+        },
+        onError: (error) => {
+            console.error("Failed to save vehicle:", error);
+        }
+    });
+
+
 
     // Update CC when model is selected
     useEffect(() => {
@@ -107,7 +170,7 @@ export default function AddVehicleModal() {
             engine_capacity_cc: engineCc ? parseInt(engineCc) : undefined,
         };
 
-        addVehicleMutation.mutate(payload);
+        saveVehicleMutation.mutate(payload);
     };
 
     const isSaveDisabled =
@@ -133,10 +196,10 @@ export default function AddVehicleModal() {
                         </Text>
                     </TouchableOpacity>
                     <Text className="font-bold text-lg" style={{ color: colors.text }}>
-                        Add Vehicle
+                        {editMode ? "Edit Vehicle" : "Add Vehicle"}
                     </Text>
-                    <TouchableOpacity onPress={handleSave} disabled={isSaveDisabled || addVehicleMutation.isPending}>
-                        {addVehicleMutation.isPending ? (
+                    <TouchableOpacity onPress={handleSave} disabled={isSaveDisabled || saveVehicleMutation.isPending}>
+                        {saveVehicleMutation.isPending ? (
                             <ActivityIndicator size="small" color={colors.primary} />
                         ) : (
                             <Text
